@@ -106,12 +106,25 @@ export async function handleX(
   if (route === "/callback" && request.method === "GET") {
     const state = url.searchParams.get("state") ?? "",
       cap = cookie(request, flowCookie) ?? "";
-    if (
-      !config ||
-      !/^[A-Za-z0-9_-]{43}$/.test(state) ||
-      !/^[A-Za-z0-9_-]{43}$/.test(cap)
-    )
+    // Every failed return names a fixed stage. Never log provider bodies,
+    // OAuth codes, tokens, cookies, or identities.
+    let stage = "callback";
+    const fail = (status?: number) => {
+      console.warn("[Slop X] Connection failed", { stage, status });
       return finish("failed");
+    };
+    if (!config) {
+      stage = "not_configured";
+      return fail();
+    }
+    if (!/^[A-Za-z0-9_-]{43}$/.test(state)) {
+      stage = "state_parameter";
+      return fail();
+    }
+    if (!/^[A-Za-z0-9_-]{43}$/.test(cap)) {
+      stage = "flow_cookie";
+      return fail();
+    }
     const hash = await sha256Hex(state);
     const flow = await deps.db
       .prepare(
@@ -119,18 +132,18 @@ export async function handleX(
       )
       .bind(hash, await sha256Hex(cap), now, now)
       .first<Flow>();
-    if (!flow) return finish("failed");
+    if (!flow) {
+      stage = "flow_lookup";
+      return fail();
+    }
     let token: string | undefined;
-    let stage = "callback";
-    // Never log provider bodies, OAuth codes, tokens, cookies, or identities.
-    const fail = (status?: number) => {
-      console.warn("[Slop X] Connection failed", { stage, status });
-      return finish("failed");
-    };
     try {
       if (url.searchParams.has("error")) return finish("cancelled");
       const code = url.searchParams.get("code");
-      if (!code || code.length > 2048) return finish("failed");
+      if (!code || code.length > 2048) {
+        stage = "code_parameter";
+        return fail();
+      }
       stage = "decrypt_verifier";
       const verifier = await decryptPkceVerifier(
         flow.verifier,
