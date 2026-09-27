@@ -29,7 +29,10 @@ export default defineConfig({
     server: localServer,
   },
   timeout: 120_000,
-  globalTimeout: 20 * 60_000,
+  // One worker runs the full matrix serially; green runs took 14 to 18 min
+  // at the same source, so 20 min stopped scheduled refreshes on runner speed
+  // alone. The deploy job's own 180 min limit still bounds a hung suite.
+  globalTimeout: 35 * 60_000,
   outputDir: `test-results/${localServer}`,
   expect: { timeout: 10_000 },
   fullyParallel: true,
