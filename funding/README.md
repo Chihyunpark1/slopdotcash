@@ -181,6 +181,40 @@ the quorum identity; the verifier does not decide what it should be. The
 verifier cannot prove who controls a key, that the third signer is
 independent, or where a future transfer will go.
 
+Two project vault rules are kept by the signers' agreement and not by the
+Squads program. A second read-only verifier (`project-vault-rules-v1`) checks
+them after the fact from finalized transaction history, with the same
+authorities and quorum. It cannot prevent a breach; it makes one visible.
+
+```bash
+bun run funding:verify-project-vault-rules -- --mode fallback-wait \
+  --multisig <multisig> --vault <vault> --vault-index <0..255> \
+  --creator-member <pubkey> --slop-member <pubkey> --independent-member <pubkey> \
+  --transaction-index <integer> --fallback-wait-seconds <integer>
+bun run funding:verify-project-vault-rules -- --mode spending-limits \
+  --multisig <multisig> --vault <vault> --vault-index <0..255> \
+  --creator-member <pubkey> --slop-member <pubkey> --independent-member <pubkey>
+```
+
+`fallback-wait` replays the votes on one payout. A proposal keeps only its
+latest status time, so the moment it was opened for votes and the moment of
+each vote are read from the transactions themselves, as Solana block times.
+When the two approvals that reached the threshold exclude the creator, every
+one of them must come at least the stated wait after the payout was opened
+for votes. A release the creator approved is reported and the wait is not
+applied. The wait is an input, not a constant.
+
+`spending-limits` reads the complete history of the multisig, back to the
+transaction that created it, and fails if a spending limit was ever created
+or used. A Squads spending limit lets one listed key move funds with no vote
+and no time lock. A limit that was proposed and never executed is reported
+and does not fail. History that does not reach the creation, or exceeds
+10,000 signatures, fails closed.
+
+Both modes exit nonzero with state `rule-not-met` when the rule was not kept.
+Both first require the current multisig to match the declared shape, so a
+payout voted on by a since-replaced member fails closed.
+
 For a Sablier Lockup v4 USDC stream on Base or Ethereum, the read-only
 verifier (`commitment-sablier-v2`) queries three fixed public RPC authorities,
 checks each authority's chain ID, pins every stream view call to that

@@ -38,7 +38,7 @@ export const SOLANA_COMMITMENT_RPC_AUTHORITIES = [
 const SOLANA_COMMITMENT_RPC_QUORUM = 2;
 export const MAX_SOLANA_COMMITMENT_RPC_BYTES = 8 * 1024 * 1024;
 
-type FetchLike = (url: URL, init?: RequestInit) => Promise<Response>;
+export type FetchLike = (url: URL, init?: RequestInit) => Promise<Response>;
 
 export type CommitmentVerificationMode =
   | "deposit"
@@ -213,7 +213,7 @@ async function rpcCall(
   return body.result;
 }
 
-function authorityRequest(
+export function authorityRequest(
   authority: string,
   authorityIndex: number,
   fetchImpl: FetchLike,
@@ -236,7 +236,7 @@ function authorityRequest(
   };
 }
 
-function quorumGroups<Result>(
+export function quorumGroups<Result>(
   settled: readonly PromiseSettledResult<{
     authority: string;
     verified: Result;
@@ -265,7 +265,7 @@ function quorumGroups<Result>(
   return agreeing;
 }
 
-function finalizedAccountValue(resultValue: unknown): {
+export function finalizedAccountValue(resultValue: unknown): {
   slot: number;
   value: unknown;
 } {

@@ -92,11 +92,12 @@ function invert(value: bigint): bigint {
 const D = mod(-121665n * invert(121666n));
 const SQRT_M1 = power(2n, (P - 1n) / 4n);
 
-function decodeBase58(value: string): Uint8Array {
+/** Decodes base58 of any length, such as Solana instruction data. */
+export function decodeBase58Bytes(value: string): Uint8Array {
   const bytes: number[] = [0];
   for (const character of value) {
     const digit = BASE58_INDEX.get(character);
-    if (digit === undefined) throw new TypeError("invalid base58 public key");
+    if (digit === undefined) throw new TypeError("invalid base58 value");
     let carry = digit;
     for (let index = 0; index < bytes.length; index += 1) {
       carry += bytes[index] * 58;
@@ -113,6 +114,10 @@ function decodeBase58(value: string): Uint8Array {
   const decoded = new Uint8Array(leadingZeroes + significant.length);
   for (let index = 0; index < significant.length; index += 1)
     decoded[decoded.length - 1 - index] = significant[index];
+  return decoded;
+}
+function decodeBase58(value: string): Uint8Array {
+  const decoded = decodeBase58Bytes(value);
   if (decoded.length !== 32) throw new TypeError("invalid Solana public key");
   return decoded;
 }
@@ -162,21 +167,10 @@ function concat(parts: readonly Uint8Array[]): Uint8Array<ArrayBuffer> {
   return output;
 }
 
-/** Derives the canonical Squads v4 vault PDA using the official seed layout. */
-export async function deriveSquadsVaultAddress(
-  multisig: string,
-  vaultIndex: number,
+async function deriveSquadsAddress(
+  seeds: readonly Uint8Array[],
+  failure: string,
 ): Promise<string> {
-  if (!isSolanaAddress(multisig))
-    throw new TypeError("multisig is not a Solana public key");
-  if (!Number.isInteger(vaultIndex) || vaultIndex < 0 || vaultIndex > 255)
-    throw new TypeError("vault index must be an integer from 0 through 255");
-  const seeds = [
-    ENCODER.encode("multisig"),
-    decodeBase58(multisig),
-    ENCODER.encode("vault"),
-    new Uint8Array([vaultIndex]),
-  ];
   const program = decodeBase58(SQUADS_V4_PROGRAM_ID);
   for (let bump = 255; bump >= 0; bump -= 1) {
     const digest = new Uint8Array(
@@ -187,7 +181,49 @@ export async function deriveSquadsVaultAddress(
     );
     if (!isEd25519Point(digest)) return encodeBase58(digest);
   }
-  throw new TypeError("Squads vault PDA could not be derived");
+  throw new TypeError(failure);
+}
+
+/** Derives the canonical Squads v4 vault PDA using the official seed layout. */
+export async function deriveSquadsVaultAddress(
+  multisig: string,
+  vaultIndex: number,
+): Promise<string> {
+  if (!isSolanaAddress(multisig))
+    throw new TypeError("multisig is not a Solana public key");
+  if (!Number.isInteger(vaultIndex) || vaultIndex < 0 || vaultIndex > 255)
+    throw new TypeError("vault index must be an integer from 0 through 255");
+  return deriveSquadsAddress(
+    [
+      ENCODER.encode("multisig"),
+      decodeBase58(multisig),
+      ENCODER.encode("vault"),
+      new Uint8Array([vaultIndex]),
+    ],
+    "Squads vault PDA could not be derived",
+  );
+}
+/** Derives the Squads v4 proposal PDA for one multisig transaction index. */
+export async function deriveSquadsProposalAddress(
+  multisig: string,
+  transactionIndex: number,
+): Promise<string> {
+  if (!isSolanaAddress(multisig))
+    throw new TypeError("multisig is not a Solana public key");
+  if (!Number.isSafeInteger(transactionIndex) || transactionIndex < 1)
+    throw new TypeError("transaction index must be a positive safe integer");
+  const index = new Uint8Array(8);
+  new DataView(index.buffer).setBigUint64(0, BigInt(transactionIndex), true);
+  return deriveSquadsAddress(
+    [
+      ENCODER.encode("multisig"),
+      decodeBase58(multisig),
+      ENCODER.encode("transaction"),
+      index,
+      ENCODER.encode("proposal"),
+    ],
+    "Squads proposal PDA could not be derived",
+  );
 }
 /** Canonical classic-token USDC ATA; vault PDAs need not be on curve. */
 export async function deriveVaultUsdcTokenAccount(
