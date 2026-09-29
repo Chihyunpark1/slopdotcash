@@ -24,7 +24,7 @@ import {
 export const SOLANA_COMMITMENT_RPC_AUTHORITIES = [
   "https://api.mainnet-beta.solana.com",
   "https://solana-rpc.publicnode.com",
-  "https://solana.drpc.org",
+  "https://public.rpc.solanavibestation.com",
 ] as const;
 const SOLANA_COMMITMENT_RPC_QUORUM = 2;
 export const MAX_SOLANA_COMMITMENT_RPC_BYTES = 8 * 1024 * 1024;

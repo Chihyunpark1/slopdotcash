@@ -290,7 +290,7 @@ describe("Squads commitment verifier", () => {
     const { fetchImpl, methods } = fetchAuthorities({
       "api.mainnet-beta.solana.com": { balance: "5000000" },
       "solana-rpc.publicnode.com": { balance: "5000000" },
-      "solana.drpc.org": { balance: "4000000" },
+      "public.rpc.solanavibestation.com": { balance: "4000000" },
     });
     await expect(
       verifyCommitmentSquads({
@@ -322,7 +322,7 @@ describe("Squads commitment verifier", () => {
     const { fetchImpl, methods } = fetchAuthorities({
       "api.mainnet-beta.solana.com": { transaction: transaction("deposit") },
       "solana-rpc.publicnode.com": { transaction: transaction("deposit") },
-      "solana.drpc.org": { error: new Error("offline") },
+      "public.rpc.solanavibestation.com": { error: new Error("offline") },
     });
     await expect(
       verifyCommitmentSquads({
@@ -354,7 +354,9 @@ describe("Squads commitment verifier", () => {
     const { fetchImpl } = fetchAuthorities({
       "api.mainnet-beta.solana.com": { transaction: transaction("release") },
       "solana-rpc.publicnode.com": { transaction: transaction("release") },
-      "solana.drpc.org": { transaction: transaction("release") },
+      "public.rpc.solanavibestation.com": {
+        transaction: transaction("release"),
+      },
     });
     await expect(
       verifyCommitmentSquads({

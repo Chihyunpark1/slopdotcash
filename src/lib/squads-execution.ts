@@ -15,7 +15,7 @@ import { isSolanaAddress } from "./wallets";
 export const SQUADS_EXECUTION_RPC_AUTHORITIES = [
   "https://api.mainnet-beta.solana.com",
   "https://solana-rpc.publicnode.com",
-  "https://solana.drpc.org",
+  "https://public.rpc.solanavibestation.com",
 ] as const;
 
 export interface SquadsSingleExecutionBinding {
