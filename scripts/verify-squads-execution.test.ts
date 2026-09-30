@@ -668,7 +668,10 @@ describe("Squads exact plan verifier", () => {
     let refusals = 0;
     const result = await verifySquadsExecution(input, {
       fetchImpl: async (url, init) => {
-        if (url.hostname === "solana.drpc.org" && refusals < 2) {
+        if (
+          url.hostname === "public.rpc.solanavibestation.com" &&
+          refusals < 2
+        ) {
           refusals += 1;
           return new Response("", {
             status: 429,
