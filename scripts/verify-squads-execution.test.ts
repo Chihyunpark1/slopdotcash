@@ -667,7 +667,8 @@ describe("Squads exact plan verifier", () => {
     const fixture = await fixtures(input);
     const result = await verifySquadsExecution(input, {
       fetchImpl: async (url, init) => {
-        if (url.hostname === "solana.drpc.org") throw new Error("offline");
+        if (url.hostname === "public.rpc.solanavibestation.com")
+          throw new Error("offline");
         return rpc(fixture)(url, init);
       },
     });
