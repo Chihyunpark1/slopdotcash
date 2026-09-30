@@ -55,11 +55,14 @@ is run from a clean checkout of `develop`, and its output is kept.
 
    Exit 0 with `plan-matched` is required. Any other result ends the
    procedure. Slop does not vote on a proposal it cannot verify.
-3. **Every destination is permitted.** Each transfer in the plan goes to a
-   wallet frozen in the approved allocation, or the fee transfer goes to the
-   fee recipient named in the reviewed policy. A refund or windup transfer goes
-   to the creator's declared funder wallet. Slop never votes on a transfer to
-   a Slop address.
+3. **Every destination is permitted, and there is no fee transfer.** Each
+   transfer in the plan goes to a wallet frozen in the approved allocation. A
+   refund or windup transfer goes to the creator's declared funder wallet. A
+   project vault proposal carries no fee transfer: the 1% fee is a separate
+   transfer the creator sends from the creator's own wallet, never from the
+   vault (RFC #500 section 8). A plan or proposal that contains a transfer to
+   Slop's fee recipient or to any other Slop address ends the procedure. Slop
+   never votes on a transfer to a Slop address.
 4. **The vault still has the reviewed shape.** Run the shape verifier in
    `state` mode with the three members from the manifest:
 

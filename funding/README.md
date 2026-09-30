@@ -302,6 +302,19 @@ until it lands the manifest validator rejects `paymentMode: "enabled"` on a
 project vault. Activation of the first vault also waits on the written
 opinion of Slop's US counsel described in RFC #500.
 
+**The fee never enters a project vault.** On the 2-of-2 instrument the
+execution plan ends with the fee transfer, readiness requires the vault to
+cover principal plus fee, and a batch must include that transfer. On a
+project vault the rule is different (RFC #500 section 8): the 1% fee is a
+separate transfer the creator sends from the creator's own wallet, the vault
+holds contributor principal only, the plan and the proposal carry no fee
+transfer, and settlement reconciles the fee from the creator's own transfer
+exactly as it does for direct payments. The plan builder, readiness,
+reservation, and batch verifier do not yet make that distinction; they are
+part of the same separate reviewed change above, and until it lands no
+project vault plan can be prepared. Slop never votes on a proposal that
+contains a transfer to a Slop address.
+
 Slop's operating procedure for its key is
 [`protocol/project-vault-signing.md`](../protocol/project-vault-signing.md).
 
