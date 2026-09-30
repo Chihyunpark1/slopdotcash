@@ -1735,6 +1735,47 @@ describe("project proposals", () => {
     ).toBeVisible();
   });
 
+  it("turns a pasted GitHub link into owner/name and flags anything else", async () => {
+    route("/projects/new");
+    mockSnapshot();
+    render(<App />);
+    await screen.findByLabelText("Project name");
+    const repositoryField = screen.getByLabelText("Public GitHub repository");
+
+    fireEvent.change(repositoryField, {
+      target: { value: "https://github.com/example/pasted-link/tree/main" },
+    });
+    expect(repositoryField).toHaveValue("example/pasted-link");
+    expect(repositoryField).not.toHaveAttribute("aria-invalid");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/"id": "example\/pasted-link"/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /"githubUrl": "https:\/\/github.com\/example\/pasted-link"/,
+      ),
+    ).toBeInTheDocument();
+
+    fireEvent.change(repositoryField, {
+      target: { value: "https://gitlab.com/example/elsewhere" },
+    });
+    expect(repositoryField).toHaveValue("https://gitlab.com/example/elsewhere");
+    expect(repositoryField).toHaveAttribute("aria-invalid", "true");
+    const error = screen.getByRole("alert");
+    expect(error).toHaveTextContent("Use the owner/name form");
+    expect(repositoryField).toHaveAttribute("aria-describedby", error.id);
+    expect(
+      screen.queryByRole("link", { name: /continue on github/i }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.change(repositoryField, {
+      target: { value: "example/elsewhere" },
+    });
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(repositoryField).not.toHaveAttribute("aria-invalid");
+  });
+
   it("does not hand off an over-limit or imprecise money pool", async () => {
     route("/projects/new");
     mockSnapshot();
