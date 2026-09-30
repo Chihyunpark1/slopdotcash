@@ -2,9 +2,10 @@
  * Read-only rule checks for the 2-of-3 project vault proposed in RFC #500.
  * Two rules are kept by signer agreement, not by the Squads program, so this
  * verifier checks them after the fact from finalized transaction history:
- * the fallback wait on one payout, and the absence of any spending limit. It
- * uses the same fixed public RPC authorities and quorum as the commitment
- * verifier. It never reads a key, signs, broadcasts, or writes a record.
+ * the fallback wait on one payout, and the absence of any spending limit. A
+ * third mode checks that the creator seat is the vault of the creator's own
+ * multisig. It uses the same fixed public RPC authorities and quorum as the
+ * commitment verifier. It never reads a key, signs, broadcasts, or writes a record.
  */
 
 import {
@@ -12,15 +13,20 @@ import {
   isSolanaTransactionId,
 } from "../src/lib/funding-address.mjs";
 import {
+  assertSquadsCreatorSeat,
   assertSquadsProjectVaultIdentity,
   deriveSquadsProposalAddress,
   PROJECT_VAULT_PERMISSIONS,
   type SquadsProjectVaultMembers,
+  type VerifiedSquadsCreatorSeat,
+  type VerifiedSquadsProjectVaultIdentity,
 } from "../src/lib/squads-funding";
 import {
   assertNoSpendingLimitHistory,
   assertProposalVoteHistory,
   assertSquadsHistoryEntry,
+  type ProposalVoteReport,
+  type SpendingLimitReport,
   type SquadsHistoryEntry,
 } from "../src/lib/squads-history";
 import {
@@ -37,10 +43,28 @@ const HISTORY_PAGE_SIZE = 1000;
 const MAX_HISTORY_PAGES = 10;
 const RATE_LIMIT_RETRIES = 5;
 
+type RuleReport =
+  | {
+      creatorSeat: VerifiedSquadsCreatorSeat;
+      rule: "creator-seat";
+      slot: number;
+    }
+  | ({ rule: "fallback-wait" } & ProposalVoteReport)
+  | ({ rule: "no-spending-limits" } & SpendingLimitReport);
+interface RuleObservation {
+  authority: string;
+  verified: {
+    identity: VerifiedSquadsProjectVaultIdentity;
+    report: RuleReport;
+  };
+}
+
 export interface ProjectVaultRulesInput extends SquadsProjectVaultMembers {
+  creatorMultisig?: string;
+  creatorVaultIndex?: number;
   fallbackWaitSeconds?: number;
   fetchImpl?: FetchLike;
-  mode: "fallback-wait" | "spending-limits";
+  mode: "creator-seat" | "fallback-wait" | "spending-limits";
   multisig: string;
   retryDelayMs?: number;
   transactionIndex?: number;
@@ -58,9 +82,11 @@ const CLI_ARGUMENTS = new Set([
   "--independent-member",
   "--transaction-index",
   "--fallback-wait-seconds",
+  "--creator-multisig",
+  "--creator-vault-index",
 ]);
 const CLI_USAGE =
-  "Usage: verify-project-vault-rules.ts --mode fallback-wait --multisig <multisig> --vault <vault> --vault-index <0..255> --creator-member <pubkey> --slop-member <pubkey> --independent-member <pubkey> --transaction-index <integer> --fallback-wait-seconds <integer> | --mode spending-limits --multisig <multisig> --vault <vault> --vault-index <0..255> --creator-member <pubkey> --slop-member <pubkey> --independent-member <pubkey>";
+  "Usage: verify-project-vault-rules.ts --mode fallback-wait --multisig <multisig> --vault <vault> --vault-index <0..255> --creator-member <pubkey> --slop-member <pubkey> --independent-member <pubkey> --transaction-index <integer> --fallback-wait-seconds <integer> | --mode spending-limits --multisig <multisig> --vault <vault> --vault-index <0..255> --creator-member <pubkey> --slop-member <pubkey> --independent-member <pubkey> | --mode creator-seat --multisig <multisig> --vault <vault> --vault-index <0..255> --creator-member <pubkey> --slop-member <pubkey> --independent-member <pubkey> --creator-multisig <pubkey> [--creator-vault-index <0..255>]";
 
 export function parseProjectVaultRulesArguments(argv: readonly string[]) {
   const parsed = new Map<string, string>();
@@ -95,9 +121,13 @@ export function parseProjectVaultRulesArguments(argv: readonly string[]) {
     independentMember: parsed.get("--independent-member"),
     transactionIndex: integer("--transaction-index"),
     fallbackWaitSeconds: integer("--fallback-wait-seconds"),
+    creatorMultisig: parsed.get("--creator-multisig"),
+    creatorVaultIndex: integer("--creator-vault-index"),
   };
   if (
-    (mode !== "fallback-wait" && mode !== "spending-limits") ||
+    (mode !== "fallback-wait" &&
+      mode !== "spending-limits" &&
+      mode !== "creator-seat") ||
     !input.multisig ||
     !input.vault ||
     input.vaultIndex === undefined ||
@@ -105,7 +135,9 @@ export function parseProjectVaultRulesArguments(argv: readonly string[]) {
     !input.slopMember ||
     !input.independentMember ||
     (mode === "fallback-wait") !== (input.transactionIndex !== undefined) ||
-    (mode === "fallback-wait") !== (input.fallbackWaitSeconds !== undefined)
+    (mode === "fallback-wait") !== (input.fallbackWaitSeconds !== undefined) ||
+    (mode === "creator-seat") !== (input.creatorMultisig !== undefined) ||
+    (mode !== "creator-seat" && input.creatorVaultIndex !== undefined)
   ) {
     throw new TypeError(CLI_USAGE);
   }
@@ -220,65 +252,135 @@ export async function verifyProjectVaultRules(input: ProjectVaultRulesInput) {
       transactionIndex: Number(transactionIndex),
     };
   } else if (
-    input.mode !== "spending-limits" ||
+    (input.mode !== "spending-limits" && input.mode !== "creator-seat") ||
     input.transactionIndex !== undefined ||
     input.fallbackWaitSeconds !== undefined
   ) {
-    throw new TypeError("spending-limits mode takes no payout fields");
+    throw new TypeError("only fallback-wait mode takes payout fields");
+  }
+  let seat: { creatorMultisig: string; creatorVaultIndex: number } | null =
+    null;
+  if (input.mode === "creator-seat") {
+    const creatorVaultIndex = input.creatorVaultIndex ?? 0;
+    if (
+      !isFundingAddress("solana", input.creatorMultisig) ||
+      input.creatorMultisig === multisig ||
+      !Number.isInteger(creatorVaultIndex) ||
+      creatorVaultIndex < 0 ||
+      creatorVaultIndex > 255
+    ) {
+      throw new TypeError(
+        "creator-seat mode requires a distinct creator multisig and a vault index",
+      );
+    }
+    seat = {
+      creatorMultisig: input.creatorMultisig as string,
+      creatorVaultIndex,
+    };
+  } else if (
+    input.creatorMultisig !== undefined ||
+    input.creatorVaultIndex !== undefined
+  ) {
+    throw new TypeError("only creator-seat mode takes creator multisig fields");
   }
   const proposal = wait
     ? await deriveSquadsProposalAddress(multisig, wait.transactionIndex)
     : null;
   const settled = await Promise.allSettled(
-    SOLANA_COMMITMENT_RPC_AUTHORITIES.map(async (authority, index) => {
-      const { rpc, request: direct } = authorityRequest(
-        authority,
-        index,
-        fetchImpl,
-      );
-      const request = patient(direct, input.retryDelayMs ?? 2_000);
-      const identity = await assertSquadsProjectVaultIdentity(
-        finalizedAccountValue(
-          await request("getAccountInfo", [
-            multisig,
+    SOLANA_COMMITMENT_RPC_AUTHORITIES.map(
+      async (authority, index): Promise<RuleObservation> => {
+        const { rpc, request: direct } = authorityRequest(
+          authority,
+          index,
+          fetchImpl,
+        );
+        const request = patient(direct, input.retryDelayMs ?? 2_000);
+        const accounts = finalizedAccountValue(
+          await request("getMultipleAccounts", [
+            seat ? [multisig, seat.creatorMultisig] : [multisig],
             { commitment: "finalized", encoding: "base64" },
           ]),
-        ).value,
-        multisig,
-        vault,
-        vaultIndex,
-        members,
-      );
-      const history = await finalizedHistory(request, proposal ?? multisig);
-      const report =
-        wait && proposal
-          ? {
-              rule: "fallback-wait" as const,
-              ...assertProposalVoteHistory(history, {
-                ...wait,
-                members,
-                multisig,
-                proposal,
-              }),
-            }
-          : {
-              rule: "no-spending-limits" as const,
-              ...assertNoSpendingLimitHistory(history, multisig),
-            };
-      return { authority: rpc.toString(), verified: { identity, report } };
-    }),
+        );
+        if (
+          !Array.isArray(accounts.value) ||
+          accounts.value.length !== (seat ? 2 : 1)
+        ) {
+          throw new TypeError("Solana accounts response is invalid");
+        }
+        const identity = await assertSquadsProjectVaultIdentity(
+          accounts.value[0],
+          multisig,
+          vault,
+          vaultIndex,
+          members,
+        );
+        if (seat) {
+          return {
+            authority: rpc.toString(),
+            verified: {
+              identity,
+              report: {
+                rule: "creator-seat" as const,
+                creatorSeat: await assertSquadsCreatorSeat(
+                  accounts.value[1],
+                  seat.creatorMultisig,
+                  members.creatorMember,
+                  seat.creatorVaultIndex,
+                ),
+                slot: accounts.slot,
+              },
+            },
+          };
+        }
+        const history = await finalizedHistory(request, proposal ?? multisig);
+        const report: RuleReport =
+          wait && proposal
+            ? {
+                rule: "fallback-wait" as const,
+                ...assertProposalVoteHistory(history, {
+                  ...wait,
+                  members,
+                  multisig,
+                  proposal,
+                }),
+              }
+            : {
+                rule: "no-spending-limits" as const,
+                ...assertNoSpendingLimitHistory(history, multisig),
+              };
+        return { authority: rpc.toString(), verified: { identity, report } };
+      },
+    ),
   );
   const agreeing = quorumGroups(settled, ({ identity, report }) =>
-    JSON.stringify([identity.timeLockSeconds, report]),
+    JSON.stringify([
+      identity.timeLockSeconds,
+      report.rule === "creator-seat" ? { ...report, slot: null } : report,
+    ]),
   );
   const { identity, report } = agreeing[0].verified;
-  const satisfied =
+  const outcome =
     report.rule === "no-spending-limits"
-      ? report.satisfied
-      : (report.fallbackWait?.satisfied ?? true);
+      ? {
+          satisfied: report.satisfied,
+          reason: "a spending limit was created or used on this multisig",
+          evidenceUrl: `https://solscan.io/account/${multisig}`,
+        }
+      : report.rule === "fallback-wait"
+        ? {
+            satisfied: report.fallbackWait?.satisfied ?? true,
+            reason:
+              "a fallback approval came before the fallback wait had passed",
+            evidenceUrl: `https://solscan.io/account/${proposal}`,
+          }
+        : {
+            satisfied: true,
+            reason: "",
+            evidenceUrl: `https://solscan.io/account/${report.creatorSeat.creatorMultisig}`,
+          };
   return {
     mode: input.mode,
-    state: satisfied
+    state: outcome.satisfied
       ? ("verified-on-chain" as const)
       : ("rule-not-met" as const),
     instrument: "squads-project-vault" as const,
@@ -294,12 +396,8 @@ export async function verifyProjectVaultRules(input: ProjectVaultRulesInput) {
     verifier: {
       version: PROJECT_VAULT_RULES_VERIFIER_VERSION,
       checkedAt: new Date().toISOString(),
-      evidenceUrl: `https://solscan.io/account/${proposal ?? multisig}`,
-      reason: satisfied
-        ? null
-        : report.rule === "no-spending-limits"
-          ? "a spending limit was created or used on this multisig"
-          : "a fallback approval came before the fallback wait had passed",
+      evidenceUrl: outcome.evidenceUrl,
+      reason: outcome.satisfied ? null : outcome.reason,
     },
     authorities: agreeing.map(({ authority }) => ({ authority })),
   };

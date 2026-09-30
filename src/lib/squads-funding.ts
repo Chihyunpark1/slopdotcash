@@ -266,6 +266,33 @@ function decodeBase64(value: unknown): Uint8Array {
   return bytes;
 }
 
+/** Returns the raw bytes of a finalized, Squads-owned, non-executable
+ * multisig account with the multisig discriminator and full base layout. */
+function squadsMultisigBytes(accountValue: unknown): Uint8Array {
+  if (accountValue === null || accountValue === undefined)
+    throw new TypeError(
+      "Squads multisig account is absent at finalized commitment",
+    );
+  const account = record(accountValue, "Squads multisig account");
+  if (account.owner !== SQUADS_V4_PROGRAM_ID || account.executable !== false)
+    throw new TypeError(
+      "multisig account is not owned by the Squads v4 program",
+    );
+  if (
+    !Array.isArray(account.data) ||
+    account.data.length !== 2 ||
+    account.data[1] !== "base64"
+  )
+    throw new TypeError("Squads multisig account data is not raw base64");
+  const bytes = decodeBase64(account.data[0]);
+  if (
+    bytes.length < 132 ||
+    !MULTISIG_DISCRIMINATOR.every((byte, index) => bytes[index] === byte)
+  )
+    throw new TypeError("account is not a Squads v4 multisig");
+  return bytes;
+}
+
 /** Validates the Squads-owned multisig account and the declared vault PDA. */
 export async function assertSquadsVaultIdentity(
   accountValue: unknown,
@@ -407,27 +434,7 @@ export async function assertSquadsProjectVaultIdentity(
     throw new TypeError(
       "vault is not the canonical Squads PDA for this multisig and index",
     );
-  if (accountValue === null || accountValue === undefined)
-    throw new TypeError(
-      "Squads multisig account is absent at finalized commitment",
-    );
-  const account = record(accountValue, "Squads multisig account");
-  if (account.owner !== SQUADS_V4_PROGRAM_ID || account.executable !== false)
-    throw new TypeError(
-      "multisig account is not owned by the Squads v4 program",
-    );
-  if (
-    !Array.isArray(account.data) ||
-    account.data.length !== 2 ||
-    account.data[1] !== "base64"
-  )
-    throw new TypeError("Squads multisig account data is not raw base64");
-  const bytes = decodeBase64(account.data[0]);
-  if (
-    bytes.length < 132 ||
-    !MULTISIG_DISCRIMINATOR.every((byte, index) => bytes[index] === byte)
-  )
-    throw new TypeError("account is not a Squads v4 multisig");
+  const bytes = squadsMultisigBytes(accountValue);
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   if (!bytes.slice(40, 72).every((byte) => byte === 0))
     throw new TypeError("project vault must have no config authority");
@@ -483,6 +490,66 @@ export async function assertSquadsProjectVaultIdentity(
     timeLockSeconds: view.getUint32(74, true),
     vault,
     vaultIndex,
+  };
+}
+
+export interface VerifiedSquadsCreatorSeat {
+  configAuthority: boolean;
+  creatorMember: string;
+  creatorMultisig: string;
+  creatorVaultIndex: number;
+  memberCount: number;
+  threshold: number;
+  timeLockSeconds: number;
+}
+
+/**
+ * Validates that the creator seat on a project vault is the canonical vault
+ * of the creator's own Squads multisig, so losing one creator device does not
+ * strand the project vault. The creator's multisig is reported, not judged:
+ * its threshold, member count, time lock, and whether a config authority is
+ * set are the creator's own choices.
+ */
+export async function assertSquadsCreatorSeat(
+  accountValue: unknown,
+  creatorMultisig: string,
+  creatorMember: string,
+  creatorVaultIndex: number,
+): Promise<VerifiedSquadsCreatorSeat> {
+  if (!isSolanaAddress(creatorMultisig) || !isSolanaAddress(creatorMember))
+    throw new TypeError(
+      "creator multisig or member is not a Solana public key",
+    );
+  if (
+    creatorMember !==
+    (await deriveSquadsVaultAddress(creatorMultisig, creatorVaultIndex))
+  )
+    throw new TypeError(
+      "creator member is not the canonical vault of the creator multisig",
+    );
+  const bytes = squadsMultisigBytes(accountValue);
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const rentCollectorTag = bytes[94];
+  if (rentCollectorTag !== 0 && rentCollectorTag !== 1)
+    throw new TypeError("Squads multisig rent collector is not canonical");
+  const memberCountOffset = 96 + 32 * rentCollectorTag;
+  const threshold = view.getUint16(72, true);
+  const memberCount = view.getUint32(memberCountOffset, true);
+  if (
+    threshold < 1 ||
+    memberCount < threshold ||
+    memberCount > 65_535 ||
+    bytes.length < memberCountOffset + 4 + 33 * memberCount
+  )
+    throw new TypeError("creator multisig membership is not canonical");
+  return {
+    configAuthority: !bytes.slice(40, 72).every((byte) => byte === 0),
+    creatorMember,
+    creatorMultisig,
+    creatorVaultIndex,
+    memberCount,
+    threshold,
+    timeLockSeconds: view.getUint32(74, true),
   };
 }
 

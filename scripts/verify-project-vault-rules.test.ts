@@ -1,6 +1,10 @@
 /** Proves the project vault rule checks against recorded devnet history. */
 import { describe, expect, it } from "vitest";
-import { SQUADS_V4_PROGRAM_ID } from "../src/lib/squads-funding";
+import {
+  assertSquadsCreatorSeat,
+  SPL_TOKEN_PROGRAM_ID,
+  SQUADS_V4_PROGRAM_ID,
+} from "../src/lib/squads-funding";
 import {
   assertNoSpendingLimitHistory,
   assertSquadsHistoryEntry,
@@ -23,6 +27,10 @@ const MEMBERS = {
   independentMember: "BxqnpgMtjHfSmNT1KAFa2VwgaM6iXXa2GsVe1Ucxe7CJ",
 };
 const FALLBACK_PROPOSAL = "BkPzJ2eAvD8ZrfJoUTUhBLFB9gt9e6NBApiCA1VJx4pV";
+// Published SDK-compatible multisig and its vault 0, used as a creator seat.
+const CREATOR_MULTISIG = "xmWqhNJwNL4z4BcDo1Yh7BbStLU7omVafZNmg91y2Vg";
+const CREATOR_SEAT = "FTK6ckiPWbe1jAiRtcPCz9sCrvCV6Y6hAJhAU5b9S3nv";
+const SEATED_MEMBERS = { ...MEMBERS, creatorMember: CREATOR_SEAT };
 const BASE58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 const FOURTEEN_DAYS = 14 * 24 * 60 * 60;
 
@@ -50,29 +58,35 @@ function encodeBase58(bytes: readonly number[]): string {
   return encoded;
 }
 
-function multisigAccount() {
+function multisigAccount(
+  members: typeof MEMBERS = MEMBERS,
+  overrides: { configAuthority?: string; owner?: string } = {},
+) {
   const bytes = new Uint8Array(231);
   bytes.set([224, 116, 121, 186, 68, 161, 79, 236]);
+  if (overrides.configAuthority)
+    bytes.set(publicKeyBytes(overrides.configAuthority), 40);
   const view = new DataView(bytes.buffer);
   view.setUint16(72, 2, true);
   view.setUint32(74, 8, true);
   view.setUint32(96, 3, true);
   [
-    [MEMBERS.creatorMember, 7],
-    [MEMBERS.slopMember, 2],
-    [MEMBERS.independentMember, 6],
+    [members.creatorMember, 7],
+    [members.slopMember, 2],
+    [members.independentMember, 6],
   ].forEach(([member, mask], index) => {
     bytes.set(publicKeyBytes(member as string), 100 + 33 * index);
     bytes[132 + 33 * index] = mask as number;
   });
   return {
     executable: false,
-    owner: SQUADS_V4_PROGRAM_ID,
+    owner: overrides.owner ?? SQUADS_V4_PROGRAM_ID,
     data: [btoa(String.fromCharCode(...bytes)), "base64"],
   };
 }
 
 interface Authority {
+  account?: (address: string) => unknown;
   listed?: (address: string) => Listed[];
   recorded?: (signature: string) => unknown;
   refuse?: number;
@@ -90,8 +104,13 @@ function authorities(byHost: Record<string, Authority> = {}) {
       return new Response("", { status: 429 });
     }
     const result =
-      request.method === "getAccountInfo"
-        ? { context: { slot: 600 }, value: multisigAccount() }
+      request.method === "getMultipleAccounts"
+        ? {
+            context: { slot: 600 },
+            value: (request.params[0] as string[]).map(
+              (address) => authority.account?.(address) ?? multisigAccount(),
+            ),
+          }
         : request.method === "getSignaturesForAddress"
           ? (authority.listed?.(request.params[0]) ??
             signatures[request.params[0]])
@@ -391,6 +410,98 @@ describe("project vault spending limits", () => {
   });
 });
 
+describe("project vault creator seat", () => {
+  const seated = (account: (address: string) => unknown) => {
+    const authority = { account };
+    return verifyProjectVaultRules({
+      ...vault,
+      ...SEATED_MEMBERS,
+      mode: "creator-seat",
+      creatorMultisig: CREATOR_MULTISIG,
+      retryDelayMs: 0,
+      fetchImpl: authorities({
+        "api.mainnet-beta.solana.com": authority,
+        "solana-rpc.publicnode.com": authority,
+        "solana.drpc.org": authority,
+      }).fetchImpl,
+    });
+  };
+  const creatorMultisig =
+    (overrides = {}) =>
+    (address: string) =>
+      address === CREATOR_MULTISIG
+        ? multisigAccount(MEMBERS, overrides)
+        : multisigAccount(SEATED_MEMBERS);
+
+  it("verifies a creator seat that is the vault of the creator's own multisig", async () => {
+    await expect(seated(creatorMultisig())).resolves.toMatchObject({
+      state: "verified-on-chain",
+      rule: "creator-seat",
+      creatorMember: CREATOR_SEAT,
+      creatorSeat: {
+        creatorMultisig: CREATOR_MULTISIG,
+        creatorVaultIndex: 0,
+        threshold: 2,
+        memberCount: 3,
+        timeLockSeconds: 8,
+        configAuthority: false,
+      },
+      verifier: {
+        reason: null,
+        evidenceUrl: `https://solscan.io/account/${CREATOR_MULTISIG}`,
+      },
+    });
+  });
+
+  it("reports a creator multisig that keeps a config authority without judging it", async () => {
+    await expect(
+      seated(creatorMultisig({ configAuthority: MEMBERS.slopMember })),
+    ).resolves.toMatchObject({
+      state: "verified-on-chain",
+      creatorSeat: { configAuthority: true },
+    });
+  });
+
+  it("fails closed when the seat is a plain key or the multisig is not Squads", async () => {
+    await expect(
+      verifyProjectVaultRules({
+        ...vault,
+        mode: "creator-seat",
+        creatorMultisig: CREATOR_MULTISIG,
+        retryDelayMs: 0,
+        fetchImpl: authorities().fetchImpl,
+      }),
+    ).rejects.toThrow(/did not reach commitment quorum/u);
+    await expect(
+      seated(creatorMultisig({ owner: SPL_TOKEN_PROGRAM_ID })),
+    ).rejects.toThrow(/did not reach commitment quorum/u);
+    await expect(
+      assertSquadsCreatorSeat(
+        multisigAccount(MEMBERS, { owner: SPL_TOKEN_PROGRAM_ID }),
+        CREATOR_MULTISIG,
+        CREATOR_SEAT,
+        0,
+      ),
+    ).rejects.toThrow(/not owned by the Squads v4 program/u);
+    await expect(
+      assertSquadsCreatorSeat(
+        multisigAccount(),
+        CREATOR_MULTISIG,
+        MEMBERS.creatorMember,
+        0,
+      ),
+    ).rejects.toThrow(/not the canonical vault of the creator multisig/u);
+    await expect(
+      assertSquadsCreatorSeat(
+        multisigAccount(),
+        CREATOR_MULTISIG,
+        CREATOR_SEAT,
+        1,
+      ),
+    ).rejects.toThrow(/not the canonical vault of the creator multisig/u);
+  });
+});
+
 describe("project vault rule arguments", () => {
   const shared = [
     ...["--multisig", MULTISIG, "--vault", VAULT, "--vault-index", "0"],
@@ -406,9 +517,42 @@ describe("project vault rule arguments", () => {
         ...["--fallback-wait-seconds", "1209600"],
       ]),
     ).toMatchObject({ transactionIndex: 2, fallbackWaitSeconds: 1209600 });
+    expect(
+      parseProjectVaultRulesArguments([
+        ...["--mode", "creator-seat", ...shared],
+        ...[
+          "--creator-multisig",
+          CREATOR_MULTISIG,
+          "--creator-vault-index",
+          "3",
+        ],
+      ]),
+    ).toMatchObject({
+      creatorMultisig: CREATOR_MULTISIG,
+      creatorVaultIndex: 3,
+    });
     for (const argv of [
       ["--mode", "fallback-wait", ...shared, "--transaction-index", "2"],
       ["--mode", "spending-limits", ...shared, "--transaction-index", "2"],
+      ["--mode", "creator-seat", ...shared],
+      [
+        "--mode",
+        "spending-limits",
+        ...shared,
+        "--creator-multisig",
+        CREATOR_MULTISIG,
+      ],
+      [
+        "--mode",
+        "fallback-wait",
+        ...shared,
+        "--transaction-index",
+        "2",
+        "--fallback-wait-seconds",
+        "1",
+        "--creator-vault-index",
+        "0",
+      ],
       [
         ...["--mode", "fallback-wait", ...shared],
         ...["--transaction-index", "2", "--fallback-wait-seconds", "1e6"],

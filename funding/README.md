@@ -215,6 +215,23 @@ Both modes exit nonzero with state `rule-not-met` when the rule was not kept.
 Both first require the current multisig to match the declared shape, so a
 payout voted on by a since-replaced member fails closed.
 
+A third mode checks the creator seat:
+
+```bash
+bun run funding:verify-project-vault-rules -- --mode creator-seat \
+  --multisig <multisig> --vault <vault> --vault-index <0..255> \
+  --creator-member <pubkey> --slop-member <pubkey> --independent-member <pubkey> \
+  --creator-multisig <pubkey> [--creator-vault-index <0..255>]
+```
+
+`creator-seat` proves that the creator member is the canonical vault of the
+declared creator multisig (index 0 unless given) and that the account at that
+address is a Squads v4 multisig. It reports that multisig's threshold, member
+count, time lock and whether a configuration authority is set, and judges
+none of them: how the creator protects its own seat is the creator's choice.
+A plain-key creator seat fails this mode; it is only wrong for a project that
+declared a multisig seat.
+
 For a Sablier Lockup v4 USDC stream on Base or Ethereum, the read-only
 verifier (`commitment-sablier-v2`) queries three fixed public RPC authorities,
 checks each authority's chain ID, pins every stream view call to that
