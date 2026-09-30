@@ -1,7 +1,10 @@
 import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it, vi } from "vitest";
-import { handlePointsApi } from "../../../backend/points/handler";
+import {
+  handlePointsApi,
+  type PointsDependencies,
+} from "../../../backend/points/handler";
 import type { D1Database } from "../../../backend/trace/cloudflare-persistence";
 import {
   pointsSql,
@@ -489,5 +492,101 @@ describe("verified X connections", () => {
     );
     expect(signedOut.headers.get("location")).toContain("failed");
     expect(xFetch).toHaveBeenCalledTimes(calls);
+  });
+  it("names the stage of every callback failure before the provider is reached", async () => {
+    const { deps } = setup();
+    const xFetch = vi.fn(async () =>
+      Response.json({ error: "unreachable" }, { status: 500 }),
+    );
+    const linked = {
+      ...deps,
+      x: { clientId: "test-client", clientSecret: "test-secret" },
+      xFetch,
+    };
+    const valid = "a".repeat(43);
+    const callback = (query: string, cookie?: string) =>
+      new Request(`https://slop.cash/api/v1/points/x/callback?${query}`, {
+        headers: cookie ? { cookie } : {},
+      });
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const cases: [Request, PointsDependencies, string][] = [
+        [
+          callback(`code=test&state=${valid}`, `__Host-slop_x_flow=${valid}`),
+          deps,
+          "not_configured",
+        ],
+        [
+          callback("code=test&state=short", `__Host-slop_x_flow=${valid}`),
+          linked,
+          "state_parameter",
+        ],
+        [callback(`code=test&state=${valid}`), linked, "flow_cookie"],
+        [
+          callback(`code=test&state=${valid}`, `__Host-slop_x_flow=${valid}`),
+          linked,
+          "flow_lookup",
+        ],
+      ];
+      for (const [request, target, stage] of cases) {
+        warning.mockClear();
+        const response = await handlePointsApi(request, target);
+        expect(response.status).toBe(303);
+        expect(response.headers.get("location")).toBe("/points?x=failed");
+        expect(warning.mock.calls).toEqual([
+          ["[Slop X] Connection failed", { stage, status: undefined }],
+        ]);
+      }
+      const joined = await handlePointsApi(
+        post("join", {
+          assertion: `slop_assert_v1_${"a".repeat(43)}`,
+          public: true,
+        }),
+        linked,
+      );
+      const cookie = joined.headers.get("set-cookie")!.split(";")[0];
+      const start = async () => {
+        const started = await handlePointsApi(
+          post("x/start", { public: true }, cookie),
+          linked,
+        );
+        return {
+          state: new URL(
+            (await started.json()).authorizationUrl,
+          ).searchParams.get("state")!,
+          flow: started.headers.get("set-cookie")!.split(";")[0],
+        };
+      };
+      const missingCode = await start();
+      warning.mockClear();
+      expect(
+        (
+          await handlePointsApi(
+            callback(`state=${missingCode.state}`, missingCode.flow),
+            linked,
+          )
+        ).headers.get("location"),
+      ).toBe("/points?x=failed");
+      expect(warning.mock.calls).toEqual([
+        ["[Slop X] Connection failed", { stage: "code_parameter" }],
+      ]);
+      const declined = await start();
+      warning.mockClear();
+      expect(
+        (
+          await handlePointsApi(
+            callback(
+              `error=access_denied&state=${declined.state}`,
+              declined.flow,
+            ),
+            linked,
+          )
+        ).headers.get("location"),
+      ).toBe("/points?x=cancelled");
+      expect(warning).not.toHaveBeenCalled();
+      expect(xFetch).not.toHaveBeenCalled();
+    } finally {
+      warning.mockRestore();
+    }
   });
 });
