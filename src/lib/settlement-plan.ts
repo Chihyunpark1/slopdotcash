@@ -32,6 +32,17 @@ export function planCarriesPlatformFee(instrumentId: unknown): boolean {
   );
 }
 
+/** The frozen funding-basis identity of a reviewed Squads instrument of either
+ * kind. Every ledger that names an instrument uses this exact string. */
+export function squadsInstrumentId(instrument: {
+  kind: "squads-v4-vault" | "squads-project-vault";
+  multisig: string;
+  vaultIndex: number;
+  vault: string;
+}): string {
+  return `${instrument.kind}:solana:${instrument.multisig}:${instrument.vaultIndex}:${instrument.vault}`;
+}
+
 export interface SettlementPlanTransfer {
   paymentId: string;
   kind: "contributor" | "platform-fee";
