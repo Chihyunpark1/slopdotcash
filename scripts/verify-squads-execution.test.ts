@@ -662,6 +662,25 @@ describe("Squads exact plan verifier", () => {
       expect(result.proposalStatus).toBe("unknown");
     }
   });
+  it("retries a rate limit refusal before counting an authority", async () => {
+    const input = await context();
+    const fixture = await fixtures(input);
+    let refusals = 0;
+    const result = await verifySquadsExecution(input, {
+      fetchImpl: async (url, init) => {
+        if (url.hostname === "solana.drpc.org" && refusals < 2) {
+          refusals += 1;
+          return new Response("", {
+            status: 429,
+            headers: { "retry-after": "0" },
+          });
+        }
+        return rpc(fixture)(url, init);
+      },
+    });
+    expect(refusals).toBe(2);
+    expect(result.accountEvidence?.authorities).toHaveLength(3);
+  });
   it("allows two-provider quorum with a third unavailable", async () => {
     const input = await context();
     const fixture = await fixtures(input);
