@@ -301,6 +301,11 @@ export async function verifySettlement(
     arguments_.cycleId,
     { allowPendingTransactionEvidence: true },
   );
+  if (cycle.state === "wound-up") {
+    throw new TypeError(
+      "The creator wound up this project vault after binding the proposal; nothing can be recorded as paid",
+    );
+  }
   if (cycle.state !== "settlement-planned") {
     throw new TypeError(
       "Only a verified execution plan can enter settlement verification",

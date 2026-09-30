@@ -323,6 +323,20 @@ checks that key against the creator multisig on chain and requires the
 Initiate permission on it. A creator loss report names the seat and needs no
 key.
 
+**Windup against a bound proposal (RFC #500 section 10).** The creator may
+return the vault balance to the creator's wallet at any time; Slop takes no
+part and cannot prevent it. When that happens after the creator bound a
+proposal, the proposal cannot execute and the approved rows cannot be paid.
+The refund itself is recorded like any vault outflow, as a verified `refund`
+commitment record. `funding:prepare-project-vault-windup` then derives
+`cycles/<project>/<month>/windup.json` from that record, the frozen allocation
+and plan, the execution binding, and a finalized quorum observation of the
+remaining balance; the cycle index validates it and publishes the cycle as
+`wound-up` with every approved row `held` under one public reason naming the
+refund transactions. Nothing is paid, carried, or reissued, and the settlement
+verifier refuses the cycle for good. See `cycles/README.md`, "Project vault
+windup".
+
 **The fee never enters a project vault.** On the 2-of-2 instrument the
 execution plan ends with the fee transfer, readiness requires the vault to
 cover principal plus fee, and a batch must include that transfer. On a

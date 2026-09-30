@@ -137,6 +137,13 @@ cannot prevent it. If asked to vote on one, Slop may do so only after steps 3,
 4, 5 and 6 above pass and the destination is the declared funder wallet. No
 fee applies to returned funds.
 
+If a windup follows a bound proposal, the record is `windup.json` in the cycle
+directory, derived from the verified refund records and a finalized balance
+observation (`cycles/README.md`, "Project vault windup"). Every approved row is
+held with one public reason naming the refund transactions. Slop's key holder
+does not write that record; anyone may prepare it from public evidence, and
+the cycle index validates it.
+
 ## 6. Refusals
 
 If any step fails, Slop does not vote, and the key holder opens an issue on
