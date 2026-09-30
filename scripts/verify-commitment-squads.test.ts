@@ -120,10 +120,11 @@ function transaction(mode: "deposit" | "release") {
 function fetchAuthorities(
   state: Record<
     string,
-    { balance?: string; error?: Error; transaction?: unknown }
+    { balance?: string; error?: Error; refuse?: number; transaction?: unknown }
   >,
 ) {
   const methods: string[] = [];
+  const refused = new Map<string, number>();
   const fetchImpl = async (url: URL, init?: RequestInit) => {
     const request = JSON.parse(String(init?.body)) as {
       id: string;
@@ -132,6 +133,10 @@ function fetchAuthorities(
     methods.push(request.method);
     const authority = state[url.host];
     if (authority.error) throw authority.error;
+    if ((refused.get(url.host) ?? 0) < (authority.refuse ?? 0)) {
+      refused.set(url.host, (refused.get(url.host) ?? 0) + 1);
+      return new Response("", { status: 429, headers: { "retry-after": "0" } });
+    }
     let result: unknown;
     if (request.method === "getMultipleAccounts")
       result = accountsResult(authority.balance ?? "5000000");
@@ -316,6 +321,34 @@ describe("Squads commitment verifier", () => {
       "getMultipleAccounts",
       "getMultipleAccounts",
     ]);
+  });
+
+  it("retries a rate limit refusal and drops an authority that never relents", async () => {
+    const { fetchImpl, methods } = fetchAuthorities({
+      "api.mainnet-beta.solana.com": { balance: "5000000", refuse: 2 },
+      "solana-rpc.publicnode.com": { balance: "5000000", refuse: 100 },
+      "solana.drpc.org": { balance: "5000000" },
+    });
+    await expect(
+      verifyCommitmentSquads({
+        funderMember: FUNDER,
+        mode: "state",
+        multisig: MULTISIG,
+        vault: VAULT,
+        vaultIndex: 0,
+        tokenAccount: TOKEN_ACCOUNT,
+        stewardMember: RECIPIENT,
+        fetchImpl,
+      }),
+    ).resolves.toMatchObject({
+      balanceMinor: "5000000",
+      authorities: [
+        { authority: "https://api.mainnet-beta.solana.com/" },
+        { authority: "https://solana.drpc.org/" },
+      ],
+    });
+    // 3 for the first authority, 4 for the one that never relents, 1 for the third.
+    expect(methods).toHaveLength(8);
   });
 
   it("validates multisig identity before every transaction authority", async () => {
