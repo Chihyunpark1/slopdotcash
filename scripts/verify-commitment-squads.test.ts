@@ -327,7 +327,7 @@ describe("Squads commitment verifier", () => {
     const { fetchImpl, methods } = fetchAuthorities({
       "api.mainnet-beta.solana.com": { balance: "5000000", refuse: 2 },
       "solana-rpc.publicnode.com": { balance: "5000000", refuse: 100 },
-      "solana.drpc.org": { balance: "5000000" },
+      "public.rpc.solanavibestation.com": { balance: "5000000" },
     });
     await expect(
       verifyCommitmentSquads({
@@ -344,7 +344,7 @@ describe("Squads commitment verifier", () => {
       balanceMinor: "5000000",
       authorities: [
         { authority: "https://api.mainnet-beta.solana.com/" },
-        { authority: "https://solana.drpc.org/" },
+        { authority: "https://public.rpc.solanavibestation.com/" },
       ],
     });
     // 3 for the first authority, 4 for the one that never relents, 1 for the third.
