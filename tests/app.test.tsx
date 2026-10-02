@@ -570,6 +570,9 @@ describe("discovery", () => {
       within(footer).queryByRole("link", { name: "Slop Git" }),
     ).not.toBeInTheDocument();
     expect(
+      within(footer).getByRole("link", { name: "hello@slop.cash" }),
+    ).toHaveAttribute("href", "mailto:hello@slop.cash");
+    expect(
       screen.queryByRole("link", { name: /^Home$/u }),
     ).not.toBeInTheDocument();
     expect(
@@ -1440,6 +1443,9 @@ describe("sponsors page", () => {
     for (const link of screen.getAllByRole("link", { name: "Add a project" })) {
       expect(link).toHaveAttribute("href", "/projects/new");
     }
+    expect(
+      screen.getByRole("link", { name: "Email hello@slop.cash" }),
+    ).toHaveAttribute("href", "mailto:hello@slop.cash");
   });
 
   it("leads with the pinned outside-GitHub cross-reference and keeps the live figures separate", async () => {
@@ -1625,6 +1631,11 @@ describe("project proposals", () => {
         name: "Add a project.",
       }),
     ).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("main")).getByRole("link", {
+        name: "hello@slop.cash",
+      }),
+    ).toHaveAttribute("href", "mailto:hello@slop.cash");
     fireEvent.change(screen.getByLabelText("Project name"), {
       target: { value: "Open Protein" },
     });

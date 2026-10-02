@@ -1,6 +1,7 @@
 import { ArrowRight, Check, Clipboard } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link } from "./Link";
+import { CONTACT_EMAIL, CONTACT_MAILTO } from "./lib/contact";
 import { copyText } from "./lib/copy-text";
 import { isFundingAddress } from "./lib/funding";
 import {
@@ -363,6 +364,10 @@ ${manifestText}`;
           Drafting does not list a project. A reviewed merge opens it for
           contributions; unknown authority and terms stay visibly disclosed
           without blocking work.
+        </p>
+        <p className="proposal-note">
+          Questions before you open the pull request? Email{" "}
+          <a href={CONTACT_MAILTO}>{CONTACT_EMAIL}</a>.
         </p>
       </section>
       <div className="proposal-grid">
