@@ -68,7 +68,9 @@ async function provider(
 ) {
   return (deps.xFetch ?? fetch)(`https://api.x.com${path}`, {
     ...init,
-    redirect: "error",
+    // Workers reject redirect: "error". With "manual" a redirect is not ok,
+    // so callers fail on it and log its status.
+    redirect: "manual",
     signal: AbortSignal.timeout(15000),
   });
 }

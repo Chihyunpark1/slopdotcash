@@ -253,6 +253,11 @@ describe("verified X connections", () => {
     let duringIdentity: (() => Promise<void>) | undefined;
     const xFetch = vi.fn(
       async (input: RequestInfo | URL, init?: RequestInit) => {
+        // Mirror the Workers runtime, which throws on redirect: "error".
+        if (init?.redirect !== "manual")
+          throw new TypeError(
+            'Invalid redirect value, must be one of "follow" or "manual"',
+          );
         const url = String(input);
         if (url.endsWith("/token")) {
           const body = new URLSearchParams(String(init?.body));
