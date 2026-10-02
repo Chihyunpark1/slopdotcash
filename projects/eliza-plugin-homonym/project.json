@@ -68,7 +68,7 @@
       "id": "mutedjapandi/eliza-plugin-homonym",
       "displayName": "mutedjapandi/eliza-plugin-homonym",
       "githubUrl": "https://github.com/mutedjapandi/eliza-plugin-homonym",
-      "description": "Describe the public repository and its role in this project.",
+      "description": "Public repository containing the ElizaOS plugin, actions, and build artifacts for the Homonym x402 game show on Base.",
       "integrationBranch": "main"
     }
   ],
