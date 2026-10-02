@@ -21,12 +21,18 @@
     "website": null
   },
   "authority": {
-    "state": "unverified",
-    "reason": "missing-repository-proof",
+    "state": "verified",
+    "reason": null,
     "role": "project-steward",
     "repositoryId": "1176392906",
     "repositoryNodeId": "R_kgDORh5Uyg",
-    "proof": null
+    "proof": {
+      "commitSha": "e64f3b0d12d00d86f018a704bf91f9c7e07ddd3b",
+      "fileSha256": "5df3ed0fa45af4e28b397a701dea45cb764e2d0eb7cc2f972bf2d3537b1bf3ae",
+      "policyRevision": "2026-10-02.1",
+      "url": "https://github.com/Canonry/canonry/blob/e64f3b0d12d00d86f018a704bf91f9c7e07ddd3b/.github/slop-project.json",
+      "verifiedAt": "2026-10-02T15:16:38.000Z"
+    }
   },
   "terms": {
     "revision": "2026-10-02.1",
