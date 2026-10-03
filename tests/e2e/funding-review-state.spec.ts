@@ -66,6 +66,28 @@ async function routeIndexes(
   );
 }
 
+// The workbench opens on the newest month once both indexes load, and choosing
+// a month clears edits and messages even when it is unchanged, so switch only
+// after every month is listed and only when the page is elsewhere.
+async function showMonth(
+  page: Page,
+  reviews: FundingReviewIndex,
+  cycles: CycleIndex,
+  cycleId: string,
+) {
+  const months = new Set(
+    [...reviews.reviews, ...cycles.cycles]
+      .filter((entry) => entry.projectId === "eliza")
+      .map((entry) => entry.cycleId),
+  );
+  const month = page
+    .locator(".funding-workbench")
+    .getByLabel("Contribution month");
+  await expect(month.locator("option")).toHaveCount(months.size);
+  if ((await month.inputValue()) !== cycleId) await month.selectOption(cycleId);
+  await expect(month).toHaveValue(cycleId);
+}
+
 async function downloadedReview(page: Page) {
   const [download] = await Promise.all([
     page.waitForEvent("download"),
@@ -236,9 +258,7 @@ test("switching contribution months clears the previous amount, reason and inval
   await routeIndexes(page, reviews, cycles);
   await page.goto("/projects/eliza/funding");
   const panel = page.locator(".funding-workbench");
-  await expect(panel.getByLabel("Contribution month")).toHaveValue(
-    august.cycleId,
-  );
+  await showMonth(page, reviews, cycles, august.cycleId);
   await panel.getByLabel("Find contributor").fill(actor.actor.login);
   const amount = panel.getByLabel(`USDC for ${actor.actor.login}`, {
     exact: true,
@@ -289,9 +309,7 @@ test("saved drafts restore only for the exact project, month, source and budget"
   );
   await page.goto("/projects/eliza/funding");
   const panel = page.locator(".funding-workbench");
-  await expect(panel.getByLabel("Contribution month")).toHaveValue(
-    august.cycleId,
-  );
+  await showMonth(page, reviews, cycles, august.cycleId);
   await panel.getByLabel("Find contributor").fill(actor.actor.login);
   const amount = panel.getByLabel(`USDC for ${actor.actor.login}`, {
     exact: true,
@@ -310,6 +328,7 @@ test("saved drafts restore only for the exact project, month, source and budget"
   expect(saved).not.toBeNull();
 
   await page.reload();
+  await showMonth(page, reviews, cycles, august.cycleId);
   await expect(panel).toContainText(
     "Saved draft restored for this exact source and budget",
   );
@@ -334,9 +353,7 @@ test("saved drafts restore only for the exact project, month, source and budget"
     ),
   });
   await page.reload();
-  await expect(panel.getByLabel("Contribution month")).toHaveValue(
-    august.cycleId,
-  );
+  await showMonth(page, currentReviews, cycles, august.cycleId);
   await panel.getByLabel("Find contributor").fill(actor.actor.login);
   await expect(amount).toHaveValue(displayUsdc(actor.simulatedMinor));
   await expect(reason).toHaveValue("");
