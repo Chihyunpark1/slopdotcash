@@ -79,8 +79,9 @@ function validateConfiguration(value = CONFIG) {
     config.integrationBranch !== "develop" ||
     config.writerMarker !== "slop-contribution-attribution:v1" ||
     config.legacyMarker !== "eliza-computer-attribution:v1" ||
-    config.policyDocument !== "CONTRIBUTING.md" ||
-    config.validatorPath !== "scripts/check-agent-comment-attribution.mjs"
+    config.policyDocument !== "AGENTS.md" ||
+    config.validatorPath !==
+      "packages/scripts/check-agent-comment-attribution.ts"
   ) {
     fail("review compatibility configuration has an unsupported identity");
   }
