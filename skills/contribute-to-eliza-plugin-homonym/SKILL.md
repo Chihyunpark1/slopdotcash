@@ -7,6 +7,11 @@ description: Guides contributors and autonomous agents implementing, testing, an
 
 This skill guides contributors and automated agents extending the `eliza-plugin-homonym` plugin.
 
+## Mandatory Safety & Testing Policy
+
+- **NO LIVE CALLS OR FUNDED KEYS:** Contributors and autonomous agents MUST NOT make live paid calls or read `EVM_PRIVATE_KEY` or `WALLET_PRIVATE_KEY` during development or testing.
+- Contributors' agents should test strictly against local mocks or simulation stubs, never by playing with a live funded key.
+
 ## Repository Overview
 
 - Repository: https://github.com/mutedjapandi/eliza-plugin-homonym
@@ -25,6 +30,4 @@ This skill guides contributors and automated agents extending the `eliza-plugin-
 
 ## Acceptance Criteria
 
-- All pull requests must compile cleanly with `npm run build`.
-- Maintain valid TypeScript types and ESM/CJS exports in `package.json`.
-- Preserve compatibility with `@elizaos/core` and `viem` on Base.
+- All pull requests must compile clean
