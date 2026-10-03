@@ -27,7 +27,7 @@ export const EVM_COMMITMENT_RPC_AUTHORITIES = Object.freeze({
   ethereum: [
     "https://ethereum-rpc.publicnode.com",
     "https://eth.drpc.org",
-    "https://cloudflare-eth.com",
+    "https://mainnet.gateway.tenderly.co",
   ],
 } as const satisfies Record<SablierNetwork, readonly string[]>);
 const EVM_COMMITMENT_RPC_QUORUM = 2;
