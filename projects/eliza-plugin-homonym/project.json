@@ -46,19 +46,19 @@
       "governanceResolution": null
     },
     "repositoryLicense": {
-      "state": "unknown",
-      "spdx": null,
-      "url": null,
+      "state": "declared",
+      "spdx": "MIT",
+      "url": "https://github.com/mutedjapandi/eliza-plugin-homonym/blob/main/LICENSE",
       "commitSha": null,
       "fileSha256": null
     },
     "inbound": {
-      "mode": "unknown",
-      "termsUrl": null,
+      "mode": "same-as-repository",
+      "termsUrl": "https://github.com/mutedjapandi/eliza-plugin-homonym/blob/main/LICENSE",
       "commitSha": null,
       "fileSha256": null,
       "version": null,
-      "acceptance": null
+      "acceptance": "Pull-request contributions are licensed under the repository MIT license."
     },
     "assignment": null,
     "externalPrize": null
@@ -88,8 +88,8 @@
     "chain": "solana",
     "rewardStartAt": "2026-10-02T01:08:33.386Z",
     "cycle": "calendar-month-utc",
-    "monthlyCapMinor": "150000000",
-    "monthlyCapDisplay": "$150",
+    "monthlyCapMinor": "0",
+    "monthlyCapDisplay": "$0",
     "committedMinor": "0",
     "paymentMode": "disabled",
     "feeBasisPoints": 100,
