@@ -46,19 +46,19 @@
       "governanceResolution": null
     },
     "repositoryLicense": {
-      "state": "declared",
+      "state": "verified",
       "spdx": "MIT",
-      "url": "https://github.com/mutedjapandi/eliza-plugin-homonym/blob/main/LICENSE",
-      "commitSha": null,
-      "fileSha256": null
+      "url": "https://github.com/mutedjapandi/eliza-plugin-homonym/blob/7a89a54d15d842cde33b6d280e51caeb924739df/LICENSE",
+      "commitSha": "7a89a54d15d842cde33b6d280e51caeb924739df",
+      "fileSha256": "ffb2e59ca302f4fbc65b3b7c4cc3109275385e74bc3314abd1fe38358a46b7a8"
     },
     "inbound": {
-      "mode": "same-as-repository",
-      "termsUrl": "https://github.com/mutedjapandi/eliza-plugin-homonym/blob/main/LICENSE",
+      "mode": "unknown",
+      "termsUrl": null,
       "commitSha": null,
       "fileSha256": null,
       "version": null,
-      "acceptance": "Pull-request contributions are licensed under the repository MIT license."
+      "acceptance": null
     },
     "assignment": null,
     "externalPrize": null
