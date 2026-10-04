@@ -27,7 +27,7 @@ const BASE_HOSTS = [
 const ETHEREUM_HOSTS = [
   "ethereum-rpc.publicnode.com",
   "eth.drpc.org",
-  "cloudflare-eth.com",
+  "mainnet.gateway.tenderly.co",
 ] as const;
 
 function addressWord(address: string): string {
