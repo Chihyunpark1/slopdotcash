@@ -12,6 +12,10 @@ import {
   isSolanaTransactionId,
 } from "../src/lib/funding-address.mjs";
 import {
+  type FetchLike,
+  fetchWithRateLimitRetry,
+} from "../src/lib/rate-limited-fetch";
+import {
   assertFinalizedUsdcFundingTransfer,
   assertFinalizedUsdcTransfer,
   type VerifiedSolanaTransaction,
@@ -33,12 +37,10 @@ import {
 export const SOLANA_COMMITMENT_RPC_AUTHORITIES = [
   "https://api.mainnet-beta.solana.com",
   "https://solana-rpc.publicnode.com",
-  "https://solana.drpc.org",
+  "https://public.rpc.solanavibestation.com",
 ] as const;
 const SOLANA_COMMITMENT_RPC_QUORUM = 2;
 export const MAX_SOLANA_COMMITMENT_RPC_BYTES = 8 * 1024 * 1024;
-
-export type FetchLike = (url: URL, init?: RequestInit) => Promise<Response>;
 
 export type CommitmentVerificationMode =
   | "deposit"
@@ -172,12 +174,11 @@ async function rpcCall(
   params: readonly unknown[],
   id: string,
 ): Promise<unknown> {
-  const response = await fetchImpl(rpc, {
+  const response = await fetchWithRateLimitRetry(fetchImpl, rpc, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
     redirect: "error",
-    signal: AbortSignal.timeout(20_000),
   });
   if (!response.ok) {
     throw new Error(`Solana RPC ${method} returned HTTP ${response.status}`);

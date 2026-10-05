@@ -141,6 +141,7 @@ test("funding and wallet keyboard flows remain accessible at 200 percent text si
       await audit(page, info, "wallet-200-percent-text");
     } else {
       const panel = page.locator(".funding-workbench");
+      await panel.getByLabel("Contribution month").selectOption("2026-08");
       await keyboardTo(page, panel.getByLabel("Find contributor"));
       await page.keyboard.type("lalalune");
       await expect(panel.locator("tbody tr")).toHaveCount(1);

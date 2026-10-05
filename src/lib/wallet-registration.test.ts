@@ -47,6 +47,7 @@ function harness(
     current?: RegisteredWalletClaim;
     created?: RegisteredWalletClaim;
     authorizationUrl?: string;
+    startLifetimeMs?: number;
     pending?: boolean;
     status?: number;
   } = {},
@@ -67,7 +68,9 @@ function harness(
             options.authorizationUrl ??
             `https://identity.slop.cash/v1/oauth/authorize?flow_id=${flowId}&state=${"s".repeat(43)}`,
           pollCapability: "p".repeat(43),
-          expiresAt: new Date(Date.now() + 300000).toISOString(),
+          expiresAt: new Date(
+            Date.now() + (options.startLifetimeMs ?? 300000),
+          ).toISOString(),
           pollAfterSeconds: 1,
         },
         201,
@@ -259,6 +262,28 @@ describe("wallet registration browser protocol", () => {
     expect(h.calls.some((call) => call.url.endsWith("/auth/session"))).toBe(
       false,
     );
+  });
+  it("opens sign-in when the visitor clock runs behind the service, within tolerance", async () => {
+    // A clock 90 seconds slow sees the five-minute flow expire 390 seconds out.
+    const slow = harness({ startLifetimeMs: 390_000, pending: true });
+    const controller = new AbortController();
+    const pending = prepareWalletRegistration(ADDRESS, {
+      fetch: slow.fetcher,
+      authorize: slow.authorization,
+      signal: controller.signal,
+    });
+    const settled = expect(pending).rejects.toThrow(/cancelled|timed out/);
+    await vi.waitFor(() => expect(slow.authorization).toHaveBeenCalledTimes(1));
+    controller.abort();
+    await settled;
+    const absurd = harness({ startLifetimeMs: 10 * 60_000 });
+    await expect(
+      prepareWalletRegistration(ADDRESS, {
+        fetch: absurd.fetcher,
+        authorize: absurd.authorization,
+      }),
+    ).rejects.toThrow(/invalid response/);
+    expect(absurd.authorization).not.toHaveBeenCalled();
   });
   it("rejects an untrusted popup destination and invalid address before registration", async () => {
     const h = harness({ authorizationUrl: "https://evil.example/authorize" });
