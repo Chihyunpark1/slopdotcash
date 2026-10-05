@@ -4,6 +4,9 @@ import { isSolanaAddress } from "./wallets";
 const IDENTITY = "https://identity.slop.cash";
 const API = "https://api.slop.cash";
 const AUDIENCE = "private-trace-api";
+// The service issues a flow that expires exactly five minutes after its own
+// clock. Allow a visitor's clock to run this far behind before refusing it.
+const CLOCK_SKEW_MS = 2 * 60_000;
 export interface WalletRegistrationIdentity {
   githubActorId: string;
   githubLogin: string;
@@ -258,7 +261,7 @@ export async function prepareWalletRegistration(
     const expires = timestamp(started.expiresAt);
     if (
       expires <= now() ||
-      expires > now() + 5 * 60_000 ||
+      expires > now() + 5 * 60_000 + CLOCK_SKEW_MS ||
       typeof started.flowId !== "string" ||
       !/^flow_[A-Za-z0-9_-]{20,64}$/u.test(started.flowId) ||
       typeof started.pollCapability !== "string" ||

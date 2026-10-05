@@ -5,8 +5,8 @@
   "integrationBranch": "develop",
   "writerMarker": "slop-contribution-attribution:v1",
   "legacyMarker": "eliza-computer-attribution:v1",
-  "policyDocument": "CONTRIBUTING.md",
-  "validatorPath": "scripts/check-agent-comment-attribution.mjs",
+  "policyDocument": "AGENTS.md",
+  "validatorPath": "packages/scripts/check-agent-comment-attribution.ts",
   "forwardProof": {
     "pullRequest": 19560,
     "reviewId": 4936838769,

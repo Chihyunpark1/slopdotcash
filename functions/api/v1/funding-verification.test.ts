@@ -324,7 +324,7 @@ describe("public canonical funding verification", () => {
       expect([
         "api.mainnet-beta.solana.com",
         "solana-rpc.publicnode.com",
-        "solana.drpc.org",
+        "public.rpc.solanavibestation.com",
       ]).toContain(url.hostname);
       const body = JSON.parse(String(init?.body));
       expect(body.method).toBe("getMultipleAccounts");

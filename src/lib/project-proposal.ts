@@ -51,6 +51,29 @@ export function immutableProposalTermsUrl(
   );
 }
 
+const GITHUB_REPOSITORY_LINK =
+  /^(?:https?:\/\/)?(?:www\.)?github\.com\/([^/\s?#]+)\/([^/\s?#]+?)(?:\.git)?(?:\/[^\s]*)?(?:[?#][^\s]*)?$/iu;
+const GITHUB_REPOSITORY_SSH =
+  /^(?:ssh:\/\/)?git@github\.com[:/]([^/\s]+)\/([^/\s]+?)(?:\.git)?\/?$/iu;
+const REPOSITORY_PATH = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u;
+
+/**
+ * Turns a pasted github.com link (https, bare host, ssh, with .git, a
+ * trailing slash, a deeper path, a query or a hash) into the owner/name form
+ * the project manifest requires. Anything that is not a github.com link is
+ * only trimmed, so a wrong value stays visible instead of being guessed.
+ */
+export function normalizeRepositoryInput(value: string): string {
+  const trimmed = value.trim();
+  const match =
+    GITHUB_REPOSITORY_LINK.exec(trimmed) ?? GITHUB_REPOSITORY_SSH.exec(trimmed);
+  return match ? `${match[1]}/${match[2]}` : trimmed;
+}
+
+export function validRepositoryPath(value: string): boolean {
+  return value.length <= 201 && REPOSITORY_PATH.test(value);
+}
+
 export function boundedText(
   value: string,
   minimum: number,
