@@ -214,7 +214,7 @@ async function rpcCall(
   return body.result;
 }
 
-function authorityRequest(
+export function authorityRequest(
   authority: string,
   authorityIndex: number,
   fetchImpl: FetchLike,
@@ -237,7 +237,7 @@ function authorityRequest(
   };
 }
 
-function quorumGroups<Result>(
+export function quorumGroups<Result>(
   settled: readonly PromiseSettledResult<{
     authority: string;
     verified: Result;
@@ -266,7 +266,7 @@ function quorumGroups<Result>(
   return agreeing;
 }
 
-function finalizedAccountValue(resultValue: unknown): {
+export function finalizedAccountValue(resultValue: unknown): {
   slot: number;
   value: unknown;
 } {

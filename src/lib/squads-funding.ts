@@ -92,11 +92,12 @@ function invert(value: bigint): bigint {
 const D = mod(-121665n * invert(121666n));
 const SQRT_M1 = power(2n, (P - 1n) / 4n);
 
-function decodeBase58(value: string): Uint8Array {
+/** Decodes base58 of any length, such as Solana instruction data. */
+export function decodeBase58Bytes(value: string): Uint8Array {
   const bytes: number[] = [0];
   for (const character of value) {
     const digit = BASE58_INDEX.get(character);
-    if (digit === undefined) throw new TypeError("invalid base58 public key");
+    if (digit === undefined) throw new TypeError("invalid base58 value");
     let carry = digit;
     for (let index = 0; index < bytes.length; index += 1) {
       carry += bytes[index] * 58;
@@ -113,6 +114,10 @@ function decodeBase58(value: string): Uint8Array {
   const decoded = new Uint8Array(leadingZeroes + significant.length);
   for (let index = 0; index < significant.length; index += 1)
     decoded[decoded.length - 1 - index] = significant[index];
+  return decoded;
+}
+function decodeBase58(value: string): Uint8Array {
+  const decoded = decodeBase58Bytes(value);
   if (decoded.length !== 32) throw new TypeError("invalid Solana public key");
   return decoded;
 }
@@ -162,21 +167,10 @@ function concat(parts: readonly Uint8Array[]): Uint8Array<ArrayBuffer> {
   return output;
 }
 
-/** Derives the canonical Squads v4 vault PDA using the official seed layout. */
-export async function deriveSquadsVaultAddress(
-  multisig: string,
-  vaultIndex: number,
+async function deriveSquadsAddress(
+  seeds: readonly Uint8Array[],
+  failure: string,
 ): Promise<string> {
-  if (!isSolanaAddress(multisig))
-    throw new TypeError("multisig is not a Solana public key");
-  if (!Number.isInteger(vaultIndex) || vaultIndex < 0 || vaultIndex > 255)
-    throw new TypeError("vault index must be an integer from 0 through 255");
-  const seeds = [
-    ENCODER.encode("multisig"),
-    decodeBase58(multisig),
-    ENCODER.encode("vault"),
-    new Uint8Array([vaultIndex]),
-  ];
   const program = decodeBase58(SQUADS_V4_PROGRAM_ID);
   for (let bump = 255; bump >= 0; bump -= 1) {
     const digest = new Uint8Array(
@@ -187,7 +181,49 @@ export async function deriveSquadsVaultAddress(
     );
     if (!isEd25519Point(digest)) return encodeBase58(digest);
   }
-  throw new TypeError("Squads vault PDA could not be derived");
+  throw new TypeError(failure);
+}
+
+/** Derives the canonical Squads v4 vault PDA using the official seed layout. */
+export async function deriveSquadsVaultAddress(
+  multisig: string,
+  vaultIndex: number,
+): Promise<string> {
+  if (!isSolanaAddress(multisig))
+    throw new TypeError("multisig is not a Solana public key");
+  if (!Number.isInteger(vaultIndex) || vaultIndex < 0 || vaultIndex > 255)
+    throw new TypeError("vault index must be an integer from 0 through 255");
+  return deriveSquadsAddress(
+    [
+      ENCODER.encode("multisig"),
+      decodeBase58(multisig),
+      ENCODER.encode("vault"),
+      new Uint8Array([vaultIndex]),
+    ],
+    "Squads vault PDA could not be derived",
+  );
+}
+/** Derives the Squads v4 proposal PDA for one multisig transaction index. */
+export async function deriveSquadsProposalAddress(
+  multisig: string,
+  transactionIndex: number,
+): Promise<string> {
+  if (!isSolanaAddress(multisig))
+    throw new TypeError("multisig is not a Solana public key");
+  if (!Number.isSafeInteger(transactionIndex) || transactionIndex < 1)
+    throw new TypeError("transaction index must be a positive safe integer");
+  const index = new Uint8Array(8);
+  new DataView(index.buffer).setBigUint64(0, BigInt(transactionIndex), true);
+  return deriveSquadsAddress(
+    [
+      ENCODER.encode("multisig"),
+      decodeBase58(multisig),
+      ENCODER.encode("transaction"),
+      index,
+      ENCODER.encode("proposal"),
+    ],
+    "Squads proposal PDA could not be derived",
+  );
 }
 /** Canonical classic-token USDC ATA; vault PDAs need not be on curve. */
 export async function deriveVaultUsdcTokenAccount(
@@ -227,6 +263,33 @@ function decodeBase64(value: unknown): Uint8Array {
   const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
   if (btoa(String.fromCharCode(...bytes)) !== value)
     throw new TypeError("Squads multisig account data is not canonical base64");
+  return bytes;
+}
+
+/** Returns the raw bytes of a finalized, Squads-owned, non-executable
+ * multisig account with the multisig discriminator and full base layout. */
+function squadsMultisigBytes(accountValue: unknown): Uint8Array {
+  if (accountValue === null || accountValue === undefined)
+    throw new TypeError(
+      "Squads multisig account is absent at finalized commitment",
+    );
+  const account = record(accountValue, "Squads multisig account");
+  if (account.owner !== SQUADS_V4_PROGRAM_ID || account.executable !== false)
+    throw new TypeError(
+      "multisig account is not owned by the Squads v4 program",
+    );
+  if (
+    !Array.isArray(account.data) ||
+    account.data.length !== 2 ||
+    account.data[1] !== "base64"
+  )
+    throw new TypeError("Squads multisig account data is not raw base64");
+  const bytes = decodeBase64(account.data[0]);
+  if (
+    bytes.length < 132 ||
+    !MULTISIG_DISCRIMINATOR.every((byte, index) => bytes[index] === byte)
+  )
+    throw new TypeError("account is not a Squads v4 multisig");
   return bytes;
 }
 
@@ -371,27 +434,7 @@ export async function assertSquadsProjectVaultIdentity(
     throw new TypeError(
       "vault is not the canonical Squads PDA for this multisig and index",
     );
-  if (accountValue === null || accountValue === undefined)
-    throw new TypeError(
-      "Squads multisig account is absent at finalized commitment",
-    );
-  const account = record(accountValue, "Squads multisig account");
-  if (account.owner !== SQUADS_V4_PROGRAM_ID || account.executable !== false)
-    throw new TypeError(
-      "multisig account is not owned by the Squads v4 program",
-    );
-  if (
-    !Array.isArray(account.data) ||
-    account.data.length !== 2 ||
-    account.data[1] !== "base64"
-  )
-    throw new TypeError("Squads multisig account data is not raw base64");
-  const bytes = decodeBase64(account.data[0]);
-  if (
-    bytes.length < 132 ||
-    !MULTISIG_DISCRIMINATOR.every((byte, index) => bytes[index] === byte)
-  )
-    throw new TypeError("account is not a Squads v4 multisig");
+  const bytes = squadsMultisigBytes(accountValue);
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   if (!bytes.slice(40, 72).every((byte) => byte === 0))
     throw new TypeError("project vault must have no config authority");
@@ -447,6 +490,66 @@ export async function assertSquadsProjectVaultIdentity(
     timeLockSeconds: view.getUint32(74, true),
     vault,
     vaultIndex,
+  };
+}
+
+export interface VerifiedSquadsCreatorSeat {
+  configAuthority: boolean;
+  creatorMember: string;
+  creatorMultisig: string;
+  creatorVaultIndex: number;
+  memberCount: number;
+  threshold: number;
+  timeLockSeconds: number;
+}
+
+/**
+ * Validates that the creator seat on a project vault is the canonical vault
+ * of the creator's own Squads multisig, so losing one creator device does not
+ * strand the project vault. The creator's multisig is reported, not judged:
+ * its threshold, member count, time lock, and whether a config authority is
+ * set are the creator's own choices.
+ */
+export async function assertSquadsCreatorSeat(
+  accountValue: unknown,
+  creatorMultisig: string,
+  creatorMember: string,
+  creatorVaultIndex: number,
+): Promise<VerifiedSquadsCreatorSeat> {
+  if (!isSolanaAddress(creatorMultisig) || !isSolanaAddress(creatorMember))
+    throw new TypeError(
+      "creator multisig or member is not a Solana public key",
+    );
+  if (
+    creatorMember !==
+    (await deriveSquadsVaultAddress(creatorMultisig, creatorVaultIndex))
+  )
+    throw new TypeError(
+      "creator member is not the canonical vault of the creator multisig",
+    );
+  const bytes = squadsMultisigBytes(accountValue);
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const rentCollectorTag = bytes[94];
+  if (rentCollectorTag !== 0 && rentCollectorTag !== 1)
+    throw new TypeError("Squads multisig rent collector is not canonical");
+  const memberCountOffset = 96 + 32 * rentCollectorTag;
+  const threshold = view.getUint16(72, true);
+  const memberCount = view.getUint32(memberCountOffset, true);
+  if (
+    threshold < 1 ||
+    memberCount < threshold ||
+    memberCount > 65_535 ||
+    bytes.length < memberCountOffset + 4 + 33 * memberCount
+  )
+    throw new TypeError("creator multisig membership is not canonical");
+  return {
+    configAuthority: !bytes.slice(40, 72).every((byte) => byte === 0),
+    creatorMember,
+    creatorMultisig,
+    creatorVaultIndex,
+    memberCount,
+    threshold,
+    timeLockSeconds: view.getUint32(74, true),
   };
 }
 
