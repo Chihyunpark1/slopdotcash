@@ -267,8 +267,15 @@ test("discovers projects and one points-ranked homepage leaderboard", async ({
     page.getByRole("heading", { exact: true, name: "Delta Star" }),
   ).toBeVisible();
   const elizaCard = page.locator('a.project-card[href="/projects/eliza"]');
-  await expect(elizaCard.getByText("Unfunded", { exact: true })).toHaveCount(0);
-  await expect(elizaCard.getByText("$5k", { exact: true })).toBeVisible();
+  await expect(
+    elizaCard.getByText("Not funded yet", { exact: true }),
+  ).toBeVisible();
+  await expect(elizaCard.getByText("$5k", { exact: true })).toHaveCount(0);
+  await expect(
+    elizaCard.getByText("Target $5k/mo · no funding committed", {
+      exact: true,
+    }),
+  ).toBeVisible();
   await expect(elizaCard.getByText("$5,000", { exact: true })).toHaveCount(0);
   await expect(
     elizaCard.getByText(/Build and verify the elizaOS framework/u),
@@ -410,16 +417,17 @@ test("starts Eliza with one prompt and no separate payout form", async ({
   ).toHaveCount(0);
   await expect(page.getByText("1% platform fee · Solana")).toHaveCount(0);
   const rewardStyle = await page.locator(".reward-card").evaluate((card) => {
-    const amount = card.querySelector<HTMLElement>(".reward-amount-monthly");
+    const amount = card.querySelector<HTMLElement>(":scope > strong");
     const actions = card.querySelector<HTMLElement>(":scope > div");
     if (!amount || !actions) return null;
     return {
-      amountFontSize: Number.parseFloat(getComputedStyle(amount).fontSize),
+      amountText: amount.textContent,
       actionBorderTopWidth: getComputedStyle(actions).borderTopWidth,
     };
   });
   expect(rewardStyle).not.toBeNull();
-  expect(rewardStyle?.amountFontSize ?? 0).toBeGreaterThanOrEqual(48);
+  // Eliza is pledged, so the headline is the funding state, never the cap.
+  expect(rewardStyle?.amountText).toBe("Not funded yet");
   expect(rewardStyle?.actionBorderTopWidth).toBe("0px");
   const projectGaps = await page.evaluate(() => {
     const breadcrumb = document.querySelector(".breadcrumb");
@@ -517,26 +525,26 @@ test("starts Eliza with one prompt and no separate payout form", async ({
   ).toHaveCount(0);
   await expect(page.getByText(/^Updated /u)).toBeVisible();
   await expect(page.getByText(/receipt-linked tokens/u)).toHaveCount(0);
-  const displayedProjectionCents = await page
+  const shareCells = await page
     .locator(".project-leader-row")
     .evaluateAll((rows) =>
-      rows.reduce((total, row) => {
-        const projection = row.querySelectorAll("td")[3]?.textContent ?? "";
-        return (
-          total + Math.round(Number(projection.replace(/[^0-9.-]/gu, "")) * 100)
-        );
-      }, 0),
+      rows.map((row) => row.querySelectorAll("td")[3]?.textContent ?? ""),
     );
   const view = createProjectView(await loadSnapshot(request), "eliza");
-  expect(displayedProjectionCents).toBe(
-    view.leaders.length
-      ? Number(BigInt(view.project.reward.monthlyCapMinor) / 10_000n)
-      : 0,
-  );
+  expect(shareCells).toHaveLength(view.leaders.length);
+  // No committed funds: every row is a share of the score, never dollars.
+  for (const cell of shareCells) {
+    expect(cell).toMatch(/^\d+\.\d{2}% of score$/u);
+  }
   expect(view.leaders.every((leader) => leader.projectedMinor === "0")).toBe(
     true,
   );
-  await expect(page.getByText(/Shares simulate the/u)).toBeVisible();
+  await expect(
+    page.getByRole("columnheader", { name: "Share of score" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/Not funded yet\. Shares show each contributor's part/u),
+  ).toBeVisible();
   await expect(page.getByText("Live from GitHub")).toHaveCount(0);
   await expect(page.getByText("How credit survives review")).toHaveCount(0);
 });
