@@ -1390,6 +1390,31 @@ test("opens the sponsors page directly and through keyboard navigation", async (
   ).toBeVisible();
 });
 
+test("lands direct hash links on their section", async ({ page }) => {
+  for (const [path, id] of [
+    ["/how-it-works#faq", "faq"],
+    ["/#leaderboard", "leaderboard"],
+  ] as const) {
+    await page.goto(path, { waitUntil: "networkidle" });
+    // The section top lands just under the sticky header, not at page top.
+    await expect
+      .poll(() =>
+        page
+          .locator(`#${id}`)
+          .evaluate((section) =>
+            Math.round(section.getBoundingClientRect().top),
+          ),
+      )
+      .toBeLessThanOrEqual(80);
+    expect(
+      await page
+        .locator(`#${id}`)
+        .evaluate((section) => section.getBoundingClientRect().top),
+    ).toBeGreaterThanOrEqual(0);
+    expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+  }
+});
+
 test("derives Solana addresses on the settlement verification page", async ({
   page,
 }, testInfo) => {

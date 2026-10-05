@@ -684,6 +684,32 @@ describe("discovery", () => {
     expect(window.location.hash).toBe("#leaderboard");
   });
 
+  it("lands a direct hash load on its section after the data renders", async () => {
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    });
+    route("/#leaderboard");
+    mockSnapshot();
+    render(<App />);
+
+    await screen.findByRole("heading", { name: "Leaderboard" });
+    await waitFor(() =>
+      expect(scrollIntoView.mock.contexts.at(-1)).toHaveProperty(
+        "id",
+        "leaderboard",
+      ),
+    );
+
+    // Once the reader scrolls, later renders must not pull them back.
+    fireEvent.wheel(window);
+    scrollIntoView.mockClear();
+    document.body.append(document.createElement("div"));
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    expect(scrollIntoView).not.toHaveBeenCalled();
+  });
+
   it("renders malformed public data as an error and retries explicitly", async () => {
     let serveValidData = false;
     const fetchMock = vi

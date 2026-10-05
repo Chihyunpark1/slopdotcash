@@ -1,4 +1,4 @@
-import { Link } from "./Link";
+import { Link, useInitialHashScroll } from "./Link";
 import { CONTACT_EMAIL, CONTACT_MAILTO } from "./lib/contact";
 import { copyText } from "./lib/copy-text";
 import { SOURCE_REPOSITORY } from "./lib/source-repository";
@@ -4568,6 +4568,7 @@ export function App() {
 
 function AppContent() {
   const route = useRoute();
+  useInitialHashScroll();
   const needsSnapshot = ![
     "points",
     "login",
