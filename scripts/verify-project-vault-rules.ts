@@ -12,6 +12,7 @@ import {
   isFundingAddress,
   isSolanaTransactionId,
 } from "../src/lib/funding-address.mjs";
+import type { FetchLike } from "../src/lib/rate-limited-fetch";
 import {
   assertSquadsCreatorSeat,
   assertSquadsProjectVaultIdentity,
@@ -31,7 +32,6 @@ import {
 } from "../src/lib/squads-history";
 import {
   authorityRequest,
-  type FetchLike,
   finalizedAccountValue,
   quorumGroups,
   SOLANA_COMMITMENT_RPC_AUTHORITIES,
@@ -41,7 +41,6 @@ export const PROJECT_VAULT_RULES_VERIFIER_VERSION =
   "project-vault-rules-v1" as const;
 const HISTORY_PAGE_SIZE = 1000;
 const MAX_HISTORY_PAGES = 10;
-const RATE_LIMIT_RETRIES = 5;
 
 type RuleReport =
   | {
@@ -66,7 +65,6 @@ export interface ProjectVaultRulesInput extends SquadsProjectVaultMembers {
   fetchImpl?: FetchLike;
   mode: "creator-seat" | "fallback-wait" | "spending-limits";
   multisig: string;
-  retryDelayMs?: number;
   transactionIndex?: number;
   vault: string;
   vaultIndex: number;
@@ -187,31 +185,6 @@ async function finalizedHistory(
   throw new RangeError("Squads history exceeded its page limit");
 }
 
-/** Public endpoints rate limit history reads; only that refusal is retried. */
-function patient(
-  request: (method: string, params: readonly unknown[]) => Promise<unknown>,
-  retryDelayMs: number,
-) {
-  return async (method: string, params: readonly unknown[]) => {
-    for (let attempt = 0; ; attempt += 1) {
-      try {
-        return await request(method, params);
-      } catch (error) {
-        if (
-          attempt >= RATE_LIMIT_RETRIES ||
-          !(error instanceof Error) ||
-          !error.message.endsWith("returned HTTP 429")
-        ) {
-          throw error;
-        }
-        await new Promise((resolve) =>
-          setTimeout(resolve, retryDelayMs * (attempt + 1)),
-        );
-      }
-    }
-  };
-}
-
 export async function verifyProjectVaultRules(input: ProjectVaultRulesInput) {
   const fetchImpl = input.fetchImpl ?? fetch;
   const members = {
@@ -289,12 +262,7 @@ export async function verifyProjectVaultRules(input: ProjectVaultRulesInput) {
   const settled = await Promise.allSettled(
     SOLANA_COMMITMENT_RPC_AUTHORITIES.map(
       async (authority, index): Promise<RuleObservation> => {
-        const { rpc, request: direct } = authorityRequest(
-          authority,
-          index,
-          fetchImpl,
-        );
-        const request = patient(direct, input.retryDelayMs ?? 2_000);
+        const { rpc, request } = authorityRequest(authority, index, fetchImpl);
         const accounts = finalizedAccountValue(
           await request("getMultipleAccounts", [
             seat ? [multisig, seat.creatorMultisig] : [multisig],
