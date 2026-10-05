@@ -571,6 +571,9 @@ describe("discovery", () => {
       within(footer).queryByRole("link", { name: "Slop Git" }),
     ).not.toBeInTheDocument();
     expect(
+      within(footer).getByRole("link", { name: "hello@slop.cash" }),
+    ).toHaveAttribute("href", "mailto:hello@slop.cash");
+    expect(
       screen.queryByRole("link", { name: /^Home$/u }),
     ).not.toBeInTheDocument();
     expect(
@@ -1441,6 +1444,9 @@ describe("sponsors page", () => {
     for (const link of screen.getAllByRole("link", { name: "Add a project" })) {
       expect(link).toHaveAttribute("href", "/projects/new");
     }
+    expect(
+      screen.getByRole("link", { name: "Email hello@slop.cash" }),
+    ).toHaveAttribute("href", "mailto:hello@slop.cash");
   });
 
   it("leads with the pinned outside-GitHub cross-reference and keeps the live figures separate", async () => {
@@ -1626,6 +1632,11 @@ describe("project proposals", () => {
         name: "Add a project.",
       }),
     ).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("main")).getByRole("link", {
+        name: "hello@slop.cash",
+      }),
+    ).toHaveAttribute("href", "mailto:hello@slop.cash");
     fireEvent.change(screen.getByLabelText("Project name"), {
       target: { value: "Open Protein" },
     });
@@ -1734,6 +1745,47 @@ describe("project proposals", () => {
         name: "Copy unavailable; select JSON",
       }),
     ).toBeVisible();
+  });
+
+  it("turns a pasted GitHub link into owner/name and flags anything else", async () => {
+    route("/projects/new");
+    mockSnapshot();
+    render(<App />);
+    await screen.findByLabelText("Project name");
+    const repositoryField = screen.getByLabelText("Public GitHub repository");
+
+    fireEvent.change(repositoryField, {
+      target: { value: "https://github.com/example/pasted-link/tree/main" },
+    });
+    expect(repositoryField).toHaveValue("example/pasted-link");
+    expect(repositoryField).not.toHaveAttribute("aria-invalid");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/"id": "example\/pasted-link"/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /"githubUrl": "https:\/\/github.com\/example\/pasted-link"/,
+      ),
+    ).toBeInTheDocument();
+
+    fireEvent.change(repositoryField, {
+      target: { value: "https://gitlab.com/example/elsewhere" },
+    });
+    expect(repositoryField).toHaveValue("https://gitlab.com/example/elsewhere");
+    expect(repositoryField).toHaveAttribute("aria-invalid", "true");
+    const error = screen.getByRole("alert");
+    expect(error).toHaveTextContent("Use the owner/name form");
+    expect(repositoryField).toHaveAttribute("aria-describedby", error.id);
+    expect(
+      screen.queryByRole("link", { name: /continue on github/i }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.change(repositoryField, {
+      target: { value: "example/elsewhere" },
+    });
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(repositoryField).not.toHaveAttribute("aria-invalid");
   });
 
   it("does not hand off an over-limit or imprecise money pool", async () => {

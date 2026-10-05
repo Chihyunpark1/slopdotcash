@@ -400,7 +400,8 @@ describe("bounded Squads Batch contract and external handoff", () => {
       second = await accounts(f, 1);
     const result = await verifySquadsExecution(f, {
       fetchImpl: async (url, init) => {
-        if (url.host === "solana.drpc.org") throw new Error("unavailable");
+        if (url.host === "public.rpc.solanavibestation.com")
+          throw new Error("unavailable");
         return (
           url.host === "api.mainnet-beta.solana.com" ? first : second
         ).fetchImpl(url, init);

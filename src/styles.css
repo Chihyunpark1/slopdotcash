@@ -2040,6 +2040,12 @@ small {
   font-size: 12px;
 }
 
+.proposal-intro .proposal-note a {
+  border-bottom: 1px solid var(--ink);
+  color: var(--ink);
+  font-weight: 700;
+}
+
 .proposal-grid {
   display: grid;
   grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);

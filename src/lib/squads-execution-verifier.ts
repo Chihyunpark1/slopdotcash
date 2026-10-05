@@ -10,6 +10,7 @@
  */
 
 import { ed25519 } from "@noble/curves/ed25519.js";
+import { fetchWithRateLimitRetry } from "./rate-limited-fetch";
 import {
   MAX_TRANSFERS_PER_PLAN,
   type SettlementExecutionPlan,
@@ -638,25 +639,28 @@ export async function verifySquadsExecution(
       let requestIndex = 0;
       const request = async (addresses: string[], minContextSlot?: number) => {
         const id = `squads-execution-${index}-${requestIndex++}`;
-        const response = await fetchImpl(new URL(authority), {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          redirect: "error",
-          signal: AbortSignal.timeout(20_000),
-          body: JSON.stringify({
-            jsonrpc: "2.0",
-            id,
-            method: "getMultipleAccounts",
-            params: [
-              addresses,
-              {
-                encoding: "base64",
-                commitment: "finalized",
-                ...(minContextSlot === undefined ? {} : { minContextSlot }),
-              },
-            ],
-          }),
-        });
+        const response = await fetchWithRateLimitRetry(
+          fetchImpl,
+          new URL(authority),
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            redirect: "error",
+            body: JSON.stringify({
+              jsonrpc: "2.0",
+              id,
+              method: "getMultipleAccounts",
+              params: [
+                addresses,
+                {
+                  encoding: "base64",
+                  commitment: "finalized",
+                  ...(minContextSlot === undefined ? {} : { minContextSlot }),
+                },
+              ],
+            }),
+          },
+        );
         const envelope = object(await boundedResponse(response));
         if (
           envelope.jsonrpc !== "2.0" ||

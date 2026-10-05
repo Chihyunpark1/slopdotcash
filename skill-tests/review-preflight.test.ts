@@ -53,7 +53,7 @@ function fixture() {
       {
         path: ".github/workflows/pr.yaml",
         source:
-          "on:\n  pull_request:\nsteps:\n  - run: node scripts/check-agent-comment-attribution.mjs",
+          "on:\n  pull_request:\nsteps:\n  - run: bun packages/scripts/check-agent-comment-attribution.ts",
       },
       {
         path: ".github/workflows/claude.yml",
@@ -78,7 +78,7 @@ describe("Eliza review compatibility preflight", () => {
     input.automationFiles.push({
       path: ".github/workflows/review-policy.yml",
       source:
-        "on:\n  pull_request_review:\nsteps:\n  - run: node scripts/check-agent-comment-attribution.mjs",
+        "on:\n  pull_request_review:\nsteps:\n  - run: bun packages/scripts/check-agent-comment-attribution.ts",
     });
     const result = assessReviewCompatibility(input);
     assert.equal(result.status, "blocked");
@@ -97,7 +97,7 @@ describe("Eliza review compatibility preflight", () => {
     input.automationFiles.push({
       path: ".github/workflows/review-policy.yml",
       source:
-        "on:\n  pull_request_review:\nsteps:\n  - run: node scripts/check-agent-comment-attribution.mjs\n# slop-contribution-attribution:v1",
+        "on:\n  pull_request_review:\nsteps:\n  - run: bun packages/scripts/check-agent-comment-attribution.ts\n# slop-contribution-attribution:v1",
     });
     const result = assessReviewCompatibility(input);
     assert.equal(result.status, "supported");
@@ -122,7 +122,7 @@ describe("Eliza review compatibility preflight", () => {
       {
         path: ".github/actions/review-policy/action.yml",
         source:
-          "runs:\n  using: composite\n  steps:\n    - run: node scripts/check-agent-comment-attribution.mjs\n      shell: bash",
+          "runs:\n  using: composite\n  steps:\n    - run: bun packages/scripts/check-agent-comment-attribution.ts\n      shell: bash",
       },
     );
     const result = assessReviewCompatibility(input);
@@ -153,7 +153,7 @@ describe("Eliza review compatibility preflight", () => {
       {
         path: ".github/actions/review-policy/action.yaml",
         source:
-          "runs:\n  using: composite\n  steps:\n    - run: node scripts/check-agent-comment-attribution.mjs\n      shell: bash\n# slop-contribution-attribution:v1",
+          "runs:\n  using: composite\n  steps:\n    - run: bun packages/scripts/check-agent-comment-attribution.ts\n      shell: bash\n# slop-contribution-attribution:v1",
       },
     );
     const result = assessReviewCompatibility(input);
