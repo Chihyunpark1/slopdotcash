@@ -364,6 +364,41 @@ textarea:focus-visible {
   line-height: 1.65;
 }
 
+.faq details {
+  border-top: 1px solid var(--line);
+  padding: 16px 0;
+}
+
+.faq details:last-of-type {
+  border-bottom: 1px solid var(--line);
+}
+
+.faq summary {
+  cursor: pointer;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.faq details p,
+.faq details li {
+  max-width: 70ch;
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.faq details p {
+  margin: 12px 0 0;
+}
+
+.faq details ul {
+  display: block;
+  margin: 10px 0 0;
+}
+
+.faq details a {
+  border-bottom: 1px solid var(--ink);
+}
+
 .mechanism-sources a {
   border-bottom: 1px solid var(--ink);
   font-weight: 700;
