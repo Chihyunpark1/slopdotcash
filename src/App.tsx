@@ -1,4 +1,5 @@
 import { Link } from "./Link";
+import { CONTACT_EMAIL, CONTACT_MAILTO } from "./lib/contact";
 import { copyText } from "./lib/copy-text";
 import { SOURCE_REPOSITORY } from "./lib/source-repository";
 import {
@@ -452,6 +453,7 @@ function Footer() {
           <ExternalLinkAnchor href={SOCIAL_TELEGRAM}>
             Telegram
           </ExternalLinkAnchor>
+          <a href={CONTACT_MAILTO}>{CONTACT_EMAIL}</a>
         </div>
       </div>
     </footer>
@@ -3970,6 +3972,9 @@ function SponsorsPage({
             >
               Reviewed manifests
             </ExternalLinkAnchor>
+          </li>
+          <li>
+            <a href={CONTACT_MAILTO}>Email {CONTACT_EMAIL}</a>
           </li>
           <li>
             <ExternalLinkAnchor href={SOCIAL_TELEGRAM}>

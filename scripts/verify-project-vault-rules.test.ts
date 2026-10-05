@@ -1,5 +1,6 @@
 /** Proves the project vault rule checks against recorded devnet history. */
 import { describe, expect, it } from "vitest";
+import { RATE_LIMIT_RETRIES } from "../src/lib/rate-limited-fetch";
 import {
   assertSquadsCreatorSeat,
   SPL_TOKEN_PROGRAM_ID,
@@ -101,7 +102,10 @@ function authorities(byHost: Record<string, Authority> = {}) {
     requests.push(`${url.hostname} ${request.method}`);
     if ((refused.get(url.hostname) ?? 0) < (authority.refuse ?? 0)) {
       refused.set(url.hostname, (refused.get(url.hostname) ?? 0) + 1);
-      return new Response("", { status: 429 });
+      return new Response("", {
+        status: 429,
+        headers: { "retry-after": "0" },
+      });
     }
     const result =
       request.method === "getMultipleAccounts"
@@ -134,7 +138,6 @@ const fallbackWait = (
     mode: "fallback-wait",
     transactionIndex,
     fallbackWaitSeconds,
-    retryDelayMs: 0,
     fetchImpl: authorities(byHost).fetchImpl,
   });
 
@@ -203,7 +206,7 @@ describe("project vault fallback wait", () => {
     const everywhere = (authority: Authority) => ({
       "api.mainnet-beta.solana.com": authority,
       "solana-rpc.publicnode.com": authority,
-      "solana.drpc.org": authority,
+      "public.rpc.solanavibestation.com": authority,
     });
     await expect(
       fallbackWait(2, FOURTEEN_DAYS, everywhere(late)),
@@ -225,7 +228,7 @@ describe("project vault fallback wait", () => {
       fallbackWait(2, FOURTEEN_DAYS, {
         "api.mainnet-beta.solana.com": votesDelayedBy(FOURTEEN_DAYS),
         "solana-rpc.publicnode.com": votesDelayedBy(FOURTEEN_DAYS - 1),
-        "solana.drpc.org": { recorded: () => null },
+        "public.rpc.solanavibestation.com": { recorded: () => null },
       }),
     ).rejects.toThrow(/did not reach commitment quorum/u);
   });
@@ -233,7 +236,7 @@ describe("project vault fallback wait", () => {
   it("retries only a rate limit refusal and reaches quorum without the third authority", async () => {
     const { fetchImpl, requests } = authorities({
       "api.mainnet-beta.solana.com": { refuse: 2 },
-      "solana.drpc.org": { refuse: 100 },
+      "public.rpc.solanavibestation.com": { refuse: 100 },
     });
     await expect(
       verifyProjectVaultRules({
@@ -241,7 +244,6 @@ describe("project vault fallback wait", () => {
         mode: "fallback-wait",
         transactionIndex: 1,
         fallbackWaitSeconds: 0,
-        retryDelayMs: 0,
         fetchImpl,
       }),
     ).resolves.toMatchObject({
@@ -251,8 +253,10 @@ describe("project vault fallback wait", () => {
       ],
     });
     expect(
-      requests.filter((request) => request.startsWith("solana.drpc.org")),
-    ).toHaveLength(6);
+      requests.filter((request) =>
+        request.startsWith("public.rpc.solanavibestation.com"),
+      ),
+    ).toHaveLength(RATE_LIMIT_RETRIES + 1);
   });
 });
 
@@ -306,7 +310,6 @@ describe("project vault spending limits", () => {
       verifyProjectVaultRules({
         ...vault,
         mode: "spending-limits",
-        retryDelayMs: 0,
         fetchImpl: authorities().fetchImpl,
       }),
     ).resolves.toMatchObject({
@@ -325,7 +328,6 @@ describe("project vault spending limits", () => {
       verifyProjectVaultRules({
         ...vault,
         mode: "spending-limits",
-        retryDelayMs: 0,
         fetchImpl: authorities({
           "api.mainnet-beta.solana.com": {
             listed: (address) => signatures[address].slice(0, -1),
@@ -418,11 +420,10 @@ describe("project vault creator seat", () => {
       ...SEATED_MEMBERS,
       mode: "creator-seat",
       creatorMultisig: CREATOR_MULTISIG,
-      retryDelayMs: 0,
       fetchImpl: authorities({
         "api.mainnet-beta.solana.com": authority,
         "solana-rpc.publicnode.com": authority,
-        "solana.drpc.org": authority,
+        "public.rpc.solanavibestation.com": authority,
       }).fetchImpl,
     });
   };
@@ -468,7 +469,6 @@ describe("project vault creator seat", () => {
         ...vault,
         mode: "creator-seat",
         creatorMultisig: CREATOR_MULTISIG,
-        retryDelayMs: 0,
         fetchImpl: authorities().fetchImpl,
       }),
     ).rejects.toThrow(/did not reach commitment quorum/u);

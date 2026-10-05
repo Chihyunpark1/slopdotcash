@@ -9,6 +9,8 @@ test("maintainer reviews August cap, preserves excluded rows, and follows fundin
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto("/projects/eliza/funding");
   const panel = page.locator(".funding-workbench");
+  // The page opens on the newest month; later freezes must not move this test.
+  await panel.getByLabel("Contribution month").selectOption("2026-08");
   await expect(panel.getByLabel("Contribution month")).toHaveValue("2026-08");
   await expect(panel).toContainText("10,000 USDC");
   await expect(panel.locator("tbody tr")).toHaveCount(108);
@@ -60,6 +62,7 @@ test("maintainer reviews August cap, preserves excluded rows, and follows fundin
 test("invalid amounts cannot export an older valid award", async ({ page }) => {
   await page.goto("/projects/eliza/funding");
   const panel = page.locator(".funding-workbench");
+  await panel.getByLabel("Contribution month").selectOption("2026-08");
   await panel.getByLabel("Find contributor").fill("lalalune");
   await panel.getByLabel("USDC for lalalune", { exact: true }).fill("1e8");
   await expect(

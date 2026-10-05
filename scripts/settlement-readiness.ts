@@ -8,6 +8,7 @@ import {
   type FundingReadinessEvidence,
   verifyFundingReadiness,
 } from "../src/lib/funding-readiness";
+import { fetchWithRateLimitRetry } from "../src/lib/rate-limited-fetch";
 import { publicSignerReport } from "../src/lib/signer-capability";
 import {
   assertSquadsVaultUsdcState,
@@ -182,13 +183,16 @@ export async function observeSettlementVault(instrument: Loaded["instrument"]) {
     SOLANA_COMMITMENT_RPC_AUTHORITIES.map(async (authority, index) => {
       async function rpc(method: string, params: unknown[]) {
         const id = `slop-release-${index}-${method}`;
-        const response = await fetch(authority, {
-          method: "POST",
-          redirect: "error",
-          signal: AbortSignal.timeout(20000),
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
-        });
+        const response = await fetchWithRateLimitRetry(
+          fetch,
+          new URL(authority),
+          {
+            method: "POST",
+            redirect: "error",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
+          },
+        );
         if (!response.ok)
           throw new TypeError(`Finalized RPC returned HTTP ${response.status}`);
         const value = (await readBoundedJson(
