@@ -630,12 +630,12 @@ describe("discovery", () => {
       .closest("a");
     expect(elizaCard).not.toBeNull();
     if (!elizaCard) throw new Error("Eliza project card is missing");
-    expect(within(elizaCard).queryByText(/Unfunded/u)).not.toBeInTheDocument();
-    expect(within(elizaCard).getByText("$5k")).toBeInTheDocument();
-    expect(within(elizaCard).getByText("/mo")).toBeInTheDocument();
+    // A pledged pool headlines its state; the cap is small print only.
+    expect(within(elizaCard).getByText("Not funded yet")).toBeInTheDocument();
+    expect(within(elizaCard).queryByText("$5k")).not.toBeInTheDocument();
     expect(
-      within(elizaCard).queryByText("Target cap · no funding committed"),
-    ).not.toBeInTheDocument();
+      within(elizaCard).getByText("Target $5k/mo · no funding committed"),
+    ).toBeInTheDocument();
     expect(
       screen.queryByText("The proof is the product."),
     ).not.toBeInTheDocument();
@@ -909,12 +909,11 @@ describe("project routes", () => {
     expect(
       screen.queryByText("$10,000 monthly pool", { exact: false }),
     ).not.toBeInTheDocument();
-    expect(
-      screen
-        .getByText("MONTHLY POOL")
-        .closest("aside")
-        ?.querySelector(".reward-amount-monthly"),
-    ).toHaveTextContent("$5k / mo");
+    const rewardCard = screen.getByText("MONTHLY POOL").closest("aside");
+    expect(rewardCard?.querySelector("strong")).toHaveTextContent(
+      "Not funded yet",
+    );
+    expect(rewardCard).not.toHaveTextContent("$5k");
     expect(
       screen.getByText(/Target \$5,000 per month\. No funding is committed/u),
     ).toBeInTheDocument();

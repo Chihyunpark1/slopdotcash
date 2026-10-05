@@ -1205,6 +1205,12 @@ small {
   font-size: 10px;
 }
 
+.project-bounty.project-bounty-unfunded strong {
+  font-size: clamp(24px, 2.6vw, 34px);
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
 .project-bounty span {
   color: var(--muted);
   font-size: 13px;

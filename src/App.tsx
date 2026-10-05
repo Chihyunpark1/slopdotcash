@@ -316,6 +316,9 @@ export function monthlyPoolLabel(
     : `${formatMicroUsdc(reward.committedMinor)} committed · accessibility unknown · target ${reward.monthlyCapDisplay}`;
 }
 
+/** A pledged pool never headlines its cap; the cap is small print only. */
+const UNFUNDED_POOL_HEADLINE = "Not funded yet";
+
 function formatPercent(partsPerMillion: number): string {
   return `${(partsPerMillion / 10_000).toFixed(2)}%`;
 }
@@ -571,13 +574,21 @@ function ProjectCard({ project }: { project: ProjectDefinition }) {
       </div>
       <div className="project-card-content">
         <p className="project-summary">{project.description}</p>
-        <p className="project-bounty">
-          <strong>{amount}</strong>
-          {project.reward.kind === "monthly-pool" ? <span>/mo</span> : null}
-        </p>
-        {project.reward.kind === "monthly-pool" && !unfunded ? (
+        {unfunded ? (
+          <p className="project-bounty project-bounty-unfunded">
+            <strong>{UNFUNDED_POOL_HEADLINE}</strong>
+          </p>
+        ) : (
+          <p className="project-bounty">
+            <strong>{amount}</strong>
+            {project.reward.kind === "monthly-pool" ? <span>/mo</span> : null}
+          </p>
+        )}
+        {project.reward.kind === "monthly-pool" ? (
           <small className="project-money-state">
-            Committed balance · accessibility unknown · payments disabled
+            {unfunded
+              ? `Target ${amount}/mo · no funding committed`
+              : "Committed balance · accessibility unknown · payments disabled"}
           </small>
         ) : null}
         {project.reward.reviewBudget ? (
@@ -972,11 +983,37 @@ function InstallPanel({ project }: { project: ProjectDefinition }) {
   );
 }
 
-function RewardValue({ leader }: { leader: ProjectContributor }) {
-  return leader.simulatedMinor !== null ? (
-    formatMicroUsdc(leader.simulatedDisplayMinor ?? leader.simulatedMinor)
-  ) : (
-    <>{formatPercent(leader.projectedSharePartsPerMillion ?? 0)} share</>
+/** Dollars are simulated only against committed funds; otherwise a share. */
+function RewardValue({
+  leader,
+  view,
+}: {
+  leader: ProjectContributor;
+  view: ProjectView;
+}) {
+  if (leader.simulatedMinor === null) {
+    return (
+      <>{formatPercent(leader.projectedSharePartsPerMillion ?? 0)} share</>
+    );
+  }
+  if (!monthlyPoolUnfunded(view.project.reward)) {
+    return formatMicroUsdc(
+      leader.simulatedDisplayMinor ?? leader.simulatedMinor,
+    );
+  }
+  const totalWeight = view.leaders.reduce(
+    (total, entry) => total + entry.adjustedWeight,
+    0,
+  );
+  return (
+    <>
+      {formatPercent(
+        totalWeight > 0
+          ? Math.round((leader.adjustedWeight * 1_000_000) / totalWeight)
+          : 0,
+      )}{" "}
+      of score
+    </>
   );
 }
 
@@ -1005,7 +1042,9 @@ function ProjectLeaderboard({
           ) : null}
           {view.reward.kind === "monthly-pool" ? (
             <p>
-              Shares simulate the {monthlyPoolLabel(view.project.reward)} cap.
+              {monthlyPoolUnfunded(view.project.reward)
+                ? `${UNFUNDED_POOL_HEADLINE}. Shares show each contributor's part of the score, not dollars. Target ${view.project.reward.monthlyCapDisplay} per month.`
+                : `Shares simulate the ${monthlyPoolLabel(view.project.reward)} cap.`}{" "}
               Not approved payouts.
             </p>
           ) : null}
@@ -1023,7 +1062,12 @@ function ProjectLeaderboard({
                   <th scope="col">Rank</th>
                   <th scope="col">Contributor</th>
                   <th scope="col">Score</th>
-                  <th scope="col">Simulated share</th>
+                  <th scope="col">
+                    {view.reward.kind === "monthly-pool" &&
+                    monthlyPoolUnfunded(view.project.reward)
+                      ? "Share of score"
+                      : "Simulated share"}
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -1064,7 +1108,7 @@ function ProjectLeaderboard({
                     </td>
                     <td>
                       <strong>
-                        <RewardValue leader={leader} />
+                        <RewardValue leader={leader} view={view} />
                       </strong>
                     </td>
                   </tr>
@@ -1783,13 +1827,16 @@ function ProjectPage({
                 </span>
                 <strong
                   className={
-                    project.reward.kind === "monthly-pool"
+                    project.reward.kind === "monthly-pool" &&
+                    !monthlyPoolUnfunded(project.reward)
                       ? "reward-amount-monthly"
                       : undefined
                   }
                 >
                   {project.reward.kind === "monthly-pool"
-                    ? `${monthlyPoolCapLabel(project.reward)} / mo`
+                    ? monthlyPoolUnfunded(project.reward)
+                      ? UNFUNDED_POOL_HEADLINE
+                      : `${monthlyPoolCapLabel(project.reward)} / mo`
                     : project.reward.externalOpportunity
                         ?.advertisedAmountDisplay}
                 </strong>
@@ -2190,7 +2237,7 @@ function ProfilePage({
                       </small>
                     </span>
                     <span className="profile-project-stat">
-                      <RewardValue leader={leader} />
+                      <RewardValue leader={leader} view={view} />
                     </span>
                     <ChevronRight aria-hidden="true" />
                   </Link>
