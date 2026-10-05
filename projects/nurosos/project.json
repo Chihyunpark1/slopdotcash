@@ -1,29 +1,121 @@
 {
   "schemaVersion": "1",
-  "id": "modarresi1913/NurosOS",
+  "id": "nurosos",
   "slug": "nurosos",
   "name": "NurosOS",
   "eyebrow": "Open-source project",
-  "headline": "Fund the open-source experimental substrate for synthetic cognitive development.",
-  "description": "A bio-inspired neuromorphic operating system and research substrate for developmental intelligence.",
+  "headline": "Earn $X by making artificial minds reproducible.",
+  "description": "Build a benchmark-quality developmental experiment for NurosOS. Start from one computational genome, develop it in different worlds, measure how trajectories diverge, then prove that each history can be checkpointed, replayed, audited, and compared. Ship a tested PR with deterministic evidence—not claims of consciousness.",
   "listingTier": "community",
   "status": "paused",
   "steward": {
-    "displayName": "Almodarresieh",
+    "displayName": "modarresi",
     "kind": "individual",
     "github": {
       "actorId": "81695894",
-      "username": "modarresi1913"
-    }
+      "nodeId": "MDQ6VXNlcjgxNjk1ODk0",
+      "login": "modarresi1913",
+      "type": "User",
+      "profileUrl": "https://github.com/modarresi1913"
+    },
+    "website": null
   },
-  "paymentsEnabled": false,
-  "committed": 0,
+  "authority": {
+    "state": "unverified",
+    "reason": "missing-repository-proof",
+    "role": "project-steward",
+    "repositoryId": "1358416073",
+    "repositoryNodeId": "MDQ6VXNlcjgxNjk1ODk0",
+    "proof": null
+  },
+  "terms": {
+    "revision": "draft-1",
+    "effectiveAt": "2026-10-05T13:38:51.122Z",
+    "paymentTransfersIp": false,
+    "retroactive": false,
+    "receiptPolicy": {
+      "state": "pending-authority-activation",
+      "activatedAt": null,
+      "bindings": []
+    },
+    "copyright": {
+      "model": "contributor-retained",
+      "claimedLegalHolder": null,
+      "notice": null,
+      "legalCapacity": null,
+      "governanceResolution": null
+    },
+    "repositoryLicense": {
+      "state": "unknown",
+      "spdx": null,
+      "url": null,
+      "commitSha": null,
+      "fileSha256": null
+    },
+    "inbound": {
+      "mode": "license",
+      "termsUrl": "",
+      "commitSha": "",
+      "fileSha256": "",
+      "version": "",
+      "acceptance": ""
+    },
+    "assignment": null,
+    "externalPrize": null
+  },
   "repositories": [
     {
       "id": "modarresi1913/NurosOS",
-      "displayName": "NurosOS",
+      "displayName": "modarresi1913/NurosOS",
       "githubUrl": "https://github.com/modarresi1913/NurosOS",
-      "description": "A bio-inspired neuromorphic operating system and research substrate for developmental intelligence."
+      "description": "Describe the public repository and its role in this project.",
+      "integrationBranch": "main"
     }
-  ]
+  ],
+  "skill": {
+    "id": "contribute-to-nurosos",
+    "publishAtRoot": false,
+    "sourcePath": "skills/contribute-to-nurosos",
+    "publicPath": "/projects/nurosos/skill.md"
+  },
+  "reviewSkill": {
+    "id": "review-nurosos-contributions",
+    "sourcePath": "skills/review-nurosos-contributions"
+  },
+  "reward": {
+    "kind": "monthly-pool",
+    "currency": "USDC",
+    "chain": "solana",
+    "rewardStartAt": "2026-10-05T13:38:51.122Z",
+    "cycle": "calendar-month-utc",
+    "monthlyCapMinor": "0",
+    "monthlyCapDisplay": "$0",
+    "committedMinor": "0",
+    "paymentMode": "disabled",
+    "feeBasisPoints": 100,
+    "unusedFunds": "rollover-without-cap-increase",
+    "fundingState": "pledged"
+  },
+  "funding": {
+    "mode": "direct-noncustodial",
+    "disclosure": "Funds go directly to the project wallet. Slop does not hold or recover funds.",
+    "recordsPath": "funding/nurosos",
+    "addresses": [
+      {
+        "network": "solana",
+        "asset": "USDC",
+        "address": "9of4DVvkq2gZBgv6D1385m5bh82XQjXRj5YVw7oge5JV",
+        "effectiveAt": "2026-10-05T13:38:51.122Z",
+        "replacedAt": null
+      }
+    ]
+  },
+  "modelPolicy": {
+    "mode": "open-declared",
+    "disclosureRequired": true
+  },
+  "links": {
+    "repository": "https://github.com/modarresi1913/NurosOS",
+    "issues": "https://github.com/modarresi1913/NurosOS/issues"
+  }
 }
