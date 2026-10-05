@@ -15,6 +15,14 @@ choice and raw token volume never change score or payout. A valid finalized
 private trace earns a fixed 15% evidence bonus. Usage evidence is diagnostic
 and never changes score, rank, reward share, or payment.
 
+Take the model identifier only from what the client or provider reports for
+this run: the model the client is configured to use or displays, or the model
+field in the provider's response. Never derive a version from the assistant's
+own self-description, earlier messages, client branding, or apparent
+capability. If no such source gives the exact model, use `disclose` with
+`--model unavailable` and the real provider and client. A signed receipt
+always requires the exact model.
+
 ## Contribute
 
 Choose useful work, implement it, test the affected behavior, and open a GitHub

@@ -90,10 +90,12 @@ export type {
  */
 
 import {
+  isDeclaredModelIdentifier,
   isExactClientIdentifier,
-  isExactModelIdentifier,
   isExactProviderIdentifier,
   isExactProviderModelIdentifier,
+  isUnavailableModelIdentifier,
+  UNAVAILABLE_MODEL_IDENTIFIER,
 } from "./model-identity";
 import { findProject } from "./projects.mjs";
 import {
@@ -757,13 +759,15 @@ function parseMarker(
     };
   }
   const provider = parsed.provider;
-  const model = parsed.model;
   if (!isExactProviderIdentifier(provider)) {
     return { error: "provider must be an exact provider identifier" };
   }
-  if (!isExactModelIdentifier(model)) {
-    return { error: "model must be an exact model identifier" };
+  if (!isDeclaredModelIdentifier(parsed.model)) {
+    return {
+      error: `model must be an exact model identifier or ${UNAVAILABLE_MODEL_IDENTIFIER}`,
+    };
   }
+  const model = declaredModel(parsed.model);
   const client = parsed.client;
   if (!isExactClientIdentifier(client)) {
     return { error: "client must name the exact client used" };
@@ -789,6 +793,25 @@ function parseMarker(
     skillRevision: skillRevision.trim(),
     run: null,
   };
+}
+
+/** Spells the unavailable declaration one way, whatever case it arrived in. */
+function declaredModel(model: string): string {
+  return isUnavailableModelIdentifier(model)
+    ? UNAVAILABLE_MODEL_IDENTIFIER
+    : model;
+}
+
+/**
+ * Exact-model lists never carry a declaration that names no model. The
+ * attribution record itself keeps the provider and client that were declared.
+ */
+export function exactModelIdentifiers(
+  attributions: readonly Pick<ModelAttribution, "identifier" | "model">[],
+): string[] {
+  return attributions
+    .filter((attribution) => !isUnavailableModelIdentifier(attribution.model))
+    .map((attribution) => attribution.identifier);
 }
 
 function exactIdentifier(provider: string, model: string): string {
@@ -1142,14 +1165,12 @@ export function assessModelAttribution(
       for (const declaration of visibleIdentifiers) {
         if (
           !isExactProviderIdentifier(declaration.provider) ||
-          !isExactModelIdentifier(declaration.model)
+          !isDeclaredModelIdentifier(declaration.model)
         ) {
           continue;
         }
-        const identifier = exactIdentifier(
-          declaration.provider,
-          declaration.model,
-        );
+        const model = declaredModel(declaration.model);
+        const identifier = exactIdentifier(declaration.provider, model);
         validSourceIds.add(source.id);
         if (markerIdentifiers.has(identifier.toLowerCase())) {
           continue;
@@ -1161,7 +1182,7 @@ export function assessModelAttribution(
           artifactId: source.artifactId,
           actor: source.author,
           provider: declaration.provider,
-          model: declaration.model,
+          model,
           identifier,
           client: null,
           skillRevision: null,
@@ -1806,7 +1827,7 @@ function resolvedIssueContributor(
 
 function modelStatus(assessment: AttributionAssessment): WorkItemModelStatus {
   const identifiers = uniqueSorted(
-    assessment.declarations.map((declaration) => declaration.identifier),
+    exactModelIdentifiers(assessment.declarations),
   );
   const machineMarkerCount = assessment.declarations.filter(
     (declaration) => declaration.format === "machine-marker",
@@ -3407,7 +3428,11 @@ export function createLeaderboardSnapshot(
     }
   }
   for (const attribution of attributions) {
-    if (attribution.actor && !isBotActor(attribution.actor)) {
+    if (
+      attribution.actor &&
+      !isBotActor(attribution.actor) &&
+      !isUnavailableModelIdentifier(attribution.model)
+    ) {
       actorEntry(entries, attribution.actor).models.add(attribution.identifier);
     }
   }
@@ -4449,7 +4474,7 @@ function assertWorkItemValue(
   );
   const coverageCounts = assertCoverageCounts(model, `${path}.model`);
   if (
-    (model.machineMarkerCount > 0 && identifiers.length === 0) ||
+    (model.machineMarkerCount > 0 && coverageCounts.validSourceCount === 0) ||
     (identifiers.length > 0 && coverageCounts.validSourceCount === 0) ||
     model.invalidMarkerCount < coverageCounts.invalidSourceCount
   ) {
@@ -5396,6 +5421,7 @@ export function assertLeaderboardSnapshot(
   const reportedModelsByActor = new Map<string, Set<string>>();
   for (const attribution of validatedAttributions) {
     if (!attribution.actor) continue;
+    if (isUnavailableModelIdentifier(attribution.model)) continue;
     const identifiers =
       reportedModelsByActor.get(attribution.actor.id) ?? new Set<string>();
     identifiers.add(attribution.identifier);

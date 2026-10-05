@@ -62,6 +62,9 @@ const COMMON_PLACEHOLDERS = new Set([
   "unknown",
   "unspecified",
 ]);
+// The one supported answer when the exact model cannot be established from
+// client or provider metadata. Only ordinary disclosure accepts it.
+const UNAVAILABLE_MODEL = "unavailable";
 const FIELD_PLACEHOLDERS = {
   client: new Set(["agent", "app", "cli", "client"]),
   model: new Set([
@@ -109,7 +112,9 @@ Common options:
   --repo-root <path>  Target Git repository root (default: current directory)
   --client <name>     Declared agent/client identifier
   --provider <name>   Declared model provider identifier
-  --model <id>        Declared exact model identifier
+  --model <id>        Declared exact model identifier, taken from client or
+                      provider metadata. Never guess it. With disclose only,
+                      "unavailable" states it could not be established.
   --client-version <version>  Exact declared agent/client version
   --json              Emit machine-readable JSON
 
@@ -265,9 +270,26 @@ export function declaredIdentity(value, field, kind, maxLength = 128) {
     COMMON_PLACEHOLDERS.has(normalized) ||
     FIELD_PLACEHOLDERS[kind].has(normalized)
   ) {
-    fail(`${field} must be an exact non-placeholder identifier`);
+    fail(
+      kind === "model"
+        ? `${field} must be an exact non-placeholder identifier; if the exact model cannot be established, use disclose with ${field} ${UNAVAILABLE_MODEL}`
+        : `${field} must be an exact non-placeholder identifier`,
+    );
+  }
+  if (kind === "model" && normalized === UNAVAILABLE_MODEL) {
+    fail(
+      `${field} ${UNAVAILABLE_MODEL} is not an exact identifier and is valid only with disclose; a signed receipt requires the exact model`,
+    );
   }
   return value;
+}
+
+/** Disclosure alone may state that the exact model could not be established. */
+export function disclosedModel(value, field) {
+  if (typeof value === "string" && value.toLowerCase() === UNAVAILABLE_MODEL) {
+    return UNAVAILABLE_MODEL;
+  }
+  return declaredIdentity(value, field, "model");
 }
 
 function normalizePath(value) {
@@ -2165,7 +2187,11 @@ function parseArguments(args) {
   }
   if (["disclose", "doctor", "finish", "start"].includes(options.action)) {
     declaredIdentity(options.provider, "--provider", "provider", 64);
-    declaredIdentity(options.model, "--model", "model");
+    if (options.action === "disclose") {
+      options.model = disclosedModel(options.model, "--model");
+    } else {
+      declaredIdentity(options.model, "--model", "model");
+    }
   }
   if (["finish", "start"].includes(options.action)) {
     if (

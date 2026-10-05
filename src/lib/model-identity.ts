@@ -28,6 +28,13 @@ const MODEL_PLACEHOLDERS = new Set([
 const CLIENT_PLACEHOLDERS = new Set(["agent", "app", "cli", "client"]);
 const VERSION_PLACEHOLDERS = new Set(["current", "latest", "version"]);
 
+/**
+ * The one supported declaration for a run whose exact model could not be
+ * established from client or provider metadata. It is never an exact model:
+ * signed receipts and private traces still require one.
+ */
+export const UNAVAILABLE_MODEL_IDENTIFIER = "unavailable";
+
 function normalizedPlaceholder(value: string): string {
   return value.toLowerCase().replaceAll(/[^a-z0-9]/gu, "");
 }
@@ -56,7 +63,22 @@ export function isExactProviderIdentifier(value: unknown): value is string {
 }
 
 export function isExactModelIdentifier(value: unknown): value is string {
-  return exactIdentity(value, 128, MODEL_PLACEHOLDERS);
+  return (
+    exactIdentity(value, 128, MODEL_PLACEHOLDERS) &&
+    normalizedPlaceholder(value) !== UNAVAILABLE_MODEL_IDENTIFIER
+  );
+}
+
+export function isUnavailableModelIdentifier(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.toLowerCase() === UNAVAILABLE_MODEL_IDENTIFIER
+  );
+}
+
+/** An exact model, or the explicit statement that none could be established. */
+export function isDeclaredModelIdentifier(value: unknown): value is string {
+  return isExactModelIdentifier(value) || isUnavailableModelIdentifier(value);
 }
 
 /**
