@@ -31,6 +31,7 @@ import {
   declaredIdentity as deltaDeclaredIdentity,
 } from "../skills/contribute-to-delta-star/scripts/run-receipt.mjs";
 import {
+  disclosedModel,
   disclosePrivateTrace,
   declaredIdentity as elizaDeclaredIdentity,
   footer,
@@ -73,6 +74,20 @@ describe("project skill contracts", () => {
         else assert.throws(attempt, /identifier/u);
       }
     }
+  });
+
+  it("lets disclosure alone state that the exact model is unavailable", () => {
+    assert.strictEqual(disclosedModel("unavailable", "--model"), "unavailable");
+    assert.strictEqual(disclosedModel("Unavailable", "--model"), "unavailable");
+    assert.strictEqual(disclosedModel("gpt-5.6-sol", "--model"), "gpt-5.6-sol");
+    assert.throws(
+      () => disclosedModel("unknown", "--model"),
+      /use disclose with --model unavailable/u,
+    );
+    assert.throws(
+      () => elizaDeclaredIdentity("unavailable", "--model", "model"),
+      /valid only with disclose/u,
+    );
   });
 
   it("ships byte-identical receipt logic with policy derived from the project inventory", () => {

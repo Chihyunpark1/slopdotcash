@@ -4161,6 +4161,15 @@ function ModelOutcomes({ summary }: { summary: ModelOutcomeSummary }) {
           {count.format(totals.signedDeclarations)} signed across{" "}
           {count.format(totals.distinctClients)} harnesses
         </span>
+        {totals.declarationsWithoutExactModel > 0 ? (
+          <span>
+            <strong>
+              {count.format(totals.declarationsWithoutExactModel)}
+            </strong>{" "}
+            more state that the exact model was unavailable and count toward no
+            model
+          </span>
+        ) : null}
       </div>
 
       <section className="model-outcomes-section">

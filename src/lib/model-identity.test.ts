@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   assertExactModelIdentity,
+  isDeclaredModelIdentifier,
   isExactClientIdentifier,
   isExactClientVersion,
   isExactModelIdentifier,
@@ -63,5 +64,25 @@ describe("exact model identity", () => {
     ["<exact-model>", isExactModelIdentifier],
   ])("rejects placeholder %s", (value, validator) => {
     expect(validator(value)).toBe(false);
+  });
+
+  it("keeps the unavailable declaration apart from exact models", () => {
+    for (const value of ["unavailable", "Unavailable"]) {
+      expect(isExactModelIdentifier(value)).toBe(false);
+      expect(isDeclaredModelIdentifier(value)).toBe(true);
+    }
+    expect(isExactProviderModelIdentifier("openai/unavailable")).toBe(false);
+    expect(isDeclaredModelIdentifier("gpt-5.6-sol")).toBe(true);
+    // Other ways of saying it stay rejected, so there is one spelling.
+    for (const value of ["unknown", "N/A"]) {
+      expect(isDeclaredModelIdentifier(value)).toBe(false);
+    }
+    expect(() =>
+      assertExactModelIdentity({
+        provider: "openai",
+        model: "unavailable",
+        client: "codex",
+      }),
+    ).toThrow(/model must be an exact/u);
   });
 });

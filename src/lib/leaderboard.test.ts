@@ -18,6 +18,7 @@ import {
   createLeaderboardSnapshot,
   dedupeByNodeId,
   type EvidenceCategory,
+  exactModelIdentifiers,
   type GitHubActor,
   type GitHubTextSource,
   hasMaterialTestChange,
@@ -1443,8 +1444,58 @@ describe("model attribution", () => {
       }),
       expect.objectContaining({
         sourceId: "COMMENT_NO_MODEL",
-        reason: "model must be an exact model identifier",
+        reason: "model must be an exact model identifier or unavailable",
       }),
+    ]);
+  });
+
+  it("records an unavailable exact model without inventing a model identifier", () => {
+    const marker = textSource(
+      "COMMENT_UNAVAILABLE_MARKER",
+      machineAttribution("OpenAI", "unavailable", "codex"),
+    );
+    const visible = textSource(
+      "COMMENT_UNAVAILABLE_VISIBLE",
+      "AI provider/model: Anthropic / Unavailable",
+    );
+    const exact = textSource(
+      "COMMENT_EXACT",
+      "AI provider/model: OpenAI / gpt-5.6-sol",
+    );
+
+    const result = assessModelAttribution([marker, visible, exact]);
+
+    expect(result.invalidMarkers).toEqual([]);
+    expect(
+      result.declarations.map(({ sourceId, provider, model, client }) => ({
+        sourceId,
+        provider,
+        model,
+        client,
+      })),
+    ).toEqual([
+      {
+        sourceId: "COMMENT_UNAVAILABLE_MARKER",
+        provider: "openai",
+        model: "unavailable",
+        client: "codex",
+      },
+      {
+        sourceId: "COMMENT_UNAVAILABLE_VISIBLE",
+        provider: "Anthropic",
+        model: "unavailable",
+        client: null,
+      },
+      {
+        sourceId: "COMMENT_EXACT",
+        provider: "OpenAI",
+        model: "gpt-5.6-sol",
+        client: null,
+      },
+    ]);
+    expect(result.coverage.validSourceCount).toBe(3);
+    expect(exactModelIdentifiers(result.declarations)).toEqual([
+      "OpenAI/gpt-5.6-sol",
     ]);
   });
 
