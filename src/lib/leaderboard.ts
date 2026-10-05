@@ -3355,42 +3355,18 @@ export function createLeaderboardSnapshot(
   for (const event of ledger) {
     const candidate = retainedAttributionCandidates.get(event.id);
     if (!candidate || !input.verifyRunReceipt) continue;
-    try {
-      assertAttributionValue(candidate, `retained attribution ${candidate.id}`);
-      const verifiedRun = input.verifyRunReceipt(candidate.run);
-      const parentPullRequestId = event.id.split(":", 1)[0];
-      const claims = verifiedRun.traceUpload
-        ? [
-            `client run:${verifiedRun.runId}`,
-            `server run:${verifiedRun.traceUpload.serverRunId}`,
-            `trace object:${verifiedRun.traceUpload.objectId}`,
-          ]
-        : [];
-      if (
-        candidate.format !== "machine-marker" ||
-        candidate.actor?.id !== event.actor.id ||
-        candidate.sourceId !== event.source.id ||
-        candidate.sourceUrl !== event.source.url ||
-        candidate.artifactId !== parentPullRequestId ||
-        candidate.run === null ||
-        !verifiedRun.traceUpload ||
-        verifiedRun.repositoryId !== event.repository ||
-        verifiedRun.provider !== candidate.provider ||
-        verifiedRun.model !== candidate.model ||
-        verifiedRun.client !== candidate.client ||
-        verifiedRun.skillRevision !== candidate.skillRevision ||
-        Date.parse(verifiedRun.completedAt) > Date.parse(event.occurredAt) ||
-        claims.some((claim) => receiptClaims.has(claim))
-      ) {
-        continue;
-      }
-      for (const claim of claims) receiptClaims.add(claim);
-      event.evidenceBonusBasisPoints = 1_500;
-      attributions.push({ ...candidate, run: verifiedRun });
-    } catch {
-      // Historical attribution is optional. Invalid replay never removes the
-      // independently accepted base review credit.
-    }
+    const replay = replayRetainedReviewAttribution(
+      event,
+      candidate,
+      input.verifyRunReceipt,
+      receiptClaims,
+    );
+    // Historical attribution is optional. A rejected replay never removes the
+    // independently accepted base review credit.
+    if ("rejection" in replay) continue;
+    for (const claim of replay.claims) receiptClaims.add(claim);
+    event.evidenceBonusBasisPoints = 1_500;
+    attributions.push({ ...candidate, run: replay.run });
   }
   const retainedValidSourceCount =
     attributions.length - overallAttribution.declarations.length;
@@ -4827,6 +4803,84 @@ function assertOpportunityValue(
   if (kind !== "expand-review" && source.kind !== "pull-request") {
     throw new Error(`${path}.source.kind must be pull-request for ${kind}`);
   }
+}
+
+export type RetainedAttributionRejection =
+  | "invalid-attribution"
+  | "receipt-verification-failed"
+  | "not-machine-marker"
+  | "actor-mismatch"
+  | "source-mismatch"
+  | "source-url-mismatch"
+  | "parent-pull-request-mismatch"
+  | "trace-not-finalized"
+  | "repository-mismatch"
+  | "declared-identity-mismatch"
+  | "run-completed-after-review"
+  | "receipt-already-claimed";
+
+/**
+ * Replays one retained signed attribution against the accepted review it was
+ * published on. Nothing stored is trusted: the receipt is verified again and
+ * every binding must hold, or the first failed binding is named.
+ */
+export function replayRetainedReviewAttribution(
+  event: ScoreEvent,
+  candidate: ModelAttribution,
+  verifyRunReceipt: (receipt: unknown) => ProjectRunReceipt,
+  receiptClaims: ReadonlySet<string>,
+):
+  | { run: ProjectRunReceipt; claims: string[] }
+  | { rejection: RetainedAttributionRejection } {
+  try {
+    assertAttributionValue(candidate, `retained attribution ${candidate.id}`);
+  } catch {
+    // error-policy:J3 a malformed retained attribution is an explicit rejection.
+    return { rejection: "invalid-attribution" };
+  }
+  let run: ProjectRunReceipt;
+  try {
+    run = verifyRunReceipt(candidate.run);
+  } catch {
+    // error-policy:J3 an unverifiable receipt is an explicit rejection.
+    return { rejection: "receipt-verification-failed" };
+  }
+  const reject = (rejection: RetainedAttributionRejection) => ({ rejection });
+  if (candidate.format !== "machine-marker") {
+    return reject("not-machine-marker");
+  }
+  if (candidate.actor?.id !== event.actor.id) return reject("actor-mismatch");
+  if (candidate.sourceId !== event.source.id) return reject("source-mismatch");
+  if (candidate.sourceUrl !== event.source.url) {
+    return reject("source-url-mismatch");
+  }
+  if (candidate.artifactId !== event.id.split(":", 1)[0]) {
+    return reject("parent-pull-request-mismatch");
+  }
+  if (!run.traceUpload) return reject("trace-not-finalized");
+  if (run.repositoryId !== event.repository) {
+    return reject("repository-mismatch");
+  }
+  if (
+    run.provider !== candidate.provider ||
+    run.model !== candidate.model ||
+    run.client !== candidate.client ||
+    run.skillRevision !== candidate.skillRevision
+  ) {
+    return reject("declared-identity-mismatch");
+  }
+  if (Date.parse(run.completedAt) > Date.parse(event.occurredAt)) {
+    return reject("run-completed-after-review");
+  }
+  const claims = [
+    `client run:${run.runId}`,
+    `server run:${run.traceUpload.serverRunId}`,
+    `trace object:${run.traceUpload.objectId}`,
+  ];
+  if (claims.some((claim) => receiptClaims.has(claim))) {
+    return reject("receipt-already-claimed");
+  }
+  return { run, claims };
 }
 
 function assertAttributionValue(
