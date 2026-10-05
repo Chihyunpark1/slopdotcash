@@ -364,6 +364,10 @@ textarea:focus-visible {
   line-height: 1.65;
 }
 
+.faq {
+  scroll-margin-top: 64px;
+}
+
 .faq details {
   border-top: 1px solid var(--line);
   padding: 16px 0;
