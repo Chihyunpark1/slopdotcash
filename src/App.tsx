@@ -438,6 +438,7 @@ function Footer() {
         <div className="footer-links">
           <Link href="/#projects">Projects</Link>
           <Link href="/how-it-works">How scoring works</Link>
+          <Link href="/how-it-works#faq">FAQ</Link>
           <Link href="/receipts">Receipts</Link>
           <Link href="/models">Models</Link>
           <Link href="/cycles">Cycle archive</Link>
@@ -3346,10 +3347,128 @@ function HowItWorksPage() {
         <h2>What Slop never holds.</h2>
         <ul>
           <li>No contributor or project private keys.</li>
-          <li>No treasury, escrow, or platform token.</li>
+          <li>No project or sponsor funds, and no escrow.</li>
+          <li>No token requirement. Pools pay in USDC.</li>
           <li>No authority to sign or broadcast payments.</li>
           <li>No paid claim without finalized public evidence.</li>
         </ul>
+      </section>
+      <section
+        className="custody-proof faq"
+        id="faq"
+        aria-labelledby="faq-title"
+      >
+        <h2 id="faq-title">Questions contributors ask.</h2>
+        <details>
+          <summary>Which repositories count?</summary>
+          <p>
+            Repositories listed by an active project on Slop. Each project page
+            names them and links its skill. Paused projects are listed but not
+            collected yet, and pull requests anywhere else, including the Slop
+            repository itself, are not in any pool.
+          </p>
+        </details>
+        <details>
+          <summary>Do I need to claim an issue first?</summary>
+          <p>
+            No. There is no assignment, claiming, or reservation. Pick unblocked
+            work, open a pull request, and the maintainers decide what merges.
+            Only merged work scores.
+          </p>
+        </details>
+        <details>
+          <summary>Do reviews score?</summary>
+          <p>Yes. A review counts as a standard review, 1 point, when:</p>
+          <ul>
+            <li>
+              It is submitted as Approve or Request changes. A plain Comment
+              review does not score.
+            </li>
+            <li>It is on someone else&apos;s pull request.</li>
+            <li>
+              It has at least 20 characters of written reasoning or an inline
+              comment.
+            </li>
+            <li>
+              It is submitted before the pull request merges, and the pull
+              request does merge.
+            </li>
+          </ul>
+          <p>
+            One review scores per person per pull request, and reviews by or of
+            bot accounts do not score. If you left a Comment review, you can
+            submit a new Approve or Request changes review while the pull
+            request is still open.
+          </p>
+        </details>
+        <details>
+          <summary>When will my work show up?</summary>
+          <p>
+            Open pull requests do not score. Once a pull request merges, it and
+            its qualifying reviews appear at the next data refresh, which runs
+            every 6 hours. Each one is dated when it happened, so points can
+            appear spread through the day. There is no waiting period and no
+            minimum account age.
+          </p>
+        </details>
+        <details>
+          <summary>Why does my merge show only 1/3 of a point?</summary>
+          <p>
+            Every merge starts as a provisional micro unit. A review agent may
+            propose a higher tier from the table above, and the score moves up
+            only when a maintainer ratifies that tier on the exact merged
+            commit. Related or split pull requests share one work unit.
+          </p>
+        </details>
+        <details>
+          <summary>Does the model I use matter?</summary>
+          <p>
+            Not to your score. Disclose the provider, exact model, and client;
+            the declaration adds no points and shows on{" "}
+            <Link href="/models">Models</Link>. A valid signed receipt with a
+            finalized private trace adds a fixed 15% to that outcome.
+          </p>
+        </details>
+        <details>
+          <summary>How do I get paid?</summary>
+          <p>
+            Register a public Solana address on the{" "}
+            <Link href="/wallet">wallet page</Link> with your GitHub account. No
+            wallet connection or signing is needed. Payments are USDC on Solana,
+            sent by the project creator, never by Slop. A wallet must be
+            registered before a month freezes to apply to that month. Without
+            one, your row stays unclaimed and carries forward.
+          </p>
+        </details>
+        <details>
+          <summary>When are payments sent?</summary>
+          <p>
+            At 00:11 UTC on the first of each month, the previous month freezes
+            into a proposal. After 14 days of public review the creator approves
+            it and sends USDC from their own wallet. Slop shows a payment as
+            paid only after the transfers are confirmed on-chain. Amounts below
+            $2 carry to the next month.
+          </p>
+        </details>
+        <details>
+          <summary>What does projected mean? Is the pool funded?</summary>
+          <p>
+            Projected is a live estimate from accepted score at the
+            project&apos;s cap. It is not a balance or a guarantee. A cap is a
+            target, and a pool can allocate only funds committed on-chain. Funds
+            committed after a month freezes apply to later months, not to that
+            one.
+          </p>
+        </details>
+        <details>
+          <summary>What is the 14-day review?</summary>
+          <p>
+            It reviews the monthly allocation, not your code. After the freeze
+            the proposal is public for 14 days, and the creator may approve,
+            hold, exclude, reduce, or increase rows, each with a public reason.
+            It is separate from pull request reviews on GitHub.
+          </p>
+        </details>
       </section>
       <section className="custody-proof mechanism-sources">
         <h2>Read the contracts. Inspect the record.</h2>
