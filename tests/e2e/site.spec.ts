@@ -272,7 +272,7 @@ test("discovers projects and one points-ranked homepage leaderboard", async ({
   ).toBeVisible();
   await expect(elizaCard.getByText("$5k", { exact: true })).toHaveCount(0);
   await expect(
-    elizaCard.getByText("Target $5k/mo · no funding committed", {
+    elizaCard.getByText("Target $5k/mo", {
       exact: true,
     }),
   ).toBeVisible();
@@ -543,7 +543,7 @@ test("starts Eliza with one prompt and no separate payout form", async ({
     page.getByRole("columnheader", { name: "Share of score" }),
   ).toBeVisible();
   await expect(
-    page.getByText(/Not funded yet\. Shares show each contributor's part/u),
+    page.getByText(/Not funded yet\. Not approved payouts\./u),
   ).toBeVisible();
   await expect(page.getByText("Live from GitHub")).toHaveCount(0);
   await expect(page.getByText("How credit survives review")).toHaveCount(0);

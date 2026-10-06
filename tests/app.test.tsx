@@ -633,9 +633,7 @@ describe("discovery", () => {
     // A pledged pool headlines its state; the cap is small print only.
     expect(within(elizaCard).getByText("Not funded yet")).toBeInTheDocument();
     expect(within(elizaCard).queryByText("$5k")).not.toBeInTheDocument();
-    expect(
-      within(elizaCard).getByText("Target $5k/mo · no funding committed"),
-    ).toBeInTheDocument();
+    expect(within(elizaCard).getByText("Target $5k/mo")).toBeInTheDocument();
     expect(
       screen.queryByText("The proof is the product."),
     ).not.toBeInTheDocument();
@@ -915,7 +913,7 @@ describe("project routes", () => {
     );
     expect(rewardCard).not.toHaveTextContent("$5k");
     expect(
-      screen.getByText(/Target \$5,000 per month\. No funding is committed/u),
+      screen.getByText(/Target \$5,000 per month\. No payments scheduled/u),
     ).toBeInTheDocument();
     expect(
       screen.queryByText("simulated monthly pool"),
