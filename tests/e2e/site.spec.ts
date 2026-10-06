@@ -7,8 +7,8 @@
 import { createHash } from "node:crypto";
 import AxeBuilder from "@axe-core/playwright";
 import { type APIRequestContext, test as base, expect } from "@playwright/test";
-import { projectPromotionEligible } from "../../src/lib/allocation-funding";
 import { assertCycleIndex, type CycleIndex } from "../../src/lib/cycle-index";
+import { homeProjects } from "../../src/lib/home-projects";
 import {
   assertLeaderboardSnapshot,
   type LeaderboardSnapshot,
@@ -177,12 +177,9 @@ test("shows signer loss and expired capability without payout availability", asy
 
 test("discovers projects and one points-ranked homepage leaderboard", async ({
   page,
-  request,
 }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.reload({ waitUntil: "networkidle" });
-  const snapshot = await loadSnapshot(request);
-  const cycles = await loadCycles(request);
 
   await expect(
     page.getByRole("heading", {
@@ -227,18 +224,8 @@ test("discovers projects and one points-ranked homepage leaderboard", async ({
     page.getByRole("heading", { exact: true, name: "Featured" }),
   ).toBeVisible();
   const community = page.locator("details.community-projects");
-  const eligibleCommunity = PROJECTS.filter(
-    (project) =>
-      project.status === "active" &&
-      project.listingTier === "community" &&
-      snapshot.repositories.some(
-        (repository) => repository.projectId === project.id,
-      ) &&
-      projectPromotionEligible(
-        project,
-        cycles.cycles,
-        createProjectView(snapshot, project.id).cycle.id,
-      ),
+  const eligibleCommunity = homeProjects().filter(
+    (project) => project.listingTier === "community",
   );
   if (eligibleCommunity.length === 0) {
     await expect(community).toHaveCount(0);
@@ -1104,7 +1091,7 @@ test("shows an explicit error for invalid data and retries", async ({
     }
     await route.fallback();
   });
-  await page.reload({ waitUntil: "networkidle" });
+  await page.goto("/projects/eliza", { waitUntil: "networkidle" });
   await expect(page.getByRole("alert")).toContainText(
     "Live totals unavailable",
   );
@@ -1121,7 +1108,7 @@ test("shows an explicit error for invalid data and retries", async ({
   await page.getByRole("button", { name: /Retry/u }).click();
   await expect(page.getByRole("alert")).toHaveCount(0);
   await expect(
-    page.getByRole("heading", { exact: true, name: "Leaderboard" }),
+    page.getByRole("heading", { name: /leaderboard\./u }),
   ).toBeVisible();
   expect(attempts).toBe(failedAttempts + 1);
 });
