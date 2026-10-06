@@ -587,7 +587,7 @@ function ProjectCard({ project }: { project: ProjectDefinition }) {
         {project.reward.kind === "monthly-pool" ? (
           <small className="project-money-state">
             {unfunded
-              ? `Target ${amount}/mo · no funding committed`
+              ? `Target ${amount}/mo`
               : "Committed balance · accessibility unknown · payments disabled"}
           </small>
         ) : null}
@@ -1043,7 +1043,7 @@ function ProjectLeaderboard({
           {view.reward.kind === "monthly-pool" ? (
             <p>
               {monthlyPoolUnfunded(view.project.reward)
-                ? `${UNFUNDED_POOL_HEADLINE}. Shares show each contributor's part of the score, not dollars. Target ${view.project.reward.monthlyCapDisplay} per month.`
+                ? `${UNFUNDED_POOL_HEADLINE}.`
                 : `Shares simulate the ${monthlyPoolLabel(view.project.reward)} cap.`}{" "}
               Not approved payouts.
             </p>
@@ -1843,7 +1843,7 @@ function ProjectPage({
                 <p>
                   {project.reward.kind === "monthly-pool"
                     ? monthlyPoolUnfunded(project.reward)
-                      ? `Target ${project.reward.monthlyCapDisplay} per month. No funding is committed, so no payment is scheduled until the project commits funds.`
+                      ? `Target ${project.reward.monthlyCapDisplay} per month. No payments scheduled.`
                       : `${formatMicroUsdc(project.reward.committedMinor)} committed against a ${project.reward.monthlyCapDisplay} monthly target. Accessibility is unknown; no payment is enabled.`
                     : "10% of an award actually received is allocated to Slop Cash; the remaining 90% is shared among accepted contributors. The prize sponsor controls eligibility and payment."}
                 </p>
