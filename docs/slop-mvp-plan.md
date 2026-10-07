@@ -6,6 +6,8 @@ Date: 6 October 2026. Status: MVP scope submitted for adoption alongside [Slop P
 
 The MVP retains current product capabilities and completes account, project, contribution, review, discovery, funding, and payout journeys on Base and Solana. It also requires optional participant-scoped Slopbot, Slop Score as the default leaderboard sort, issue/PR outcome metrics, closure penalties, admin featuring/bans, and mandatory community security vetting. Source availability is not proof of production readiness. Private security bounty programs, Robinhood, Ethereum mainnet settlement, bridges, swaps, and additional chains are future work.
 
+The maintainer-approved fee for new payout obligations is 2% deducted from the gross award: 100 USDC gross means 98 to the contributor and 2 fee. Reserve the 100 once, show net contributor earnings, and preserve recorded legacy terms. Actor-binding proof and execution authority remain separate approval gates.
+
 ## Implementation scope and phase exit
 
 Implement only the approved work packages below. Every implementation issue and PR must reference the exact PRD requirement and MVP package. New proposals must review and reference the PRD, or add a proposed requirement for human approval before implementation. A future requirement, open issue, or agent recommendation does not expand MVP scope.
@@ -24,7 +26,7 @@ The rest of the PRD is blocked until maintainers approve an explicit MVP complet
 | MVP-03 | PRJ-01–04 | Resumable project setup, optional Slopbot settings/health and updates | MVP-00/01 for drafts; MVP-12 before executable activation; actual permissions and canonical publication |
 | MVP-04 | SKL-01–07 | Discovery/project skills, human-responsible outside issues, visible attribution and sandbox checks | MVP-03/12; genuine contribution, provenance and exact approved-revision execution |
 | MVP-05 | BOT-01–07 | Optional Slopbot, marker/member routing, external opt-in, ignored actors, guideline-aware review and delegated closures | MVP-03/04/12; full eligibility matrix, health, stale revision, close confirmation, retry and uninstall |
-| MVP-06 | FND-01–05, PAY-01–08 | Base and Solana contract/program, funding classes and protected obligations | MVP-00/02/03; independent review and accounting/authority conformance |
+| MVP-06 | FND-01–05, PAY-01–08 | Base and Solana contract/program, funding classes and protected obligations | MVP-00/02/03; approved PAY-05 actor-binding proof and recovery authority, independent review and accounting/authority conformance |
 | MVP-07 | PAY-01–08 | Human approval, manual/automatic execution, late wallet dispatch, finality and receipts | MVP-06; full same-scenario test deployment evidence on both chains |
 | MVP-08 | ELG-01–03 | Prospective maintainer exclusions, moderation, financial holds and appeals | MVP-00/03/07; scoped human decisions and protected accrued obligations |
 | MVP-09 | SCR-01–03, LDR-01–03, DSC-01–04 | Separate signed Slop Score/points, closure debits/reversals, issue/PR ratios and score-default sorting | MVP-00/03/05/07/08; exact source coverage, ties, zero denominators, no duplicate penalties or financial seizure |
@@ -52,7 +54,7 @@ No package is marked implemented by this document. Create bounded implementation
 - **Identity:** live GitHub and X configuration independently qualified; optional X failure does not block contribution or payment.
 - **Bot scope and penalties:** optional/off/incomplete/ready/degraded states, tagged nonmember, untagged member, unknown membership, external opt-in, ignored maintainer/contributor, stale revision, manual versus bot closure, failed close, merge, reopen and appeal; each has its specified review and journal outcome.
 - **Community security:** isolated VM, trusted outside collector, file/disk/process/network telemetry, canary probes, controlled egress, tamper detection, recursive artifact quarantine, independent pinned Astra/Opus scans, incomplete/clean/malicious dispositions, no unscanned execution, and revision revocation.
-- **Contracts:** exact deployed code, network/asset/vault identity, permissions, reserve invariants, donation rights, fee arithmetic, and independent security review.
+- **Contracts:** exact deployed code, network/asset/vault identity, permissions, reserve invariants, donation rights, fee arithmetic, no Slop-held key able to originate or redirect a payment, and independent security review.
 - **Financial operations:** complete Base/Solana test scenarios, ambiguous-send recovery, replay protection, finalized receipts, queue/indexer restart and reconciliation.
 - **UI:** desktop/mobile, keyboard, 200% zoom, WCAG AA, copy/download/link checks, console/network evidence, uploaded walkthrough and test videos.
 - **Deployment:** approved protected workflow and environment; production website/API/contract checks are separate. Claim the deploy/DNS lever before any such change.
