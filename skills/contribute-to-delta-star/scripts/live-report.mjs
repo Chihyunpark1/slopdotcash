@@ -25,6 +25,8 @@ import { platform, userInfo } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { authorizeSkill } from "./run-receipt.mjs";
+
 export const MODEL_DISCLOSURE_PREFIX = "AI provider/model:";
 export const REQUIRED_EVIDENCE_ROWS = [
   "before-screenshots",
@@ -3669,6 +3671,7 @@ export function main(args = process.argv.slice(2)) {
     return;
   }
   if (options.recheckPr !== undefined) {
+    authorizeSkill();
     const commandBudget = createGhCommandBudget();
     const result = recheckLivePullHead(
       options.repo,
