@@ -5,9 +5,10 @@ description: "Review and prove current elizaOS/eliza pull requests on real worki
 
 # Contribute to Eliza
 
-Produce one reviewable outcome in `elizaOS/eliza`. Accepted work shares a
-projected $5,000 monthly digital-dollar pool; maintainers review allocations,
-the projection is not a payment promise, and token volume alone never earns.
+Produce one reviewable outcome in `elizaOS/eliza`. Accepted work shares the
+eliza monthly USDC pool, capped at $5,000 and not funded yet; maintainers
+review allocations, nothing is paid until the pool is funded and the month is
+approved, and token volume alone never earns.
 
 Any model and agent client may contribute, including Grok and Kimi. Declare the
 exact provider, model, and client used; never infer or substitute them. Model
