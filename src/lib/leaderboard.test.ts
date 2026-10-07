@@ -4569,6 +4569,42 @@ describe("work queue claims and prioritization", () => {
       claim: { status: "claimed" },
       selection: { status: "excluded", reasons: ["claimed"] },
     });
+
+    // The same outsider's open implementation is objective claim evidence.
+    // Drafts and requests for changes still represent work in progress.
+    for (const isDraft of [false, true]) {
+      const linked = createLeaderboardSnapshot(
+        input({
+          openIssues: [untrusted, trusted],
+          openPullRequests: [
+            pullRequest({
+              id: "PR_OUTSIDE_IMPLEMENTATION",
+              number: 20,
+              mergedAt: null,
+              createdAt: "2026-07-01T12:00:00.000Z",
+              author: actor("outside-visitor"),
+              closingIssueIds: [untrusted.id, trusted.id],
+              isDraft,
+              reviewDecision: "CHANGES_REQUESTED",
+            }),
+          ],
+        }),
+      );
+      expect(linked.workQueue.issues).toHaveLength(2);
+      for (const item of linked.workQueue.issues) {
+        expect(item).toMatchObject({
+          claim: {
+            status: "claimed",
+            source: "pull-request",
+            kind: "implementation",
+            actors: [expect.objectContaining({ login: "outside-visitor" })],
+            claimedAt: null,
+          },
+          selection: { status: "excluded", reasons: ["claimed"] },
+        });
+      }
+      expect(() => assertLeaderboardSnapshot(linked)).not.toThrow();
+    }
   });
 
   it("recognizes claims collected after the scoring cutoff", () => {

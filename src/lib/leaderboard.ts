@@ -1918,6 +1918,7 @@ function isClaimLabel(
 function issueClaim(
   issue: IssueRecord,
   referenceTime: string,
+  linkedPullRequests: PullRequestRecord[],
 ): WorkItemClaimStatus {
   const assignees = issue.assignees.filter((actor) => !isBotActor(actor));
   if (assignees.length > 0) {
@@ -1926,6 +1927,19 @@ function issueClaim(
       source: "assignee",
       kind: "implementation",
       actors: assignees,
+      claimedAt: null,
+    };
+  }
+  if (linkedPullRequests.length > 0) {
+    return {
+      status: "claimed",
+      source: "pull-request",
+      kind: "implementation",
+      actors: dedupeByNodeId(
+        linkedPullRequests.flatMap((pullRequest) =>
+          pullRequest.author ? [pullRequest.author] : [],
+        ),
+      ).sort((left, right) => left.id.localeCompare(right.id)),
       claimedAt: null,
     };
   }
@@ -2109,6 +2123,7 @@ function workItemSelection(input: CandidateSelectionInput): WorkItemSelection {
 function issueWorkItem(
   issue: IssueRecord,
   referenceTime: string,
+  linkedPullRequests: PullRequestRecord[],
 ): {
   item: WorkItem;
   attribution: AttributionAssessment;
@@ -2116,7 +2131,7 @@ function issueWorkItem(
   const sources = issueTextSources(issue);
   const evidence = assessEvidence(sources);
   const attribution = assessModelAttribution(sources);
-  const claim = issueClaim(issue, referenceTime);
+  const claim = issueClaim(issue, referenceTime, linkedPullRequests);
   const labels = uniqueSorted(issue.labels.map((label) => label.name));
   const actionability = workItemActionability(issue.labels, false);
   return {
@@ -3313,8 +3328,20 @@ export function createLeaderboardSnapshot(
     }
   }
 
+  const issuePullRequests = new Map<string, PullRequestRecord[]>();
+  for (const pullRequest of openPullRequests) {
+    for (const issueId of pullRequest.closingIssueIds) {
+      const linked = issuePullRequests.get(issueId) ?? [];
+      linked.push(pullRequest);
+      issuePullRequests.set(issueId, linked);
+    }
+  }
   const issueQueue = openIssues.map((record) =>
-    issueWorkItem(record, input.generatedAt),
+    issueWorkItem(
+      record,
+      input.generatedAt,
+      issuePullRequests.get(record.id) ?? [],
+    ),
   );
   const pullRequestQueue = openPullRequests.map((record) =>
     pullRequestWorkItem(
@@ -4301,7 +4328,7 @@ function assertWorkItemValue(
   assertEnum(claim.status, ["claimed", "unclaimed"], `${path}.claim.status`);
   assertEnum(
     claim.source,
-    ["assignee", "label", "claim-comment", "none"],
+    ["assignee", "label", "claim-comment", "pull-request", "none"],
     `${path}.claim.source`,
   );
   if (claim.kind !== null) {
@@ -4330,6 +4357,7 @@ function assertWorkItemValue(
     (claim.status === "claimed" &&
       (claim.source === "none" || claim.kind !== expectedClaimKind)) ||
     (claim.source === "assignee" && claim.actors.length === 0) ||
+    (claim.source === "pull-request" && expectedKind !== "issue") ||
     (claim.source === "claim-comment" &&
       (claim.actors.length !== 1 || claim.claimedAt === null)) ||
     (claim.source !== "claim-comment" && claim.claimedAt !== null) ||

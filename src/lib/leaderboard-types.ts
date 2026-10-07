@@ -380,7 +380,7 @@ export interface LeaderboardEntry {
 
 export interface WorkItemClaimStatus {
   status: "claimed" | "unclaimed";
-  source: "assignee" | "label" | "claim-comment" | "none";
+  source: "assignee" | "label" | "claim-comment" | "pull-request" | "none";
   kind: "implementation" | "review" | null;
   actors: GitHubActor[];
   claimedAt: string | null;
