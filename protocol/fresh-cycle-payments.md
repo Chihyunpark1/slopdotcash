@@ -8,7 +8,7 @@ never makes public funding accessibility true.
 ## Operator prerequisites
 
 Deploy the trusted reservation workflow and verifier before activation. Configure
-classic protection on canonical `SlopDotCash/slopdotcash` `develop`: strict
+classic protection on canonical `SlopDotCash/slopdotcash` `main`: strict
 up-to-date PR checks requiring `Trusted payment reservation gate` from the verified
 GitHub Actions app, approving review with stale dismissal and last-push approval,
 resolved conversations, admin enforcement, no review bypass, force push or deletion.
@@ -29,8 +29,11 @@ payments.
 The checkpoint is a reviewed trust root in verifier code, never a CLI argument,
 candidate manifest, or environment assertion.
 
-The loader rejects shallow history, requires continuous two-parent develop merges
+The loader rejects shallow history, requires continuous two-parent canonical merges
 since that checkpoint, and replays every policy/allocation/reservation transition.
+Current merges target `main`. Historical `develop` merges are accepted only
+when they are ancestors of the immutable branch-migration checkpoint
+`2b1ec5089d03d2b6413ce5475cbccaab63005daf`.
 For each merge it also verifies the actual successful `pull_request_target` run
 with a receipt bound to the exact first-parent base, the pinned workflow bytes, successful named job,
 and a digest-checked workflow receipt binding PR number, base, head, run and attempt.

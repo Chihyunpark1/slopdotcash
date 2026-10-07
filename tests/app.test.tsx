@@ -1714,7 +1714,9 @@ describe("project proposals", () => {
     const handoff = screen.getByRole("link", { name: /continue on github/i });
     expect(handoff).toHaveAttribute(
       "href",
-      expect.stringContaining("github.com/SlopDotCash/slopdotcash/new/develop"),
+      expect.stringContaining(
+        "github.com/SlopDotCash/slopdotcash/new/development",
+      ),
     );
     expect(handoff).toHaveAttribute(
       "href",
