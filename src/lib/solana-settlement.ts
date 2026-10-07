@@ -219,9 +219,9 @@ export function assertFinalizedUsdcTransfer(
 }
 
 /** Validates one finalized direct-funding credit without trusting its sender.
- * `excludedOwner` names a wallet whose USDC balance must not move in the
- * transaction at all; a project vault's fee transfer uses it to prove the
- * fee did not come from the vault (RFC #500 section 8). */
+ * `excludedOwner` names a wallet whose USDC accounts cannot participate.
+ * A zero net change can hide a top-up followed by a fee transfer, so project
+ * vault fees require a separate transaction without the vault's accounts. */
 export function assertFinalizedUsdcFundingTransfer(
   transactionValue: unknown,
   expectedSignature: string,
@@ -304,10 +304,10 @@ export function assertFinalizedUsdcFundingTransfer(
   }
   if (
     options.excludedOwner !== undefined &&
-    (deltas.get(options.excludedOwner) ?? 0n) !== 0n
+    deltas.has(options.excludedOwner)
   ) {
     throw new TypeError(
-      "Solana funding transaction moves USDC of the excluded vault",
+      "Solana funding transaction includes USDC accounts of the excluded vault",
     );
   }
   return {
