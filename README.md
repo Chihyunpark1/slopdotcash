@@ -216,3 +216,13 @@ run `bun run test:e2e` separately for the full browser matrix.
 login and write backend. `main` serves [production](https://slop.cash). See
 [release environments](docs/release-environments.md) for setup, promotion, and
 acceptance requirements.
+
+## Base and Solana escrow migration
+
+The new escrow protocol is being qualified separately from legacy payouts.
+Projects select one chain. A gross 100-USDC award pays 98 to the contributor
+and 2 in fees. Unused escrow withdrawals incur 10%, while funded unpaid awards
+remain reserved until their recipients register a wallet. GitHub remains the
+only login. See [the approved MVP](docs/payouts-mvp.md) for the authority model,
+acceptance tests and deployment gates. Existing project payment history and
+production activation are not changed by adding this implementation.

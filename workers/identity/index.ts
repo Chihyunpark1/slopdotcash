@@ -1,4 +1,5 @@
-import { deploymentOrigins, deploymentTier } from "../../src/lib/deployment";
+import { deploymentTier } from "../../src/lib/deployment";
+import { identityPublicOrigin } from "./contracts";
 import { randomToken } from "./crypto";
 import { handleIdentityRequest, identityBrowserResponse } from "./handler";
 import { type D1Database, D1IdentityPersistence } from "./persistence";
@@ -14,6 +15,7 @@ type Env = {
   IDENTITY_START_LIMITER: RateLimitBinding;
   IDENTITY_POLL_LIMITER: RateLimitBinding;
   GITHUB_APP_CLIENT_ID: string;
+  IDENTITY_PUBLIC_ORIGIN?: string;
   GITHUB_APP_CLIENT_SECRET: string;
   IDENTITY_STATE_KEY: string;
   IDENTITY_ASSERTION_KEY: string;
@@ -188,6 +190,7 @@ export async function applyIdentityRateLimit(
     | "IDENTITY_START_LIMITER"
     | "IDENTITY_POLL_LIMITER"
     | "IDENTITY_STATE_KEY"
+    | "IDENTITY_PUBLIC_ORIGIN"
   >,
   now: () => Date = () => new Date(),
 ): Promise<Response | null> {
@@ -195,7 +198,10 @@ export async function applyIdentityRateLimit(
   if (
     url.protocol !== "https:" ||
     url.origin !==
-      deploymentOrigins(deploymentTier(env.SLOP_ENVIRONMENT)).identity ||
+      identityPublicOrigin(
+        env.IDENTITY_PUBLIC_ORIGIN,
+        deploymentTier(env.SLOP_ENVIRONMENT),
+      ) ||
     request.method !== "POST"
   ) {
     return null;
@@ -263,7 +269,7 @@ async function resolveGithubIdentity(
           client_secret: env.GITHUB_APP_CLIENT_SECRET,
           code,
           code_verifier: pkceVerifier,
-          redirect_uri: `${deploymentOrigins(deploymentTier(env.SLOP_ENVIRONMENT)).identity}/v1/oauth/callback`,
+          redirect_uri: `${identityPublicOrigin(env.IDENTITY_PUBLIC_ORIGIN, deploymentTier(env.SLOP_ENVIRONMENT))}/v1/oauth/callback`,
         }),
         signal: AbortSignal.timeout(10_000),
       },
@@ -464,6 +470,7 @@ function dependencies(env: Env) {
     stateEncryptionSecret: env.IDENTITY_STATE_KEY,
     assertionSecret: env.IDENTITY_ASSERTION_KEY,
     githubClientId: env.GITHUB_APP_CLIENT_ID,
+    publicOrigin: env.IDENTITY_PUBLIC_ORIGIN,
     now: () => new Date(),
     randomToken,
     resolveGithubIdentity: (code: string, pkceVerifier: string) =>
@@ -479,6 +486,15 @@ export default {
     return handleIdentityRequest(request, dependencies(env));
   },
   async scheduled(_controller: unknown, env: Env): Promise<void> {
+    if (
+      identityPublicOrigin(
+        env.IDENTITY_PUBLIC_ORIGIN,
+        deploymentTier(env.SLOP_ENVIRONMENT),
+      ) !== "https://identity.slop.cash"
+    ) {
+      await deleteExpiredIdentityState(env, new Date());
+      return;
+    }
     await runScheduledMaintenance(env, new Date());
   },
 };

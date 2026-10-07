@@ -20,6 +20,7 @@ import {
   isWalletChain,
   type WalletChain,
 } from "../../src/lib/wallets";
+import { canonicalWalletClaimDigests } from "../payments/wallet-registration";
 import { signApiToken, verifyApiToken } from "./auth";
 import {
   type ApiRole,
@@ -359,9 +360,6 @@ async function createContributorWalletClaim(
       chain === "base" ? "Invalid Base address" : "Invalid Solana address",
     );
   }
-  // Solana records keep their original byte layout so every digest issued
-  // before Base claims existed still recomputes. Only Base records name a chain.
-  const chainField = chain === "solana" ? {} : { chain };
   const requestedPredecessor = optionalString(
     body,
     "supersedesClaimId",
@@ -389,26 +387,11 @@ async function createContributorWalletClaim(
   }
 
   const observedAt = deps.now().toISOString();
-  const declaration = JSON.stringify({
-    schemaVersion: 1,
-    githubActorId: actor.githubId,
-    address: walletAddress,
-    ...chainField,
-    supersedesClaimId: requestedPredecessor,
-  });
-  const sourceBodySha256 = await sha256Hex(
-    new TextEncoder().encode(declaration),
-  );
-  const canonicalRecord = JSON.stringify({
-    schemaVersion: 1,
+  const { sourceBodySha256, recordDigest } = await canonicalWalletClaimDigests({
     githubActorId: actor.githubId,
     githubLogin: actor.githubLogin,
     address: walletAddress,
-    ...chainField,
-    source: "d1_registry",
-    issueRepository: null,
-    issueNumber: null,
-    sourceBodySha256,
+    chain,
     observedAt,
     supersedesClaimId: requestedPredecessor,
   });
@@ -423,7 +406,7 @@ async function createContributorWalletClaim(
     issueNumber: null,
     sourceBodySha256,
     observedAt,
-    recordSha256: await sha256Hex(new TextEncoder().encode(canonicalRecord)),
+    recordSha256: recordDigest,
     supersedesClaimId: requestedPredecessor,
     createdAt: observedAt,
   };

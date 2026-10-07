@@ -1,3 +1,4 @@
+import { handlePaymentsApi } from "../../../backend/payments/handler";
 import { handlePointsApi } from "../../../backend/points/handler";
 import {
   CloudflareTracePersistence,
@@ -10,6 +11,7 @@ import { deploymentTier } from "../../../src/lib/deployment";
 type Env = {
   SLOP_ENVIRONMENT?: "production" | "staging";
   SLOP_DB: D1Database;
+  PAYMENTS_ALLOWED_ORIGIN?: string;
   PRIVATE_TRACES: R2Bucket;
   TRACE_AUTH_SECRET: string;
   X_CLIENT_ID?: string;
@@ -128,10 +130,30 @@ async function verifyIdentityAssertion(
 }
 
 export async function onRequest(context: PagesContext): Promise<Response> {
+  if (new URL(context.request.url).pathname.startsWith("/api/v1/payments/"))
+    return handlePaymentsApi(context.request, {
+      db: context.env.SLOP_DB,
+      operatorIds: (context.env.OPERATOR_GITHUB_IDS ?? "")
+        .split(",")
+        .map((id) => id.trim())
+        .filter((id) => /^[1-9][0-9]*$/.test(id)),
+      ...([
+        "https://staging.slop.cash",
+        "https://slop-staging.pages.dev",
+      ].includes(context.env.PAYMENTS_ALLOWED_ORIGIN ?? "")
+        ? { allowedOrigins: [context.env.PAYMENTS_ALLOWED_ORIGIN as string] }
+        : {}),
+    });
   if (new URL(context.request.url).pathname.startsWith("/api/v1/points/"))
     return handlePointsApi(context.request, {
       tier: deploymentTier(context.env.SLOP_ENVIRONMENT),
       db: context.env.SLOP_DB,
+      ...([
+        "https://staging.slop.cash",
+        "https://slop-staging.pages.dev",
+      ].includes(context.env.PAYMENTS_ALLOWED_ORIGIN ?? "")
+        ? { allowedOrigins: [context.env.PAYMENTS_ALLOWED_ORIGIN as string] }
+        : {}),
       rateLimitSecret: context.env.TRACE_AUTH_SECRET,
       identity: context.env.SLOP_IDENTITY,
       x:
