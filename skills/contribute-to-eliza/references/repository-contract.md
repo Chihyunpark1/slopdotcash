@@ -139,6 +139,12 @@ check for the selected exact head before any GitHub write.
 
 ## Attribution and payout evidence
 
+Run `run-receipt.mjs authorize` immediately before each contribution-related GitHub
+write. `start` and the live report's `--recheck-pr` gate also require fresh GitHub
+authority. No authorization is cached. A network failure blocks these operations;
+local inspection and historical `status`/`finish` remain available. This checks
+installed skill authority, not permission to merge or write in the target repository.
+
 Generate ordinary attribution with `run-receipt.mjs disclose`. Signed run
 receipts, usage collection, and private traces are optional. If chosen, start
 a run before work and finish after proof; finish without trace arguments when

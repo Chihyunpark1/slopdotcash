@@ -61,6 +61,7 @@ import {
   normalizeSessionReport,
   usageDelta,
 } from "../skills/contribute-to-eliza/scripts/run-receipt.mjs";
+import { createInstallAuthorityFixture } from "../tests/install-authority-fixture";
 
 const testDir = dirname(fileURLToPath(import.meta.url));
 const skillDir = join(testDir, "..", "skills", "contribute-to-eliza");
@@ -4044,12 +4045,28 @@ describe("run receipt CLI", () => {
         "scripts",
         "run-receipt.mjs",
       );
+      const skillAuthority = createInstallAuthorityFixture(
+        join(fixtureRoot, "skill-authority"),
+        {
+          developHead: sourceRevision,
+          revisions: {
+            [sourceRevision]: {
+              files: Object.fromEntries(
+                installedFiles.map((path) => [
+                  path,
+                  readFileSync(join(installedSkillRoot, path)),
+                ]),
+              ),
+            },
+          },
+        },
+      );
       const entrypoint = join(fixtureRoot, "run-receipt-test-harness.mjs");
       writeFileSync(
         entrypoint,
         `import { main } from ${JSON.stringify(pathToFileURL(receiptEntrypoint).href)};
 try {
-  await main(process.argv.slice(2), { testPolicyAuthority: ${JSON.stringify(pathToFileURL(policyRoot).href)} });
+  await main(process.argv.slice(2), { testPolicyAuthority: ${JSON.stringify(pathToFileURL(policyRoot).href)}, testSkillAuthority: ${JSON.stringify(skillAuthority)} });
 } catch (error) {
   process.stderr.write(\`project run receipt failed: \${error instanceof Error ? error.message : String(error)}\\n\`);
   process.exitCode = 1;
