@@ -179,21 +179,21 @@ export function ProfilePage({
     (total, match) => total + match.leader.acceptedOutcomeCount,
     0,
   );
-  const projected = matches.reduce(
-    (total, match) => total + BigInt(match.leader.projectedMinor ?? "0"),
+  const simulated = matches.reduce(
+    (total, match) => total + BigInt(match.leader.simulatedMinor ?? "0"),
     0n,
   );
-  // Name the UTC cycle behind the projection and whether money backs it.
+  // Keep the cap-based estimate separate from funding and approved awards.
   const cycleId = (matches[0]?.view ?? state.views[0])?.cycle.id;
   const monthlyPools = (
     matches.length > 0 ? matches.map(({ view }) => view) : state.views
   ).filter((view) => view.project.reward.kind === "monthly-pool");
-  const projectedUnfunded =
+  const simulatedUnfunded =
     monthlyPools.length > 0 &&
     monthlyPools.every((view) => monthlyPoolUnfunded(view.project.reward));
-  const projectedLabel = `${
+  const simulatedLabel = `${
     cycleId ? formatCycleMonth(cycleId) : "monthly"
-  } projected${projectedUnfunded ? ", unfunded" : ""}`;
+  } simulated estimate${simulatedUnfunded ? ", unfunded" : ""}`;
   const historicalWallet = history.find(({ contributor }) => contributor.wallet)
     ?.contributor.wallet;
   const featuredEvents = events.slice(0, PROFILE_EVENT_PREVIEW_LIMIT);
@@ -247,12 +247,16 @@ export function ProfilePage({
               <span>accepted this month</span>
             </div>
             <div>
-              <strong>{formatMicroUsdc(projected.toString())}</strong>
-              <span>{projectedLabel}</span>
+              <strong>{formatMicroUsdc(simulated.toString())}</strong>
+              <span>{simulatedLabel}</span>
             </div>
           </>
         }
       />
+      <p>
+        This estimate uses project budget targets. It is not an approved payout.
+        The 14-day review applies to monthly proposals, not this estimate.
+      </p>
       <section className="section profile-section">
         <div className="profile-section-heading">
           <h2>Projects</h2>

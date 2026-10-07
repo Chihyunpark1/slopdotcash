@@ -1074,7 +1074,7 @@ describe("public records", () => {
     expect(screen.getByText("Evidence guidance")).toBeInTheDocument();
     expect(screen.getByText("recorded score")).toBeInTheDocument();
     expect(
-      screen.getByText("July 2026 projected, unfunded"),
+      screen.getByText("July 2026 simulated estimate, unfunded"),
     ).toBeInTheDocument();
     expect(screen.queryByText(/all-time/u)).not.toBeInTheDocument();
     expect(screen.queryByText("monthly estimate")).not.toBeInTheDocument();
