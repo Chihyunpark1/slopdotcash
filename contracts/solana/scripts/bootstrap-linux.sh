@@ -5,6 +5,10 @@ set -euo pipefail
 : "${RUNNER_TEMP:?Run in an isolated GitHub Actions job}"
 : "${GITHUB_PATH:?GitHub Actions PATH file required}"
 : "${GITHUB_ENV:?GitHub Actions environment file required}"
+# Anchor CLI's hidapi dependency links libudev on Linux. The hosted runner
+# already supplies pkg-config; OpenSSL builds through Anchor's locked dependencies.
+sudo apt-get update
+sudo apt-get install --no-install-recommends -y libudev-dev
 install_dir="$RUNNER_TEMP/slop-solana-tools"
 mkdir -p "$install_dir"
 curl --fail --location --retry 3 --output "$install_dir/solana.tar.bz2" https://github.com/anza-xyz/agave/releases/download/v2.1.21/solana-release-x86_64-unknown-linux-gnu.tar.bz2
