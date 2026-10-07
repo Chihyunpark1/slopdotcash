@@ -82,6 +82,7 @@ import {
 } from "./lib/leaderboard";
 import {
   type ModelOutcomeSummary,
+  modelIdentityKey,
   summarizeModelOutcomes,
 } from "./lib/model-outcomes";
 import {
@@ -128,16 +129,6 @@ const WALLET_CLAIM_TIMEOUT_MS = 12_000;
 const MAX_FUNDING_INDEX_BYTES = 8 * 1024 * 1024;
 const MAX_WALLET_CLAIM_BYTES = 16 * 1024;
 const PROFILE_EVENT_PREVIEW_LIMIT = 10;
-const HERO_ACTIONS = [
-  "SHIPPING OPEN SOURCE.",
-  "SECURING THE WEB.",
-  "HACKING THE PLANET.",
-  "BUILDING AGI.",
-] as const;
-const HERO_HOLD_MS = 2_400;
-const HERO_TYPE_MS = 55;
-const HERO_DELETE_MS = 30;
-const HERO_GAP_MS = 220;
 
 export function publicFooterDomain(
   hostname: string,
@@ -270,7 +261,7 @@ function formatScore(value: number): string {
   return new Intl.NumberFormat("en-US", {
     maximumFractionDigits: 2,
     minimumFractionDigits: 0,
-    useGrouping: false,
+    useGrouping: true,
   }).format(value);
 }
 
@@ -352,7 +343,7 @@ function stale(snapshot: Pick<LeaderboardSnapshot, "generatedAt">): boolean {
   return Date.now() - Date.parse(snapshot.generatedAt) > 8 * 60 * 60 * 1_000;
 }
 
-function Header({ isHome }: { isHome: boolean }) {
+function Header() {
   const [open, setOpen] = useState(false);
   const headerRef = useRef<HTMLElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
@@ -398,11 +389,6 @@ function Header({ isHome }: { isHome: boolean }) {
           className={open ? "nav-links nav-links-open" : "nav-links"}
           id="primary-navigation"
         >
-          {!isHome ? (
-            <Link href="/" onNavigate={closeMenu}>
-              Home
-            </Link>
-          ) : null}
           <Link href="/#projects" onNavigate={closeMenu}>
             Projects
           </Link>
@@ -441,12 +427,10 @@ function Footer() {
         </div>
         <div className="footer-links">
           <Link href="/#projects">Projects</Link>
-          <Link href="/how-it-works">How scoring works</Link>
+          <Link href="/how-it-works">How it works</Link>
           <Link href="/how-it-works#faq">FAQ</Link>
-          <Link href="/receipts">Receipts</Link>
           <Link href="/models">Models</Link>
-          <Link href="/cycles">Cycle archive</Link>
-          <Link href="/sponsors">Fund a pool</Link>
+          <Link href="/sponsors">Sponsors</Link>
           <Link href="/projects/new">Add a project</Link>
           <ExternalLinkAnchor href={SOURCE_REPOSITORY}>
             GitHub
@@ -460,6 +444,12 @@ function Footer() {
           </ExternalLinkAnchor>
           <a href={CONTACT_MAILTO}>{CONTACT_EMAIL}</a>
         </div>
+        <nav className="footer-links footer-records" aria-label="Records">
+          <span>Records</span>
+          <Link href="/receipts">Run receipts</Link>
+          <Link href="/cycles">Cycle archive</Link>
+          <Link href="/how-it-works#verification">Verification</Link>
+        </nav>
       </div>
     </footer>
   );
@@ -467,7 +457,11 @@ function Footer() {
 
 function DataNotice({ state, retry }: { state: DataState; retry: () => void }) {
   if (state.status === "loading") {
-    return null;
+    return (
+      <p className="data-notice" role="status">
+        Loading records…
+      </p>
+    );
   }
   if (state.status === "error") {
     return (
@@ -486,60 +480,6 @@ function DataNotice({ state, retry }: { state: DataState; retry: () => void }) {
       <span className="status-dot stale-dot" />
       Data may be outdated · updated {formatDate(state.snapshot.generatedAt)}
     </div>
-  );
-}
-
-function TypewriterHeroHeading() {
-  const [index, setIndex] = useState(0);
-  const [characters, setCharacters] = useState(HERO_ACTIONS[0].length);
-  const [phase, setPhase] = useState<"deleting" | "holding" | "typing">(
-    "holding",
-  );
-  useEffect(() => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const target = HERO_ACTIONS[index];
-    let delay = 1;
-    let advance: () => void;
-    if (phase === "holding") {
-      delay = HERO_HOLD_MS;
-      advance = () => setPhase("deleting");
-    } else if (phase === "deleting" && characters > 0) {
-      delay = HERO_DELETE_MS;
-      advance = () => setCharacters((value) => Math.max(0, value - 1));
-    } else if (phase === "deleting") {
-      delay = HERO_GAP_MS;
-      advance = () => {
-        setIndex((value) => (value + 1) % HERO_ACTIONS.length);
-        setPhase("typing");
-      };
-    } else if (characters < target.length) {
-      delay = HERO_TYPE_MS;
-      advance = () => setCharacters((value) => value + 1);
-    } else {
-      advance = () => setPhase("holding");
-    }
-    const timer = window.setTimeout(advance, delay);
-    return () => window.clearTimeout(timer);
-  }, [characters, index, phase]);
-  const action = HERO_ACTIONS[index];
-  return (
-    <h1 aria-label="MAKE MONEY SHIPPING OPEN SOURCE.">
-      <span aria-hidden="true" className="hero-message">
-        <span>MAKE MONEY</span>
-        <span className="hero-switch">
-          {HERO_ACTIONS.map((candidate) => (
-            <span className="hero-switch-sizer" key={candidate}>
-              {candidate}
-            </span>
-          ))}
-          <span className="hero-typewriter">
-            {action.slice(0, characters)}
-            <span className="hero-typewriter-caret" />
-          </span>
-          <span className="hero-mobile-action">{action}</span>
-        </span>
-      </span>
-    </h1>
   );
 }
 
@@ -591,7 +531,9 @@ function ProjectCard({ project }: { project: ProjectDefinition }) {
               ? `Target ${amount}/mo`
               : "Committed balance · accessibility unknown · payments disabled"}
           </small>
-        ) : null}
+        ) : (
+          <small className="project-money-state">External prize</small>
+        )}
         {project.reward.reviewBudget ? (
           <small className="project-review-budget">
             + {reviewBudgetLabel(project.reward.reviewBudget)}
@@ -663,16 +605,19 @@ function HomePage() {
   return (
     <main>
       <section className="hero shell">
-        <TypewriterHeroHeading />
+        <h1 className="hero-message">
+          <span>MAKE MONEY</span>{" "}
+          <span className="hero-action">SHIPPING OPEN SOURCE.</span>
+        </h1>
         <p className="hero-copy">
-          Fund accepted work on GitHub. Slop calculates allocations from public
-          evidence; project owners sign payments directly.
+          Ship useful work with any agent. Maintainers review it on GitHub;
+          project owners approve rewards.
         </p>
         <div className="hero-actions">
           <Link className="button primary-button" href="/#projects">
             Explore projects <ArrowRight aria-hidden="true" />
           </Link>
-          <Link className="button secondary-button" href="/projects/new">
+          <Link className="button secondary-button" href="/sponsors">
             Fund a project
           </Link>
         </div>
@@ -703,34 +648,7 @@ function HomePage() {
           </details>
         ) : null}
       </section>
-      <section className="section shell audience-section">
-        <div className="audience-grid">
-          <article>
-            <h3>Pay for accepted outcomes.</h3>
-            <p>
-              Commit a capped contributor pool and an optional additive review
-              budget.
-            </p>
-            <Link href="/projects/new">Fund a project</Link>
-          </article>
-          <article>
-            <h3>Keep GitHub in control.</h3>
-            <p>
-              Review work in the project repository while Slop publishes the
-              record.
-            </p>
-            <Link href="/how-it-works">See the mechanism</Link>
-          </article>
-          <article>
-            <h3>Ship with any agent.</h3>
-            <p>
-              Use the project skill, disclose the exact model, and land useful
-              work.
-            </p>
-            <Link href="/#projects">Explore projects</Link>
-          </article>
-        </div>
-      </section>
+      <GlobalLeaderboard />
       <section className="how-section" id="how-it-works">
         <div className="shell">
           <div className="home-section-heading inverse-heading">
@@ -758,17 +676,11 @@ function HomePage() {
               </p>
             </article>
           </div>
-          <div className="owner-callout">
-            <div>
-              <h3>Add your project.</h3>
-            </div>
-            <Link className="button inverse-button" href="/projects/new">
-              Get started <ArrowRight aria-hidden="true" />
-            </Link>
-          </div>
+          <Link className="how-details-link" href="/how-it-works">
+            How scores and rewards work <ArrowRight aria-hidden="true" />
+          </Link>
         </div>
       </section>
-      <GlobalLeaderboard />
     </main>
   );
 }
@@ -2099,18 +2011,16 @@ function ProfilePage({
     )
     .slice(0, PROFILE_OPPORTUNITY_LIMIT);
   // Outside the rolling window the frozen months are the only scored record.
-  const score =
-    globalLeader?.score ??
-    formatThirds(
-      preparations.reduce(
-        (total, { contributor }) => total + Number(contributor.scoreThirds),
-        0,
-      ),
-    );
-  // The live score is a rolling window, never a full-history total.
-  const scoreLabel = globalLeader
-    ? `${state.snapshot.window.days}-day score to ${formatDate(state.snapshot.window.to)}`
-    : "score, frozen months";
+  const score = globalLeader
+    ? formatScore(globalLeader.score)
+    : formatThirds(
+        preparations.reduce(
+          (total, { contributor }) => total + Number(contributor.scoreThirds),
+          0,
+        ),
+      );
+  // Closed cycles replace their overlapping ledger events in this cumulative score.
+  const scoreLabel = globalLeader ? "recorded score" : "score, frozen months";
   const acceptedOutcomes = matches.reduce(
     (total, match) => total + match.leader.acceptedOutcomeCount,
     0,
@@ -2182,7 +2092,9 @@ function ProfilePage({
           </div>
         ) : null}
         <div>
-          <strong>{score}</strong>
+          <strong title="Closed cycles and ledger events outside those cycles">
+            {score}
+          </strong>
           <span>{scoreLabel}</span>
         </div>
         <div>
@@ -2653,7 +2565,11 @@ function CyclePage({
               : record?.kind === "external-prize-share" ||
                   view?.reward.kind === "external-prize-share"
                 ? "provisional shares assigned"
-                : "current cycle amount"}
+                : record
+                  ? record.reward.approvedMinor !== "0"
+                    ? "approved principal"
+                    : "suggested principal"
+                  : "projected principal"}
           </span>
         </div>
       </section>
@@ -3545,7 +3461,7 @@ function HowItWorksPage() {
             <Link href="/how-it-works#verification">
               Settlement verification
             </Link>
-            <Link href="/sponsors">Fund a pool</Link>
+            <Link href="/sponsors">Sponsors</Link>
           </li>
           <li>
             <Link href="/projects/new">Add your project</Link>
@@ -4149,6 +4065,10 @@ function ReceiptsPage({
   state: DataState;
   retry: () => void;
 }) {
+  const [query, setQuery] = useState(
+    () => new URLSearchParams(window.location.search).get("q") ?? "",
+  );
+  const search = query.trim().toLowerCase();
   const receipts =
     state.status === "ready"
       ? state.snapshot.attributions
@@ -4159,83 +4079,150 @@ function ReceiptsPage({
             ),
           )
       : [];
+  const matching = receipts.filter((entry) =>
+    [
+      entry.actor?.login,
+      entry.sourceUrl,
+      entry.run?.runId,
+      entry.run?.repositoryId,
+      entry.identifier,
+      modelIdentityKey(entry.provider, entry.model).key,
+      entry.client,
+    ]
+      .join(" ")
+      .toLowerCase()
+      .includes(search),
+  );
   return (
-    <main className="shell evidence-page">
+    <main className="shell evidence-page receipt-page">
       <section className="evidence-page-hero">
-        <h1>Signed runs, without the private trace.</h1>
+        <h1>Run receipts</h1>
         <p>
-          Public receipts show identity and byte-continuity metadata. Raw
-          prompts, responses, source files, private trace bodies, and signing
-          material never appear here.
+          Device signatures attest byte continuity. Model and usage declarations
+          are self-reported; private traces stay private.
         </p>
         <DataNotice retry={retry} state={state} />
       </section>
-      {state.status === "ready" && receipts.length === 0 ? (
-        <EmptyState text="No publishable signed receipts in this snapshot." />
+      <label className="receipt-search">
+        Find a receipt
+        <input
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Contributor, model, client or run ID"
+          disabled={state.status !== "ready"}
+        />
+      </label>
+      {state.status === "ready" ? (
+        <p className="receipt-count" role="status">
+          {matching.length} of {receipts.length} receipts
+        </p>
       ) : null}
-      <div className="receipt-grid">
-        {receipts.map((entry) => {
+      {state.status === "ready" && matching.length === 0 ? (
+        <EmptyState
+          text={
+            receipts.length === 0
+              ? "No publishable signed receipts in this snapshot."
+              : "No receipts match this search."
+          }
+        />
+      ) : null}
+      <div className="receipt-list">
+        {matching.map((entry) => {
           const run = entry.run;
           if (!run) return null;
+          const workLabel = new URL(entry.sourceUrl).pathname
+            .slice(1)
+            .replace(/\/(?:pull|issues)\//u, " #");
           return (
-            <article className="receipt-card" key={run.runId}>
-              <header>
-                <span
-                  className="verification-seal"
-                  aria-label="Device signature present"
-                  role="img"
-                >
-                  S
-                </span>
-                <div>
-                  <span>Verified receipt</span>
-                  <strong>{run.runId}</strong>
-                </div>
-              </header>
-              <dl>
-                <div>
-                  <dt>Project</dt>
-                  <dd>{run.projectId}</dd>
-                </div>
-                <div>
-                  <dt>Model</dt>
-                  <dd>
+            <article className="receipt-record" key={run.runId}>
+              <div className="receipt-links">
+                <strong>
+                  {entry.actor ? (
+                    <Link
+                      href={`/contributors/${encodeURIComponent(entry.actor.login)}`}
+                    >
+                      {entry.actor.login}
+                    </Link>
+                  ) : (
+                    "Unknown contributor"
+                  )}
+                </strong>
+                <ExternalLinkAnchor href={entry.sourceUrl}>
+                  {workLabel}
+                </ExternalLinkAnchor>
+              </div>
+              <details>
+                <summary>
+                  <span>
                     {run.provider}/{run.model}
-                  </dd>
+                  </span>
+                  <time dateTime={run.completedAt}>
+                    {formatDate(run.completedAt)}
+                  </time>
+                  <ChevronRight aria-hidden="true" />
+                </summary>
+                <div className="receipt-details">
+                  <dl>
+                    <div>
+                      <dt>Run ID</dt>
+                      <dd>
+                        <code>{run.runId}</code>
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Project</dt>
+                      <dd>{run.projectId}</dd>
+                    </div>
+                    <div>
+                      <dt>Client</dt>
+                      <dd>{run.client}</dd>
+                    </div>
+                    <div>
+                      <dt>Tokens</dt>
+                      <dd>
+                        {run.usage.confidence === "unavailable"
+                          ? "Unavailable"
+                          : new Intl.NumberFormat("en-US").format(
+                              run.usage.totalTokens,
+                            )}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Usage evidence</dt>
+                      <dd>{run.usage.confidence}</dd>
+                    </div>
+                    <div>
+                      <dt>Skill revision</dt>
+                      <dd>
+                        <code>{run.skillRevision}</code>
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Skill digest</dt>
+                      <dd>
+                        <code>{run.skillSha256}</code>
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Device key</dt>
+                      <dd>
+                        <code>{run.deviceKeyId}</code>
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Private trace digest</dt>
+                      <dd>
+                        {run.traceUpload ? (
+                          <code>{run.traceUpload.sha256}</code>
+                        ) : (
+                          "Not available"
+                        )}
+                      </dd>
+                    </div>
+                  </dl>
                 </div>
-                <div>
-                  <dt>Client</dt>
-                  <dd>{run.client}</dd>
-                </div>
-                <div>
-                  <dt>Completed</dt>
-                  <dd>{formatDate(run.completedAt)}</dd>
-                </div>
-                <div>
-                  <dt>Tokens</dt>
-                  <dd>
-                    {new Intl.NumberFormat("en-US").format(
-                      run.usage.totalTokens,
-                    )}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Device key</dt>
-                  <dd>
-                    <code>{run.deviceKeyId.slice(0, 16)}…</code>
-                  </dd>
-                </div>
-                <div>
-                  <dt>Private trace</dt>
-                  <dd>
-                    {run.traceUpload ? (
-                      <code>{run.traceUpload.sha256.slice(0, 16)}…</code>
-                    ) : (
-                      "not available"
-                    )}
-                  </dd>
-                </div>
-              </dl>
+              </details>
             </article>
           );
         })}
@@ -4252,12 +4239,8 @@ function ModelsPage({ state, retry }: { state: DataState; retry: () => void }) {
       <section className="evidence-page-hero">
         <h1>Which models merge. By the receipts.</h1>
         <p>
-          Every merged pull request and accepted review on the leaderboard can
-          carry a model declaration by the person who did the work. This page
-          counts those declarations next to the outcomes they were made on.
-          Model identity is self-reported, adds no points, and is never checked
-          against the provider. A signed receipt binds a device to its
-          declaration; neither form verifies which model produced the work.
+          Accepted work, grouped by self-reported model. Declarations and device
+          signatures do not verify the provider or change the score.
         </p>
         <DataNotice retry={retry} state={state} />
       </section>
@@ -4374,9 +4357,13 @@ function ModelOutcomes({ summary }: { summary: ModelOutcomeSummary }) {
                         : `${((100 * row.mergedPullRequests) / totals.mergedPullRequests).toFixed(1)}%`}
                   </td>
                   <td>
-                    {row.signedPullRequests > 0
-                      ? count.format(row.signedPullRequests)
-                      : "none"}
+                    {row.signedPullRequests > 0 ? (
+                      <Link href={`/receipts?q=${encodeURIComponent(row.key)}`}>
+                        {count.format(row.signedPullRequests)}
+                      </Link>
+                    ) : (
+                      "none"
+                    )}
                   </td>
                   <td>{points(row.pullRequestPoints)}</td>
                   <td>{count.format(row.acceptedReviews)}</td>
@@ -4683,7 +4670,7 @@ function AppContent() {
   } else content = <NotFound />;
   return (
     <>
-      <Header isHome={route.kind === "home"} />
+      <Header />
       <Suspense
         fallback={
           <main className="shell route-main" role="status">

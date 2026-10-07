@@ -178,7 +178,7 @@ test("shows signer loss and expired capability without payout availability", asy
 test("discovers projects and one points-ranked homepage leaderboard", async ({
   page,
 }) => {
-  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.emulateMedia({ reducedMotion: "no-preference" });
   await page.reload({ waitUntil: "networkidle" });
 
   await expect(
@@ -340,10 +340,12 @@ test("discovers projects and one points-ranked homepage leaderboard", async ({
     leaderboard.getByRole("link", { name: firstLogin, exact: true }),
   ).toBeVisible();
   await leaderboard.getByLabel("Find a contributor").fill("");
-  await expect(page.locator(".hero-mobile-action")).toHaveText(
+  await expect(page.locator(".hero-action")).toHaveText(
     "SHIPPING OPEN SOURCE.",
   );
-  await expect(page.locator(".hero-typewriter-caret")).toBeHidden();
+  await expect(
+    page.getByRole("link", { name: "Fund a project", exact: true }),
+  ).toHaveAttribute("href", "/sponsors");
   const menuButton = page.getByRole("button", { name: "Open navigation" });
   if (await menuButton.isVisible()) await menuButton.click();
   await page.getByRole("link", { name: "Leaderboard" }).click();
@@ -595,7 +597,9 @@ test("renders contributor and cycle records from validated public data", async (
     page.locator(".profile-totals").getByText("paid", { exact: true }),
   ).toBeVisible();
   await expect(
-    page.locator(".profile-totals").getByText(/^\d+-day score to /u),
+    page
+      .locator(".profile-totals")
+      .getByText("recorded score", { exact: true }),
   ).toBeVisible();
   await expect(
     page.locator(".profile-totals").getByText(/^[A-Z][a-z]+ \d{4} projected/u),
@@ -1188,13 +1192,84 @@ for (const scenario of [
   });
 }
 
+test("finds a receipt and opens its full evidence and GitHub contribution", async ({
+  page,
+  request,
+}) => {
+  const snapshot = await loadSnapshot(request);
+  const entry = snapshot.attributions.find((entry) => entry.run !== null);
+  await page.goto("/models", { waitUntil: "networkidle" });
+  const modelReceipts = page
+    .locator('.model-outcomes-table a[href^="/receipts?q="]')
+    .first();
+  if (await modelReceipts.count()) {
+    await modelReceipts.click();
+    await expect(page).toHaveURL(/\/receipts\?q=/u);
+    await expect(
+      page.getByRole("searchbox", { name: "Find a receipt" }),
+    ).not.toHaveValue("");
+    expect(await page.locator(".receipt-record").count()).toBeGreaterThan(0);
+  } else {
+    await page.goto("/receipts", { waitUntil: "networkidle" });
+  }
+  await expect(
+    page.getByRole("heading", { name: "Run receipts", exact: true }),
+  ).toBeVisible();
+  if (!entry?.run) {
+    await expect(
+      page.getByText("No publishable signed receipts in this snapshot."),
+    ).toBeVisible();
+    return;
+  }
+  await page
+    .getByRole("searchbox", { name: "Find a receipt" })
+    .fill(entry.run.runId);
+  const record = page.locator(".receipt-record");
+  await expect(record).toHaveCount(1);
+  await record.locator("summary").focus();
+  await page.keyboard.press("Enter");
+  await expect(
+    record.getByText(entry.run.runId, { exact: true }),
+  ).toBeVisible();
+  await expect(
+    record.getByText(entry.run.skillSha256, { exact: true }),
+  ).toBeVisible();
+  await expect(
+    record.getByRole("link", {
+      name: new URL(entry.sourceUrl).pathname
+        .slice(1)
+        .replace(/\/(?:pull|issues)\//u, " #"),
+    }),
+  ).toHaveAttribute("href", entry.sourceUrl);
+  await expect(
+    record.getByRole("link", {
+      name: new URL(entry.sourceUrl).pathname
+        .slice(1)
+        .replace(/\/(?:pull|issues)\//u, " #"),
+    }),
+  ).toBeVisible();
+  await page
+    .getByRole("searchbox", { name: "Find a receipt" })
+    .fill("no-matching-receipt-000000");
+  await expect(page.getByText("No receipts match this search.")).toBeVisible();
+  await page.getByRole("searchbox", { name: "Find a receipt" }).fill("");
+  await expect(page.locator(".receipt-record")).toHaveCount(
+    snapshot.attributions.filter((entry) => entry.run !== null).length,
+  );
+});
+
 test("keeps primary routes accessible and inside the viewport", async ({
   page,
   request,
 }) => {
   const snapshot = await loadSnapshot(request);
+  const cycles = await loadCycles(request);
   for (const path of [
+    ...cycles.cycles
+      .slice(0, 1)
+      .map((cycle) => `/cycles/${cycle.projectId}/${cycle.cycleId}`),
     "/models",
+    "/receipts",
     "/sponsors",
     "/verification",
     "/",
