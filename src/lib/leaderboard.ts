@@ -536,10 +536,13 @@ export function isRecognizedTestFile(path: string): boolean {
   );
 }
 
-export function materialTestStats(files: PullRequestFile[]): {
+export function materialTestStats(files: PullRequestFile[] | null): {
   additions: number;
   churn: number;
 } {
+  if (files === null) {
+    throw new Error("Cannot assess tests without pull request file detail");
+  }
   const testFiles = files.filter((file) => isRecognizedTestFile(file.path));
   const additions = testFiles.reduce(
     (total, file) => total + file.additions,
@@ -552,13 +555,17 @@ export function materialTestStats(files: PullRequestFile[]): {
   return { additions, churn };
 }
 
-export function hasMaterialTestChange(files: PullRequestFile[]): boolean {
+export function hasMaterialTestChange(
+  files: PullRequestFile[] | null,
+): boolean {
   const { additions, churn } = materialTestStats(files);
   return additions >= MATERIAL_TEST_ADDITIONS && churn >= MATERIAL_TEST_CHURN;
 }
 
 /** Open PRs with non-trivial test progress that still miss the published bar. */
-export function isNearMaterialTestChange(files: PullRequestFile[]): boolean {
+export function isNearMaterialTestChange(
+  files: PullRequestFile[] | null,
+): boolean {
   if (hasMaterialTestChange(files)) {
     return false;
   }

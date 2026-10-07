@@ -104,7 +104,8 @@ export interface PullRequestRecord {
   author: GitHubActor | null;
   assignees: GitHubActor[];
   labels: GitHubLabel[];
-  files: PullRequestFile[];
+  /** Null is unavailable GitHub diff detail on an excluded open draft. */
+  files: PullRequestFile[] | null;
   comments: GitHubTextSource[];
   reviews: PullRequestReview[];
   closingIssueIds: string[];

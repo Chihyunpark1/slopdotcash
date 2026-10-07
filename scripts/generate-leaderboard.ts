@@ -156,7 +156,7 @@ interface ParsedPullRequest {
   pages: {
     comments: NestedPageState;
     reviews: NestedPageState;
-    files: NestedPageState;
+    files: NestedPageState | null;
     closingIssues: NestedPageState;
   };
 }
@@ -1015,7 +1015,12 @@ function parsePullRequest(value: unknown, path: string): ParsedPullRequest {
   const id = asString(node.id, `${path}.id`);
   const comments = parseComments(node.comments, `${path}.comments`, id);
   const reviews = parseReviews(node.reviews, `${path}.reviews`);
-  const files = parseFiles(node.files, `${path}.files`);
+  // GitHub can return null for an oversized draft diff, even with zero diff
+  // counters. Retain that draft, but never represent unavailable files as [].
+  const files =
+    node.files === null && node.state === "OPEN" && node.isDraft === true
+      ? null
+      : parseFiles(node.files, `${path}.files`);
   const closingIssues = parseClosingIssueIds(
     node.closingIssuesReferences,
     `${path}.closingIssuesReferences`,
@@ -1046,7 +1051,7 @@ function parsePullRequest(value: unknown, path: string): ParsedPullRequest {
       author: parseActor(node.author, `${path}.author`),
       assignees: parseAssignees(node.assignees, `${path}.assignees`),
       labels: parseLabels(node.labels, `${path}.labels`),
-      files: files.nodes,
+      files: files?.nodes ?? null,
       comments: comments.nodes,
       reviews: reviews.nodes,
       closingIssueIds: closingIssues.nodes.map((issue) => issue.id),
@@ -1061,7 +1066,7 @@ function parsePullRequest(value: unknown, path: string): ParsedPullRequest {
     pages: {
       comments: pageState(comments),
       reviews: pageState(reviews),
-      files: pageState(files),
+      files: files === null ? null : pageState(files),
       closingIssues: pageState(closingIssues),
     },
   };
@@ -2186,7 +2191,7 @@ async function completePullRequestConnections(
   );
 
   let filesState = parsed.pages.files;
-  while (filesState.pageInfo.hasNextPage) {
+  while (filesState?.pageInfo.hasNextPage) {
     if (!filesState.pageInfo.endCursor) {
       throw new Error(`PR #${pullRequest.number} files cursor is missing`);
     }
@@ -2198,6 +2203,9 @@ async function completePullRequestConnections(
       child(data, "node", "data").files,
       "data.node.files",
     );
+    if (pullRequest.files === null) {
+      throw new Error(`PR #${pullRequest.number} file detail is unavailable`);
+    }
     pullRequest.files.push(...page.nodes);
     filesState = pageState(page);
   }
@@ -2223,7 +2231,7 @@ async function completePullRequestConnections(
 
   pullRequest.closingIssueIds = [...new Set(pullRequest.closingIssueIds)];
   if (
-    pullRequest.files.length !== parsed.pages.files.totalCount ||
+    pullRequest.files?.length !== parsed.pages.files?.totalCount ||
     pullRequest.closingIssueIds.length !== parsed.pages.closingIssues.totalCount
   ) {
     throw new Error(
