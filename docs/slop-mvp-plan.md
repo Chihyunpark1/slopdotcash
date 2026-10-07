@@ -10,7 +10,7 @@ The MVP retains current product capabilities and completes account, project, con
 
 Implement only the approved work packages below. Every implementation issue and PR must reference the exact PRD requirement and MVP package. New proposals must review and reference the PRD, or add a proposed requirement for human approval before implementation. A future requirement, open issue, or agent recommendation does not expand MVP scope.
 
-Outside issues must be independently written by the contributor and manually submitted on the website. Agents cannot draft ready-to-submit issue text, create or submit issues through the UI, CLI, API, scripts or prefilled URLs, or delegate that work to another agent. Agents may privately explain findings and read existing issues. Every Slop participation issue/PR includes `Made via @slopdotcash`; the human adds it to their issue.
+Slop participation issues are chosen, verified and personally submitted by the human on the website. Agents must not generate unattended issue text, create issues in bulk, or open or submit an issue through the UI, CLI, API, scripts, prefilled URLs or another agent; they may investigate, explain findings, and assist with editing or translation under the contributor's control. The rule, its evidence standard, appeal path and effective date are in `CONTRIBUTING.md`. Every Slop participation issue/PR includes `Made via @slopdotcash`; the human adds it to their issue.
 
 The rest of the PRD is blocked until maintainers approve an explicit MVP completion record. That record must map every work package and requirement to exact revisions, test results, real workflow validation, release evidence, and resolved blocking defects. It must confirm the MVP is finished, verified, tested and validated. A partially shipped feature, green local suite, merged PR, or model declaration is not phase completion. After confirmation, humans approve the next PRD phase before implementation begins.
 
@@ -22,7 +22,7 @@ The rest of the PRD is blocked until maintainers approve an explicit MVP complet
 | MVP-01 | ACC-01–05, SOC-01 | One GitHub account with profile, optional X, sessions, privacy and recovery | Reuse identity/membership; real OAuth, rename and access tests |
 | MVP-02 | WAL-01–05 | Backend Base/Solana wallet connections and safe changes | MVP-01; real wallet proof, unsupported paths, replay/concurrency and recovery |
 | MVP-03 | PRJ-01–04 | Resumable project setup, optional Slopbot settings/health and updates | MVP-00/01 for drafts; MVP-12 before executable activation; actual permissions and canonical publication |
-| MVP-04 | SKL-01–07 | Discovery/project skills, human-only outside issues, visible attribution and sandbox checks | MVP-03/12; genuine contribution, provenance and exact approved-revision execution |
+| MVP-04 | SKL-01–07 | Discovery/project skills, human-responsible outside issues, visible attribution and sandbox checks | MVP-03/12; genuine contribution, provenance and exact approved-revision execution |
 | MVP-05 | BOT-01–07 | Optional Slopbot, marker/member routing, external opt-in, ignored actors, guideline-aware review and delegated closures | MVP-03/04/12; full eligibility matrix, health, stale revision, close confirmation, retry and uninstall |
 | MVP-06 | FND-01–05, PAY-01–08 | Base and Solana contract/program, funding classes and protected obligations | MVP-00/02/03; independent review and accounting/authority conformance |
 | MVP-07 | PAY-01–08 | Human approval, manual/automatic execution, late wallet dispatch, finality and receipts | MVP-06; full same-scenario test deployment evidence on both chains |
@@ -38,7 +38,7 @@ No package is marked implemented by this document. Create bounded implementation
 
 1. A contributor signs in, connects X optionally, adds a verified wallet on each supported network, and sees correct private/public state.
 2. A maintainer proves repository authority, passes security admission, publishes policy/skills, and optionally configures Slopbot. Tagged/member submissions are reviewed; external/ignored submissions are skipped unless explicitly configured otherwise.
-3. A contributor discovers cleared work through the main skill, uses the approved community sandbox, completes required tests, and submits a tagged PR. Any outside issue is independently written and submitted by the human.
+3. A contributor discovers cleared work through the main skill, uses the approved community sandbox, completes required tests, and submits a tagged PR. Any Slop participation issue is chosen, verified and personally submitted by the human.
 4. A sponsor funds a vault; a separate donor adds reward-restricted funds; the maintainer approves awards for registered and walletless actors.
 5. Registered actors receive exact payments; late registration triggers the remaining funded award; retries do not repay; donor funds cannot be refunded.
 6. Slopbot closes an eligible policy-violating issue/PR under delegated rules. Confirm one points/score debit, ratios, retry deduplication, and reversal after reopen/appeal; preserve earned obligations.
