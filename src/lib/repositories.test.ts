@@ -6,7 +6,6 @@ import { PROJECTS } from "./projects.mjs";
 import {
   collectTargetRepositories,
   findRegisteredRepositoryById,
-  findTargetRepositoryById,
   PRIMARY_REPOSITORY,
   TARGET_REPOSITORIES,
 } from "./repositories.mjs";
@@ -85,7 +84,6 @@ describe("collectTargetRepositories", () => {
     expect(
       findRegisteredRepositoryById("heirlabs/elements-sdk")?.projectId,
     ).toBe("heir-desk-sdk");
-    expect(findTargetRepositoryById("heirlabs/element-sdk")).toBeNull();
   });
 
   it("promotes the next active project when the first one is paused", () => {

@@ -2,7 +2,6 @@
 
 import { describe, expect, it } from "vitest";
 import {
-  formatPublishedWallet,
   isBaseAddress,
   isSolanaAddress,
   parsePublishedWallet,
@@ -13,8 +12,8 @@ const ADDRESS = "11111111111111111111111111111111";
 const BASE_ADDRESS = "0x1111111111111111111111111111111111111111";
 
 describe("public wallet markers", () => {
-  it("round-trips one standalone Solana marker", () => {
-    const marker = formatPublishedWallet(ADDRESS);
+  it("reads one standalone Solana marker", () => {
+    const marker = `<!-- slop-wallet:v1 {"chain":"solana","address":"${ADDRESS}"} -->`;
     expect(parsePublishedWallet(`# profile\n\n${marker}\n`)).toEqual({
       address: ADDRESS,
       chain: "solana",
@@ -22,14 +21,14 @@ describe("public wallet markers", () => {
   });
 
   it("does not treat examples or prose as wallet publication", () => {
-    const marker = formatPublishedWallet(ADDRESS);
+    const marker = `<!-- slop-wallet:v1 {"chain":"solana","address":"${ADDRESS}"} -->`;
     expect(parsePublishedWallet(`\`\`\`md\n${marker}\n\`\`\``)).toBeNull();
     expect(parsePublishedWallet(`Example: ${marker}`)).toBeNull();
     expect(parsePublishedWallet("No wallet published.")).toBeNull();
   });
 
   it("rejects ambiguity, foreign chains, extra fields, and malformed keys", () => {
-    const marker = formatPublishedWallet(ADDRESS);
+    const marker = `<!-- slop-wallet:v1 {"chain":"solana","address":"${ADDRESS}"} -->`;
     expect(() => parsePublishedWallet(`${marker}\n${marker}`)).toThrow(
       /multiple/u,
     );
@@ -57,8 +56,8 @@ describe("public wallet markers", () => {
   });
 
   it("accepts one Base marker beside the Solana marker", () => {
-    const solana = formatPublishedWallet(ADDRESS);
-    const base = formatPublishedWallet(BASE_ADDRESS, "base");
+    const solana = `<!-- slop-wallet:v1 {"chain":"solana","address":"${ADDRESS}"} -->`;
+    const base = `<!-- slop-wallet:v1 {"chain":"base","address":"${BASE_ADDRESS}"} -->`;
     expect(parsePublishedWallets(`${solana}\n${base}\n`)).toEqual({
       base: { address: BASE_ADDRESS, chain: "base" },
       solana: { address: ADDRESS, chain: "solana" },
@@ -71,7 +70,7 @@ describe("public wallet markers", () => {
   });
 
   it("refuses a second marker on the same chain and cross-chain addresses", () => {
-    const base = formatPublishedWallet(BASE_ADDRESS, "base");
+    const base = `<!-- slop-wallet:v1 {"chain":"base","address":"${BASE_ADDRESS}"} -->`;
     expect(() => parsePublishedWallets(`${base}\n${base}`)).toThrow(
       /multiple base/u,
     );
@@ -85,7 +84,6 @@ describe("public wallet markers", () => {
         `<!-- slop-wallet:v1 {"chain":"solana","address":"${BASE_ADDRESS}"} -->`,
       ),
     ).toThrow(/invalid Solana/u);
-    expect(() => formatPublishedWallet(ADDRESS, "base")).toThrow(/Base/u);
   });
 
   it("accepts only the canonical lowercase spelling of a Base account", () => {

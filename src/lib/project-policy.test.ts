@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 import eliza from "../../projects/eliza/project.json";
-import {
-  assertPaymentDoesNotMutateTerms,
-  assertProjectPolicyTransition,
-} from "./project-policy.mjs";
+import { assertProjectPolicyTransition } from "./project-policy.mjs";
 
 describe("project policy transitions", () => {
   interface MutableFundingRoute {
@@ -162,19 +159,6 @@ describe("project policy transitions", () => {
     branch.repositories[0].integrationBranch = "main";
     expect(() => assertProjectPolicyTransition(transferred, branch)).toThrow(
       /drift/u,
-    );
-  });
-
-  it("keeps payment transitions from rewriting IP state", () => {
-    const payment = structuredClone(eliza);
-    payment.reward.monthlyCapMinor = "20000000000";
-    payment.reward.monthlyCapDisplay = "$20,000";
-    expect(assertPaymentDoesNotMutateTerms(eliza, payment)).toEqual(payment);
-
-    const rewritten = structuredClone(payment);
-    rewritten.terms.revision = `${eliza.terms.revision}-mutated`;
-    expect(() => assertPaymentDoesNotMutateTerms(eliza, rewritten)).toThrow(
-      /latest binding|cannot mutate/u,
     );
   });
 

@@ -12,11 +12,7 @@ import type {
   ModelAttribution,
 } from "./leaderboard";
 import { SCORE_CAPS } from "./leaderboard";
-import {
-  createProjectView,
-  formatCapUsageLine,
-  projectCycleHasOpened,
-} from "./project-view";
+import { createProjectView, projectCycleHasOpened } from "./project-view";
 import type { ProjectRunReceipt } from "./run-receipts";
 
 const SECOND_ACTOR: GitHubActor = {
@@ -217,9 +213,6 @@ describe("project views", () => {
         cap: SCORE_CAPS.evaluatedContributions,
       },
     });
-    expect(formatCapUsageLine(eliza.leaders[0].capUsage)).toBe(
-      "2026-07 scoring · merges 1 uncapped · issues 1/5 · tests 1/5 · evidence 3/30 · reviews 1/10",
-    );
 
     const delta = createProjectView(snapshot, "delta-star", "2026-07");
     expect(delta.opportunities.map((row) => row.source.id)).toEqual([

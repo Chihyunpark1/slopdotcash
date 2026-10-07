@@ -276,13 +276,3 @@ export function assertProjectPolicyTransition(previousValue, nextValue) {
   }
   return next;
 }
-
-/** Proves a payment-only transition did not mutate copyright or legal terms. */
-export function assertPaymentDoesNotMutateTerms(previousValue, nextValue) {
-  const previous = assertProjectDefinition(previousValue);
-  const next = assertProjectDefinition(nextValue);
-  if (canonical(previous.terms) !== canonical(next.terms)) {
-    throw new TypeError("payment state cannot mutate IP terms");
-  }
-  return next;
-}
