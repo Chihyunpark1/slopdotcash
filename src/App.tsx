@@ -1820,11 +1820,6 @@ function ProjectPage({
             </div>
             {promotionEligible ? (
               <aside className="reward-card">
-                <span>
-                  {project.reward.kind === "monthly-pool"
-                    ? "MONTHLY POOL"
-                    : "EXTERNAL OPPORTUNITY"}
-                </span>
                 <strong
                   className={
                     project.reward.kind === "monthly-pool" &&
