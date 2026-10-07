@@ -1054,7 +1054,8 @@ describe("public records", () => {
       await screen.findByRole("heading", { name: "finish-line" }),
     ).toBeInTheDocument();
     expect(screen.getByText("34")).toBeInTheDocument();
-    expect(screen.getAllByText("$0").length).toBeGreaterThan(0);
+    expect(screen.getByText("$5,000")).toBeInTheDocument();
+    expect(screen.getByText("$0.00")).toBeInTheDocument();
     expect(screen.getByText("Eliza")).toBeInTheDocument();
     expect(screen.getByText("Delta Star")).toBeInTheDocument();
     expect(
