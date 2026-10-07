@@ -16,7 +16,7 @@ import {
   SCORE_V2_EFFECTIVE_AT,
   type ScoreEvent,
 } from "../src/lib/leaderboard";
-
+import { isUnavailableModelIdentifier } from "../src/lib/model-identity";
 import { REGISTERED_REPOSITORIES } from "../src/lib/repositories.mjs";
 
 type JsonRecord = Record<string, unknown>;
@@ -184,6 +184,7 @@ function rebuildLeaders(
     if (typeof attribution.identifier !== "string") {
       throw new TypeError("attribution.identifier must be a string");
     }
+    if (isUnavailableModelIdentifier(attribution.model)) continue;
     const identifiers = reportedModelsByActor.get(id) ?? new Set<string>();
     identifiers.add(attribution.identifier);
     reportedModelsByActor.set(id, identifiers);
