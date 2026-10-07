@@ -51,7 +51,7 @@ let installerArtifactRoot: string;
 let installerArchivePath: string;
 let installerChecksumPath: string;
 
-const skillPython = pythonCommand(repositoryRoot);
+const skillPython = pythonCommand(sourceRoot);
 
 type JsonRecord = Record<string, unknown>;
 
