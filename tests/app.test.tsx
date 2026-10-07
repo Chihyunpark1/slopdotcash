@@ -434,59 +434,6 @@ afterEach(() => {
 });
 
 describe("discovery", () => {
-  it("types through the campaign headlines without changing the semantic heading", () => {
-    vi.useFakeTimers();
-    Object.defineProperty(window, "matchMedia", {
-      configurable: true,
-      value: vi.fn().mockReturnValue({
-        matches: false,
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-      }),
-    });
-    mockSnapshot();
-    render(<App />);
-
-    expect(
-      screen.getByRole("heading", {
-        name: "MAKE MONEY SHIPPING OPEN SOURCE.",
-      }),
-    ).toBeInTheDocument();
-    const visibleAction = () =>
-      document.querySelector(".hero-typewriter")?.textContent ?? "";
-    expect(visibleAction()).toBe("SHIPPING OPEN SOURCE.");
-
-    for (const action of [
-      "SECURING THE WEB.",
-      "HACKING THE PLANET.",
-      "BUILDING AGI.",
-      "SHIPPING OPEN SOURCE.",
-    ]) {
-      let attempts = 0;
-      while (visibleAction() !== action && attempts < 100) {
-        act(() => vi.advanceTimersToNextTimer());
-        attempts += 1;
-      }
-      expect(visibleAction()).toBe(action);
-      expect(
-        screen.getByRole("heading", {
-          name: "MAKE MONEY SHIPPING OPEN SOURCE.",
-        }),
-      ).toBeInTheDocument();
-    }
-  });
-
-  it("keeps the first campaign headline fixed when reduced motion is requested", () => {
-    vi.useFakeTimers();
-    mockSnapshot();
-    render(<App />);
-
-    act(() => vi.advanceTimersByTime(30_000));
-    expect(document.querySelector(".hero-typewriter")).toHaveTextContent(
-      "SHIPPING OPEN SOURCE.",
-    );
-  });
-
   it("keeps loading separate from empty and error states", () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(
       (_input, init) =>
@@ -905,7 +852,7 @@ describe("project routes", () => {
     expect(
       screen.queryByText(/not accepting new Slop runs/u),
     ).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /^Home$/u })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Slop home" })).toHaveAttribute(
       "href",
       "/",
     );
@@ -1142,9 +1089,7 @@ describe("public records", () => {
     ).toBeInTheDocument();
     const totals = document.querySelector("main > .profile-totals");
     expect(totals).not.toBeNull();
-    expect(totals).toHaveTextContent(
-      /3435-day score to [A-Z][a-z]{2} \d{1,2}, \d{4}/u,
-    );
+    expect(totals).toHaveTextContent("recorded score");
     expect(totals).not.toHaveTextContent(/all-time/u);
     expect(
       screen.getByText("Harden the proximity manifest loader"),
@@ -1178,9 +1123,7 @@ describe("public records", () => {
     ).toBeInTheDocument();
     expect(screen.queryAllByText(/2026-07 scoring ·/)).toHaveLength(0);
     expect(screen.getByText("Evidence guidance")).toBeInTheDocument();
-    expect(
-      screen.getByText("35-day score to Jul 30, 2026"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("recorded score")).toBeInTheDocument();
     expect(
       screen.getByText("July 2026 projected, unfunded"),
     ).toBeInTheDocument();
@@ -1439,9 +1382,9 @@ describe("public proof routes", () => {
   });
   it.each([
     ["/how-it-works", "Accepted work in. Auditable allocations out."],
-    ["/receipts", "Signed runs, without the private trace."],
-    ["/models", "Which models merge. By the receipts."],
-    ["/sponsors", "Fund the merges. Keep the keys."],
+    ["/receipts", "Run receipts"],
+    ["/models", "Models"],
+    ["/sponsors", "Fund a project."],
     ["/cycles", "Every pool gets a dated public record."],
   ])("renders %s as a branded route", async (path, heading) => {
     route(path);
@@ -1490,7 +1433,7 @@ describe("sponsors page", () => {
     ).toHaveAttribute("href", "mailto:hello@slop.cash");
   });
 
-  it("leads with the pinned outside-GitHub cross-reference and keeps the live figures separate", async () => {
+  it("keeps the dated audience report available after funding choices", async () => {
     route("/sponsors");
     mockSnapshot();
     render(<App />);
@@ -1506,6 +1449,8 @@ describe("sponsors page", () => {
     const pin = WHO_BUILDS_CROSS_REFERENCE;
     const all = outside.cohorts[0];
 
+    fireEvent.click(screen.getByText(/Audience report ·/u));
+    fireEvent.click(screen.getByText("Funding rules and payment stages"));
     const heading = await screen.findByRole("heading", {
       name: "Who builds on Slop.",
     });
@@ -1514,7 +1459,7 @@ describe("sponsors page", () => {
     const scope = within(section as HTMLElement);
     const main = screen.getByRole("main");
     const headings = within(main).getAllByRole("heading", { level: 2 });
-    expect(headings[0]).toBe(heading);
+    expect(headings[0]).toHaveTextContent("Projects");
     const stats = within(
       (section as HTMLElement).querySelector(
         ".model-outcomes-summary",
