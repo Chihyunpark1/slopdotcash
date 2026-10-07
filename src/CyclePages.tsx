@@ -18,7 +18,7 @@ import {
   NotFound,
   stale,
 } from "./Presentation";
-import { ProjectLeaderboard } from "./ProjectLeaderboard";
+import { CycleAllocation } from "./ProjectLeaderboard";
 
 export function CyclePage({
   project,
@@ -159,12 +159,7 @@ export function CyclePage({
         </li>
       </ol>
       {view ? (
-        <ProjectLeaderboard
-          state={state}
-          retry={retry}
-          updatedAt={state.snapshot.generatedAt}
-          view={view}
-        />
+        <CycleAllocation updatedAt={state.snapshot.generatedAt} view={view} />
       ) : record ? (
         <ArchivedCycleLeaderboard cycle={record} />
       ) : null}

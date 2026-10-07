@@ -517,6 +517,7 @@ test("starts Eliza with one prompt and no separate payout form", async ({
   await expect(
     page.getByText(/GitHub ledger \+ reward records live/u),
   ).toHaveCount(0);
+  await page.getByText("Cycle allocation details", { exact: true }).click();
   await expect(page.getByText(/^Updated /u)).toBeVisible();
   await expect(page.getByText(/receipt-linked tokens/u)).toHaveCount(0);
   const shareCells = await page

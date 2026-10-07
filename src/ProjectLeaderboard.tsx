@@ -6,7 +6,7 @@ import {
   selectReviewerLeaders,
 } from "./lib/reviewer-leaders";
 import type { DataState } from "./lib/use-snapshot";
-import { ContributorStandings, PointsLabel } from "./Points";
+import { ContributorStandings } from "./Points";
 import {
   Avatar,
   EmptyState,
@@ -20,17 +20,35 @@ import {
   UNFUNDED_POOL_HEADLINE,
 } from "./Presentation";
 
+interface CycleAllocationProps {
+  updatedAt: string;
+  view: ProjectView;
+}
 export function ProjectLeaderboard({
-  updatedAt,
   state,
   retry,
-  view,
-}: {
-  updatedAt: string;
+  ...props
+}: CycleAllocationProps & {
   state: DataState;
   retry: () => void;
-  view: ProjectView;
 }) {
+  return (
+    <>
+      <ContributorStandings
+        projectId={props.view.project.id}
+        scoreState={state}
+        retryScore={retry}
+        compact
+      />
+      <details>
+        <summary>Cycle allocation details</summary>
+        <CycleAllocation {...props} />
+      </details>
+    </>
+  );
+}
+
+export function CycleAllocation({ updatedAt, view }: CycleAllocationProps) {
   const reviewers = new Map(
     selectReviewerLeaders(view.ledger).map((reviewer) => [
       reviewer.actor.id,
@@ -39,12 +57,6 @@ export function ProjectLeaderboard({
   );
   return (
     <>
-      <ContributorStandings
-        projectId={view.project.id}
-        scoreState={state}
-        retryScore={retry}
-        compact
-      />
       <section className="section project-leader-section">
         <div className="section-heading">
           <h2>{formatCycleMonth(view.cycle.id)} leaderboard.</h2>
@@ -97,7 +109,6 @@ export function ProjectLeaderboard({
                         <Avatar actor={leader.actor} />
                         <span>
                           <strong>{leader.actor.login}</strong>
-                          <PointsLabel actorId={leader.actor.id} />
                           <small>
                             {leader.acceptedOutcomeCount} accepted events
                           </small>

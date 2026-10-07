@@ -354,28 +354,6 @@ function Notice() {
     </p>
   );
 }
-export function PointsLabel({
-  actorId,
-  projectId,
-}: {
-  actorId: string;
-  projectId?: string;
-}) {
-  const { state } = useContext(Context);
-  if (state.status !== "ready")
-    return (
-      <span className="points-meta">
-        Points {state.status === "loading" ? "loading…" : "unavailable"}
-      </span>
-    );
-  const m = state.members.find((m) => m.actor.id === actorId);
-  const n = projectId
-    ? (m?.awards
-        .filter((a) => a.projectId === projectId)
-        .reduce((s, a) => s + a.amount, 0) ?? 0)
-    : (m?.total ?? 0);
-  return <span className="points-label">{n.toLocaleString()} pts</span>;
-}
 export function ProfilePoints({
   actorId,
   summary,

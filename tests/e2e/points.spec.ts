@@ -1,5 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
+import { archivedPaidCycleIndex, snapshotFixture } from "../fixtures";
 
 test(
   "points history is usable, accessible and independent of payments",
@@ -120,3 +121,36 @@ test(
     expect(failures).toEqual([]);
   },
 );
+
+test("ranks archived work separately from the month its payment settled", async ({
+  page,
+}) => {
+  // Local public-record fixtures exercise the browser projection, not chain verification.
+  await page.clock.setFixedTime(new Date("2026-08-17T12:00:00.000Z"));
+  await page.route("**/data/leaderboard.json?**", (route) =>
+    route.fulfill({ json: snapshotFixture() }),
+  );
+  await page.route("**/data/cycles/index.json?**", (route) =>
+    route.fulfill({ json: archivedPaidCycleIndex() }),
+  );
+  await page.goto("/?sort=money#leaderboard");
+  const standings = page.getByRole("region", {
+    name: "Leaderboard",
+    exact: true,
+  });
+  const recipient = standings.getByRole("row").filter({
+    has: page.getByRole("link", { name: "archive-only", exact: true }),
+  });
+  await expect(recipient.locator("td").nth(4)).toHaveText("$1");
+  await expect(recipient.locator("td").nth(2)).toHaveText("Unavailable");
+  await standings
+    .getByLabel("Period", { exact: true })
+    .selectOption("lifetime");
+  await standings.getByLabel("Sort by").selectOption("score");
+  await expect(recipient.locator("td").nth(2)).toHaveText("7");
+  await expect(recipient.locator("td").nth(4)).toHaveText("$1");
+  await page.clock.setFixedTime(new Date("2026-07-31T12:00:00.000Z"));
+  await page.goto("/?sort=money#leaderboard");
+  await expect(recipient.locator("td").nth(2)).toHaveText("7");
+  await expect(recipient.locator("td").nth(4)).toHaveText("$0");
+});

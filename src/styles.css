@@ -3600,12 +3600,7 @@ small {
 .points-history small {
   display: block;
 }
-.points-label {
-  display: inline-block;
-  margin-left: 0.5rem;
-  font-size: 0.8rem;
-  font-variant-numeric: tabular-nums;
-}
+
 @media (max-width: 520px) {
   .points-controls label {
     width: 100%;
