@@ -1,3 +1,4 @@
+import { assertEscrowTransition } from "./escrow-policy.mjs";
 /**
  * Enforces non-retroactive project policy transitions. This is deliberately
  * independent from payment state: money events cannot rewrite IP policy.
@@ -175,6 +176,7 @@ export function assertProjectPolicyTransition(previousValue, nextValue) {
   const previous = assertHistoricalProjectDefinition(previousValue);
   const next = assertProjectDefinition(nextValue);
   if (previous.id !== next.id) throw new TypeError("project id cannot change");
+  assertEscrowTransition(previous.escrow, next.escrow);
   assertFundingRouteTransition(
     previous.funding.addresses,
     next.funding.addresses,

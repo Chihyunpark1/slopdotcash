@@ -75,7 +75,7 @@ export type ProjectRewardProjection =
   | {
       kind: "monthly-pool";
       currency: "USDC";
-      chain: "solana";
+      chain: "solana" | "base";
       capMinor: string;
       projectedPrincipalMinor: string;
       platformFeeMinor: string;
@@ -223,7 +223,7 @@ function emptyUsage(): ProjectUsageSummary {
   };
 }
 
-function allocateIntegerTotal(
+export function allocateIntegerTotal(
   total: bigint,
   contributors: readonly ProjectContributor[],
 ): Map<string, bigint> {
@@ -490,8 +490,11 @@ export function createProjectView(
     AllocationFundingBasis,
     "fundingState" | "committedMinor" | "monthlyCapMinor"
   >,
+  archivedProject?: ProjectDefinition,
 ): ProjectView {
-  const project = findProject(projectId);
+  const project = archivedProject ?? findProject(projectId);
+  if (project && project.id !== projectId)
+    throw new Error("Archived project identity mismatch");
   if (!project) throw new TypeError(`Unknown project: ${projectId}`);
   if (
     project.repositories.some(
@@ -628,6 +631,10 @@ export function createProjectView(
     const monthlyCapMinor = allocationFundingMinor(
       fundingBasis ?? deriveAllocationFundingBasis(project, cycleId),
     );
+    const escrow =
+      project.escrow && cycleId >= project.escrow.effectiveCycle
+        ? project.escrow
+        : undefined;
     const projected = allocateIntegerTotal(monthlyCapMinor, leaders);
     const projectedCents = allocateIntegerTotal(
       monthlyCapMinor / 10_000n,
@@ -646,21 +653,38 @@ export function createProjectView(
         (simulatedCents.get(entry.actor.id) ?? 0n) * 10_000n
       ).toString();
       entry.projectedMinor = (projected.get(entry.actor.id) ?? 0n).toString();
+      if (escrow) {
+        // New escrow projections are recipient net, never gross plus a fee.
+        const net = (gross: string) =>
+          (BigInt(gross) - BigInt(gross) / 50n).toString();
+        entry.simulatedMinor = net(entry.simulatedMinor);
+        entry.simulatedDisplayMinor = entry.simulatedMinor;
+        entry.projectedMinor = net(entry.projectedMinor);
+      }
       entry.projectedDisplayMinor = (
         (projectedCents.get(entry.actor.id) ?? 0n) * 10_000n
       ).toString();
+      if (escrow) entry.projectedDisplayMinor = entry.projectedMinor;
     }
     reward = {
       kind: "monthly-pool",
       currency: "USDC",
-      chain: "solana",
+      chain: escrow?.chain ?? "solana",
       capMinor,
       projectedPrincipalMinor: [...projected.values()]
-        .reduce((total, amount) => total + amount, 0n)
+        .reduce(
+          (total, amount) => total + (escrow ? amount - amount / 50n : amount),
+          0n,
+        )
         .toString(),
-      platformFeeMinor: (
-        (monthlyCapMinor * BigInt(project.reward.feeBasisPoints)) /
-        10_000n
+      platformFeeMinor: (escrow
+        ? [...projected.values()].reduce(
+            (total, amount) => total + amount / 50n,
+            0n,
+          )
+        : (monthlyCapMinor *
+            BigInt(project.escrow ? 100 : project.reward.feeBasisPoints)) /
+          10_000n
       ).toString(),
       status: "simulation",
     };

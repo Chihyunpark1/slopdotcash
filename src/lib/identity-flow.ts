@@ -1,5 +1,6 @@
 /** Shared identity start/poll protocol; consumers retain separate audiences and session exchanges. */
-const IDENTITY = "https://identity.slop.cash";
+import { identityPublicOrigin } from "../../workers/identity/contracts";
+
 const CLOCK_SKEW_MS = 2 * 60_000;
 export interface IdentityAuthorization {
   flowId: string;
@@ -43,6 +44,7 @@ function delay(ms: number, signal: AbortSignal) {
 
 export async function requestIdentityAssertion(options: {
   audience: "private-trace-api" | "slop-points-web";
+  origin?: string;
   signal: AbortSignal;
   now?: () => number;
   resume?: unknown;
@@ -53,6 +55,7 @@ export async function requestIdentityAssertion(options: {
     init: RequestInit,
   ) => Promise<{ status: number; body: Record<string, unknown> } | null>;
 }): Promise<string> {
+  const identityOrigin = identityPublicOrigin(options.origin);
   const now = options.now ?? Date.now;
   const signal = options.signal;
   const post = (body: unknown): RequestInit => ({
@@ -64,7 +67,7 @@ export async function requestIdentityAssertion(options: {
     ? record(options.resume)
     : ((
         await options.request(
-          `${IDENTITY}/v1/oauth/start`,
+          `${identityOrigin}/v1/oauth/start`,
           post({ audience: options.audience }),
         )
       )?.body ?? invalid());
@@ -86,7 +89,7 @@ export async function requestIdentityAssertion(options: {
     invalid();
   }
   if (
-    authorization.origin !== IDENTITY ||
+    authorization.origin !== identityOrigin ||
     authorization.pathname !== "/v1/oauth/authorize" ||
     authorization.username ||
     authorization.password ||
@@ -114,7 +117,7 @@ export async function requestIdentityAssertion(options: {
     await delay(Math.min(interval * 1000, expires - now()), signal);
     if (now() >= expires) break;
     const polled = await options.request(
-      `${IDENTITY}/v1/oauth/poll`,
+      `${identityOrigin}/v1/oauth/poll`,
       post({
         flowId: started.flowId,
         pollCapability: started.pollCapability,

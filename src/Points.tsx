@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { identityPublicOrigin } from "../workers/identity/contracts";
 import {
   fetchWithDeadline,
   readBoundedJson,
@@ -319,6 +320,9 @@ export function PointsNav({ onNavigate }: { onNavigate?: () => void }) {
           >
             View profile
           </a>
+          <a href="/earnings" onClick={navigate}>
+            Earnings and wallets
+          </a>
           <a href="/points" onClick={navigate}>
             Account settings
           </a>
@@ -564,6 +568,14 @@ function JoinPoints({
     if (popup) popup.opener = null;
     try {
       const assertion = await requestIdentityAssertion({
+        origin: identityPublicOrigin(
+          [
+            "https://staging.slop.cash",
+            "https://slop-staging.pages.dev",
+          ].includes(window.location.origin)
+            ? import.meta.env.VITE_IDENTITY_PUBLIC_ORIGIN
+            : undefined,
+        ),
         audience: "slop-points-web",
         signal: c.signal,
         authorize: (url) => {
@@ -603,7 +615,9 @@ function JoinPoints({
       setMe(signedIn);
       if (redirectToProfile)
         window.location.assign(
-          `/contributors/${encodeURIComponent(signedIn.actor.login)}`,
+          new URLSearchParams(window.location.search).get("next") === "earnings"
+            ? "/earnings"
+            : `/contributors/${encodeURIComponent(signedIn.actor.login)}`,
         );
       setMessage("You’re signed in. Your welcome points are recorded.");
     } catch (e) {

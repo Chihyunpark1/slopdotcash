@@ -20,6 +20,7 @@ vi.mock("./lib/wallet-registration", () => ({
 const prepare = vi.mocked(prepareWalletRegistration);
 const ADDRESS = "11111111111111111111111111111111";
 const claim: RegisteredWalletClaim = {
+  chain: "solana",
   schemaVersion: 1,
   claimId: "test_claim",
   githubActorId: "123",
@@ -42,6 +43,7 @@ function setup() {
   const cancel = vi.fn();
   const session: WalletRegistrationSession = {
     preview: {
+      chain: "solana",
       identity: { githubActorId: "123", githubLogin: "octocat" },
       address: ADDRESS,
       current: null,

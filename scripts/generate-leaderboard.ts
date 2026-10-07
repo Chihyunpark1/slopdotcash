@@ -5,6 +5,10 @@
  * becoming a plausible-looking empty snapshot.
  */
 
+import { resolveGitHubToken } from "./github-token";
+
+export { resolveGitHubToken } from "./github-token";
+
 import { readFileSync } from "node:fs";
 import { mkdir, rename, rm } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
@@ -1644,39 +1648,6 @@ export class GitHubGraphqlClient implements GraphqlExecutor {
     }
     return this.#rateLimit;
   }
-}
-
-async function loadGhToken(): Promise<string> {
-  const process = Bun.spawn(["gh", "auth", "token"], {
-    stdin: "ignore",
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  const [exitCode, stdout, stderr] = await Promise.all([
-    process.exited,
-    new Response(process.stdout).text(),
-    new Response(process.stderr).text(),
-  ]);
-  if (exitCode !== 0) {
-    throw new Error(
-      `GITHUB_TOKEN is unset and gh auth token failed: ${stderr.trim().slice(0, 300)}`,
-    );
-  }
-  const token = stdout.trim();
-  if (!token) {
-    throw new Error(
-      "GITHUB_TOKEN is unset and gh auth token returned no token",
-    );
-  }
-  return token;
-}
-
-export async function resolveGitHubToken(
-  environment: Record<string, string | undefined> = Bun.env,
-  ghTokenLoader: () => Promise<string> = loadGhToken,
-): Promise<string> {
-  const token = environment.GITHUB_TOKEN?.trim();
-  return token || (await ghTokenLoader());
 }
 
 function parseIsoDate(value: Date, path: string): Date {

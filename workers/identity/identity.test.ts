@@ -585,6 +585,53 @@ describe("slop identity worker", () => {
 });
 
 describe("identity browser CORS boundary", () => {
+  it("isolates test OAuth redirects and CORS while retaining production defaults", async () => {
+    const { deps } = dependencies();
+    const publicOrigin = "https://slop-identity-test.fixture.workers.dev";
+    const test = { ...deps, publicOrigin };
+    const start = (host: string, origin: string) =>
+      new Request(`${host}/v1/oauth/start`, {
+        method: "POST",
+        headers: { origin, "content-type": "application/json" },
+        body: JSON.stringify({ audience: "slop-points-web" }),
+      });
+    expect(
+      (
+        await handleIdentityRequest(
+          start("https://identity.slop.cash", "https://slop-staging.pages.dev"),
+          deps,
+        )
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await handleIdentityRequest(
+          start(publicOrigin, "https://slop.cash"),
+          test,
+        )
+      ).status,
+    ).toBe(403);
+    const response = await handleIdentityRequest(
+      start(publicOrigin, "https://slop-staging.pages.dev"),
+      test,
+    );
+    expect(response.status).toBe(201);
+    expect(response.headers.get("access-control-allow-origin")).toBe(
+      "https://slop-staging.pages.dev",
+    );
+    const flow = await response.json();
+    expect(new URL(flow.authorizationUrl).origin).toBe(publicOrigin);
+    const authorize = await handleIdentityRequest(
+      new Request(flow.authorizationUrl),
+      test,
+    );
+    expect(authorize.status).toBe(302);
+    expect(
+      new URL(authorize.headers.get("location") ?? "").searchParams.get(
+        "redirect_uri",
+      ),
+    ).toBe(`${publicOrigin}/v1/oauth/callback`);
+  });
   it.each(["https://slop.cash", "https://slop.tech", "https://eliza.army"])(
     "allows only start/poll JSON preflight for %s",
     async (origin) => {

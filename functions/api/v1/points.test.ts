@@ -93,6 +93,46 @@ function post(
   });
 }
 describe("points persistence and joining", () => {
+  it("admits a staging GitHub assertion only with trusted origin configuration and retains same-origin CSRF", async () => {
+    const { deps, sqlite, calls } = setup();
+    const body = {
+      assertion: `slop_assert_v1_${"a".repeat(43)}`,
+      public: false,
+    };
+    const request = (origin = "https://slop-staging.pages.dev") =>
+      new Request("https://slop-staging.pages.dev/api/v1/points/join", {
+        method: "POST",
+        headers: { origin, "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    expect((await handlePointsApi(request(), deps)).status).toBe(403);
+    const staging = {
+      ...deps,
+      allowedOrigins: ["https://slop-staging.pages.dev"],
+    };
+    expect(
+      (await handlePointsApi(request("https://attacker.invalid"), staging))
+        .status,
+    ).toBe(403);
+    expect(calls()).toBe(0);
+    const joined = await handlePointsApi(request(), staging);
+    expect(joined.status).toBe(200);
+    const cookie = joined.headers.get("set-cookie") ?? "";
+    expect(cookie).toContain("Secure; HttpOnly; SameSite=Strict");
+    expect(cookie).not.toContain("Domain=");
+    expect(calls()).toBe(1);
+    const session = await handlePointsApi(
+      new Request("https://slop-staging.pages.dev/api/v1/points/me", {
+        headers: { cookie: cookie.split(";")[0] },
+      }),
+      staging,
+    );
+    expect(session.status).toBe(200);
+    expect(
+      sqlite.prepare("SELECT github_id FROM points_members").get()?.github_id,
+    ).toBe("123");
+    sqlite.close();
+  });
   it("awards welcome once, retains membership on signout, and binds visibility to the session", async () => {
     const { deps, sqlite } = setup();
     const body = {
