@@ -1383,7 +1383,7 @@ describe("public proof routes", () => {
   it.each([
     ["/how-it-works", "Accepted work in. Auditable allocations out."],
     ["/receipts", "Run receipts"],
-    ["/models", "Which models merge. By the receipts."],
+    ["/models", "Models"],
     ["/sponsors", "Fund a project."],
     ["/cycles", "Every pool gets a dated public record."],
   ])("renders %s as a branded route", async (path, heading) => {
