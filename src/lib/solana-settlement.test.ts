@@ -329,7 +329,7 @@ describe("project vault fee outside the vault (RFC #500 section 8)", () => {
   const PROJECT_VAULT = `squads-project-vault:solana:${RECIPIENT}:0:${VAULT}`;
   const TWO_OF_TWO = `squads-v4-vault:solana:${RECIPIENT}:0:${VAULT}`;
 
-  it("refuses a funding credit that moves the excluded vault's USDC", () => {
+  it("refuses a funding credit that includes the excluded vault's USDC accounts", () => {
     expect(
       assertFinalizedUsdcFundingTransfer(
         transaction(),
@@ -347,7 +347,7 @@ describe("project vault fee outside the vault (RFC #500 section 8)", () => {
         "1000000",
         { excludedOwner: SOURCE },
       ),
-    ).toThrow(/moves USDC of the excluded vault/u);
+    ).toThrow(/includes USDC accounts of the excluded vault/u);
     expect(() =>
       assertFinalizedUsdcFundingTransfer(
         transaction(),
@@ -399,7 +399,19 @@ describe("project vault fee outside the vault (RFC #500 section 8)", () => {
           1_786_000_100,
         ),
       }),
-    ).rejects.toThrow(/moves USDC of the excluded vault/u);
+    ).rejects.toThrow(/includes USDC accounts of the excluded vault/u);
+
+    // A top-up and fee payment through the vault can leave its net balance
+    // unchanged. The separate fee transaction must omit vault accounts.
+    const feeThroughVault = structuredClone(feeFromCreator);
+    feeThroughVault.meta.preTokenBalances.push(balance(2, VAULT, "1000000"));
+    feeThroughVault.meta.postTokenBalances.push(balance(2, VAULT, "1000000"));
+    await expect(
+      verify(f, {
+        [PAYOUT_SIGNATURE]: payout,
+        [FEE_SIGNATURE]: feeThroughVault,
+      }),
+    ).rejects.toThrow(/includes USDC accounts of the excluded vault/u);
 
     // The fee is payable only once the contributor payout is complete.
     await expect(
