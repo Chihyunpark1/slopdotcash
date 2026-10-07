@@ -170,7 +170,7 @@ function intentComponent(value: string): string {
     .slice(0, 48);
 }
 
-function ensureCompleteCycle(
+export function ensureCompleteCycle(
   input: CreateRewardCycleProposalInput,
   view: ReturnType<typeof createProjectView>,
 ): void {
@@ -212,6 +212,10 @@ export function createRewardCycleProposal(
   input: CreateRewardCycleProposalInput,
 ): RewardCycleProposal {
   const project = findProject(input.projectId);
+  if (project?.escrow && input.cycleId >= project.escrow.effectiveCycle)
+    throw new TypeError(
+      "Escrow awards use the v2 gross allocation workflow; legacy Solana plans cannot reserve them",
+    );
   if (
     project?.funding.freshCyclePaymentPolicy?.cycleId === input.cycleId &&
     (input.legacyCapMinor !== undefined ||

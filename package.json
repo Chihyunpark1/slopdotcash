@@ -58,14 +58,22 @@
     "test:coverage": "vitest run --coverage",
     "points:generate": "bun scripts/generate-points.ts",
     "points:backfill": "bun scripts/backfill-points.ts",
-    "profiles:generate": "bun scripts/generate-profiles.ts --live"
+    "profiles:generate": "bun scripts/generate-profiles.ts --live",
+    "payments:deployments": "bun scripts/prepare-payment-deployments.ts",
+    "test:contracts:base": "forge test --root contracts/evm -vv && bun contracts/evm/adapter.integration.ts",
+    "test:contracts:solana": "bash contracts/solana/scripts/test-local.sh",
+    "test:payments": "vitest run src/lib/payments/integration.test.ts && bun backend/payments/base.integration.ts",
+    "rewards:propose-escrow": "bun scripts/prepare-escrow-cycle.ts",
+    "rewards:plan-escrow": "bun scripts/prepare-escrow-commitments.ts"
   },
   "dependencies": {
     "@fontsource/poppins": "^5.2.7",
+    "@noble/hashes": "2.4.0",
     "lucide-react": "^1.0.0",
     "qrcode": "1.5.4",
     "react": "19.2.7",
-    "react-dom": "19.2.7"
+    "react-dom": "19.2.7",
+    "viem": "2.57.3"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.11.1",
