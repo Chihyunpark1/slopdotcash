@@ -1384,7 +1384,7 @@ describe("public proof routes", () => {
     ["/how-it-works", "Accepted work in. Auditable allocations out."],
     ["/receipts", "Run receipts"],
     ["/models", "Which models merge. By the receipts."],
-    ["/sponsors", "Fund the merges. Keep the keys."],
+    ["/sponsors", "Fund a project."],
     ["/cycles", "Every pool gets a dated public record."],
   ])("renders %s as a branded route", async (path, heading) => {
     route(path);
@@ -1433,7 +1433,7 @@ describe("sponsors page", () => {
     ).toHaveAttribute("href", "mailto:hello@slop.cash");
   });
 
-  it("leads with the pinned outside-GitHub cross-reference and keeps the live figures separate", async () => {
+  it("keeps the dated audience report available after funding choices", async () => {
     route("/sponsors");
     mockSnapshot();
     render(<App />);
@@ -1449,6 +1449,8 @@ describe("sponsors page", () => {
     const pin = WHO_BUILDS_CROSS_REFERENCE;
     const all = outside.cohorts[0];
 
+    fireEvent.click(screen.getByText(/Audience report ·/u));
+    fireEvent.click(screen.getByText("Funding rules and payment stages"));
     const heading = await screen.findByRole("heading", {
       name: "Who builds on Slop.",
     });
@@ -1457,7 +1459,7 @@ describe("sponsors page", () => {
     const scope = within(section as HTMLElement);
     const main = screen.getByRole("main");
     const headings = within(main).getAllByRole("heading", { level: 2 });
-    expect(headings[0]).toBe(heading);
+    expect(headings[0]).toHaveTextContent("Projects");
     const stats = within(
       (section as HTMLElement).querySelector(
         ".model-outcomes-summary",

@@ -1416,19 +1416,37 @@ test("opens the sponsors page directly and through keyboard navigation", async (
   await page.goto("/sponsors", { waitUntil: "networkidle" });
   await expect(
     page.getByRole("heading", {
-      name: "Fund the merges. Keep the keys.",
+      name: "Fund a project.",
       exact: true,
     }),
   ).toBeVisible();
   await page.reload({ waitUntil: "networkidle" });
   await expect(
     page.getByRole("heading", {
-      name: "Fund the merges. Keep the keys.",
+      name: "Fund a project.",
       exact: true,
     }),
   ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Projects" })).toBeVisible();
+  await expect(page.getByText("$5,050", { exact: true })).toBeVisible();
+  const audience = page
+    .locator("summary")
+    .filter({ hasText: "Audience report ·" });
+  await audience.focus();
+  await page.keyboard.press("Enter");
   await expect(
     page.getByRole("heading", { name: "Who builds on Slop.", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Method and caveats" }),
+  ).toBeVisible();
+  const rules = page.getByText("Funding rules and payment stages", {
+    exact: true,
+  });
+  await rules.focus();
+  await page.keyboard.press("Enter");
+  await expect(
+    page.getByRole("heading", { name: "Your money has exact states." }),
   ).toBeVisible();
   const tableRegion = page.getByRole("region", {
     name: "Project funding pools",
@@ -1459,7 +1477,7 @@ test("opens the sponsors page directly and through keyboard navigation", async (
   await page.goBack({ waitUntil: "networkidle" });
   await expect(
     page.getByRole("heading", {
-      name: "Fund the merges. Keep the keys.",
+      name: "Fund a project.",
       exact: true,
     }),
   ).toBeVisible();

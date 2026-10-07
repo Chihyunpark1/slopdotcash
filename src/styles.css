@@ -3381,6 +3381,18 @@ small {
   margin-top: 10px;
 }
 
+.sponsor-details {
+  border-top: 1px solid var(--ink);
+  padding: 16px 0;
+}
+
+.sponsor-details > summary {
+  min-height: 44px;
+  align-content: center;
+  cursor: pointer;
+  font-weight: 700;
+}
+
 .sponsor-controls ul,
 .sponsor-start ul {
   display: grid;
