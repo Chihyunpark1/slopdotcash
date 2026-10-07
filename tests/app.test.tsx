@@ -28,6 +28,7 @@ import {
   rootPublishedTemplateProject,
   safeProposalHttpsUrl,
 } from "../src/App";
+import { browserDeployment } from "../src/lib/browser-deployment";
 import { assertCycleIndex } from "../src/lib/cycle-index";
 import type { ProjectFundingRecord } from "../src/lib/funding";
 import type { FundingCommitmentInstrument } from "../src/lib/funding-instruments.mjs";
@@ -1069,7 +1070,7 @@ describe("public records", () => {
     );
     expect(wallet).toHaveAttribute(
       "href",
-      "https://api.slop.cash/api/v1/wallet-claims/wc_current01",
+      `${browserDeployment.api}/api/v1/wallet-claims/wc_current01`,
     );
   });
 
