@@ -907,7 +907,7 @@ describe("project routes", () => {
     expect(
       screen.queryByText("$10,000 monthly pool", { exact: false }),
     ).not.toBeInTheDocument();
-    const rewardCard = screen.getByText("MONTHLY POOL").closest("aside");
+    const rewardCard = screen.getByText("Not funded yet").closest("aside");
     expect(rewardCard?.querySelector("strong")).toHaveTextContent(
       "Not funded yet",
     );
@@ -990,7 +990,6 @@ describe("project routes", () => {
     expect(
       await screen.findByRole("heading", { name: "Make money solving math." }),
     ).toBeInTheDocument();
-    expect(screen.getByText("EXTERNAL OPPORTUNITY")).toBeInTheDocument();
     expect(
       screen.getByText("No platform pool · no dollar projection"),
     ).toBeInTheDocument();

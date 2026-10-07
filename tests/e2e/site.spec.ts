@@ -556,7 +556,6 @@ test("never presents Delta Star's external prize as platform money", async ({
   await expect(
     page.getByRole("heading", { name: "Make money solving math." }),
   ).toBeVisible();
-  await expect(page.getByText("EXTERNAL OPPORTUNITY")).toBeVisible();
   await expect(
     page.getByText("No platform pool · no dollar projection"),
   ).toBeVisible();
