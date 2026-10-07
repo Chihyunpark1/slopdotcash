@@ -49,8 +49,8 @@ import {
   type SettlementExecutionPlan,
 } from "../src/lib/settlement-plan";
 import { verifyRewardSettlementOnchain } from "../src/lib/solana-settlement";
-import { loadProjectCommitmentRecords } from "./funding-commitment-records";
 import { assertEscrowDecisions } from "./escrow-review";
+import { loadProjectCommitmentRecords } from "./funding-commitment-records";
 import { validateEscrowCycle } from "./prepare-escrow-cycle";
 import { loadPriorCycleAccrual } from "./prior-cycle-accrual";
 import {
