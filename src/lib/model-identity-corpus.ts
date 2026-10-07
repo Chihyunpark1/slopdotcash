@@ -24,4 +24,7 @@ export const MODEL_IDENTITY_CONFORMANCE_CASES: readonly {
   { field: "model", value: "gpt-5+", valid: false },
   { field: "client", value: "codex~", valid: false },
   { field: "version", value: "1.2.3@", valid: false },
+  // Reserved: states that no exact model could be established.
+  { field: "model", value: "unavailable", valid: false },
+  { field: "model", value: "Unavailable", valid: false },
 ];

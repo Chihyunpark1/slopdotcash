@@ -36,6 +36,8 @@ import { homedir, tmpdir } from "node:os";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { createSkillAuthorizationProgram } from "./skill-authority.mjs";
+
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const skillDirectory = resolve(scriptDirectory, "..");
 const PROJECT = JSON.parse(
@@ -62,6 +64,9 @@ const COMMON_PLACEHOLDERS = new Set([
   "unknown",
   "unspecified",
 ]);
+// The one supported answer when the exact model cannot be established from
+// client or provider metadata. Only ordinary disclosure accepts it.
+const UNAVAILABLE_MODEL = "unavailable";
 const FIELD_PLACEHOLDERS = {
   client: new Set(["agent", "app", "cli", "client"]),
   model: new Set([
@@ -101,7 +106,8 @@ Commands:
   preview  Show local reads, writes, network access, and public receipt fields
   doctor   Verify repository, skill provenance, declarations, and local runners
   status   List this project's local active and completed measured runs
-  start    Capture a local ccusage baseline or record usage as unavailable
+  authorize Revalidate installed source immediately before a GitHub write
+  start    Authorize current skill source and capture an optional usage baseline
   trace    Permanently upload this run's private trace and finalize it
   finish   Close a measured run and print its device-signed GitHub footer
 
@@ -109,7 +115,9 @@ Common options:
   --repo-root <path>  Target Git repository root (default: current directory)
   --client <name>     Declared agent/client identifier
   --provider <name>   Declared model provider identifier
-  --model <id>        Declared exact model identifier
+  --model <id>        Declared exact model identifier, taken from client or
+                      provider metadata. Never guess it. With disclose only,
+                      "unavailable" states it could not be established.
   --client-version <version>  Exact declared agent/client version
   --json              Emit machine-readable JSON
 
@@ -265,9 +273,26 @@ export function declaredIdentity(value, field, kind, maxLength = 128) {
     COMMON_PLACEHOLDERS.has(normalized) ||
     FIELD_PLACEHOLDERS[kind].has(normalized)
   ) {
-    fail(`${field} must be an exact non-placeholder identifier`);
+    fail(
+      kind === "model"
+        ? `${field} must be an exact non-placeholder identifier; if the exact model cannot be established, use disclose with ${field} ${UNAVAILABLE_MODEL}`
+        : `${field} must be an exact non-placeholder identifier`,
+    );
+  }
+  if (kind === "model" && normalized === UNAVAILABLE_MODEL) {
+    fail(
+      `${field} ${UNAVAILABLE_MODEL} is not an exact identifier and is valid only with disclose; a signed receipt requires the exact model`,
+    );
   }
   return value;
+}
+
+/** Disclosure alone may state that the exact model could not be established. */
+export function disclosedModel(value, field) {
+  if (typeof value === "string" && value.toLowerCase() === UNAVAILABLE_MODEL) {
+    return UNAVAILABLE_MODEL;
+  }
+  return declaredIdentity(value, field, "model");
 }
 
 function normalizePath(value) {
@@ -1030,6 +1055,61 @@ function resolveSkillProvenance() {
     revision,
     skillRevision: `SlopDotCash/slopdotcash@${revision}:${relativeSkill}`,
     skillSha256: digest,
+  };
+}
+
+/** Fresh authority applies to this operation only; historical run records are untouched. */
+export function authorizeSkill(
+  provenance = resolveSkillProvenance(),
+  testAuthority,
+) {
+  const files = Object.fromEntries(
+    listRegularFiles(skillDirectory)
+      .filter(
+        (path) => path !== "PROVENANCE.json" && path !== AUTHORIZATION_RECEIPT,
+      )
+      .map((path) => [
+        path,
+        readFileSync(join(skillDirectory, path)).toString("base64"),
+      ]),
+  );
+  const result = spawnSync(
+    "python3",
+    ["-c", createSkillAuthorizationProgram(testAuthority)],
+    {
+      input: JSON.stringify({
+        revision: provenance.revision,
+        sourcePath: PROJECT.skillSourcePath,
+        files,
+      }),
+      encoding: "utf8",
+      maxBuffer: 1024 * 1024,
+      timeout: 10 * 60_000,
+      env: executionEnvironmentWithGitHub(),
+    },
+  );
+  if (result.status !== 0 || result.signal || result.error) {
+    fail(
+      `Installed skill ${provenance.revision} is not freshly authorized: ${result.stderr?.trim() || result.error?.message || "verification did not complete"}. Read the verified update instructions with: curl --fail --silent --show-error https://slop.cash/projects/${PROJECT.projectId}/manual.md . Local work and historical receipts are unchanged.`,
+    );
+  }
+  const value = JSON.parse(result.stdout);
+  if (value.revision !== provenance.revision || !value.authorization)
+    fail("Skill authority returned an invalid revision");
+  return value;
+}
+
+function executionEnvironmentWithGitHub() {
+  return {
+    ...executionEnvironment(),
+    ...Object.fromEntries(
+      ["GH_TOKEN", "GITHUB_TOKEN", "SSL_CERT_FILE", "SSL_CERT_DIR"].flatMap(
+        (name) =>
+          typeof process.env[name] === "string"
+            ? [[name, process.env[name]]]
+            : [],
+      ),
+    ),
   };
 }
 
@@ -2081,6 +2161,7 @@ function parseArguments(args) {
   }
   if (
     ![
+      "authorize",
       "disclose",
       "doctor",
       "finish",
@@ -2091,9 +2172,12 @@ function parseArguments(args) {
       "trace",
     ].includes(options.action)
   ) {
-    fail("command must be preview, doctor, status, start, trace, or finish");
+    fail(
+      "command must be authorize, disclose, preview, doctor, status, start, trace, or finish",
+    );
   }
   const allowedArguments = {
+    authorize: new Set(["--json"]),
     disclose: new Set([
       "--client",
       "--provider",
@@ -2165,7 +2249,11 @@ function parseArguments(args) {
   }
   if (["disclose", "doctor", "finish", "start"].includes(options.action)) {
     declaredIdentity(options.provider, "--provider", "provider", 64);
-    declaredIdentity(options.model, "--model", "model");
+    if (options.action === "disclose") {
+      options.model = disclosedModel(options.model, "--model");
+    } else {
+      declaredIdentity(options.model, "--model", "model");
+    }
   }
   if (["finish", "start"].includes(options.action)) {
     if (
@@ -2302,6 +2390,7 @@ function previewRun(options) {
       "Bun or npm package cache and diagnostic logs only with --allow-package-execution; none with --usage-unavailable",
     ],
     network: [
+      "Required for start and authorize: api.github.com and raw.githubusercontent.com verify the complete installed skill and current source authority; no source bytes are uploaded",
       `With --allow-package-execution, resolve exact ccusage@${CCUSAGE_VERSION} during doctor and measured runs; fetch it from the package registry only when it is not already cached`,
       `Only with start --verify-policy, fetch current project terms from https://slop.cash/projects/${PROJECT.projectId}/terms.json and any digest-bound LICENSE, inbound terms, or prize rules from github.com, raw.githubusercontent.com, or proximityprize.org as named by that policy`,
       `Verify the server-authoritative private-request intake gate at ${PRIVATE_REQUEST_INTAKE_STATUS}; trace upload remains blocked unless it reports enabled`,
@@ -2428,6 +2517,7 @@ function statusRun(options) {
 function startRun(options, testOptions) {
   const provenance = resolveSkillProvenance();
   const repositoryRoot = requireRepository(options.repoRoot);
+  authorizeSkill(provenance, testOptions?.testSkillAuthority);
   const usageAdapter = usageAdapterFor(options.client);
   const runId = createRunId();
   const state = validateActiveRecord({
@@ -2445,7 +2535,13 @@ function startRun(options, testOptions) {
       ? null
       : collectUsage(options.client, repositoryRoot),
     ...(options.verifyPolicy
-      ? { policyAcknowledgement: projectPolicyPreflight(testOptions) }
+      ? {
+          policyAcknowledgement: projectPolicyPreflight(
+            testOptions?.testPolicyAuthority === undefined
+              ? undefined
+              : { testPolicyAuthority: testOptions.testPolicyAuthority },
+          ),
+        }
       : {}),
     ...provenance,
   });
@@ -2668,7 +2764,19 @@ export async function main(args = process.argv.slice(2), testOptions) {
   } else if (options.action === "preview") previewRun(options);
   else if (options.action === "doctor") doctorRun(options);
   else if (options.action === "status") statusRun(options);
-  else if (options.action === "start") startRun(options, testOptions);
+  else if (options.action === "authorize") {
+    const result = authorizeSkill(
+      resolveSkillProvenance(),
+      testOptions?.testSkillAuthority,
+    );
+    renderResult(
+      {
+        ...result,
+        message: `Skill ${result.revision} is currently authorized. Recheck immediately before each GitHub write.`,
+      },
+      options.json,
+    );
+  } else if (options.action === "start") startRun(options, testOptions);
   else if (options.action === "trace") await traceRun(options);
   else finishRun(options);
 }
