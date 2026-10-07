@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { type ReactNode, useState } from "react";
 import { fetchWithDeadline, readBoundedJson } from "./lib/browser-json";
 import type { CycleIndex } from "./lib/cycle-index";
 import {
@@ -6,6 +6,8 @@ import {
   type ProfileIndex,
   profileCounts,
 } from "./lib/profiles";
+import { usePublicResource } from "./lib/use-public-resource";
+import { ContributorIdentity } from "./Presentation";
 
 const disclosures = import.meta.glob("../disclosures/*.json", {
   eager: true,
@@ -20,33 +22,28 @@ const disclosures = import.meta.glob("../disclosures/*.json", {
     }[];
   }
 >;
+async function loadProfiles(signal: AbortSignal) {
+  const response = await fetchWithDeadline("/data/profiles.json", {
+    signal,
+    cache: "no-store",
+  });
+  if (!response.ok) throw Error("Profiles unavailable");
+  const index = await readBoundedJson(response, 8 * 1024 * 1024, "profiles");
+  assertProfiles(index);
+  return { index };
+}
 type State =
   | { status: "loading" }
   | { status: "error" }
   | { status: "ready"; index: ProfileIndex };
-export function useProfiles() {
-  const [state, setState] = useState<State>({ status: "loading" });
-  const [attempt, setAttempt] = useState(0);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: attempt explicitly retries the census request.
-  useEffect(() => {
-    const c = new AbortController();
-    setState({ status: "loading" });
-    void fetchWithDeadline("/data/profiles.json", {
-      signal: c.signal,
-      cache: "no-store",
-    })
-      .then(async (r) => {
-        if (!r.ok) throw Error("Profiles unavailable");
-        const v = await readBoundedJson(r, 8 * 1024 * 1024, "profiles");
-        assertProfiles(v);
-        if (!c.signal.aborted) setState({ status: "ready", index: v });
-      })
-      .catch(() => {
-        if (!c.signal.aborted) setState({ status: "error" });
-      });
-    return () => c.abort();
-  }, [attempt]);
-  return { state, retry: () => setAttempt((n) => n + 1) };
+export function useProfiles(): { state: State; retry: () => void } {
+  const [state, retry] = usePublicResource(
+    true,
+    loadProfiles,
+    "Profiles unavailable",
+    15_000,
+  );
+  return { state, retry };
 }
 function dollars(n: bigint) {
   return `$${(n / 1000000n).toLocaleString("en-US")}.${(n % 1000000n).toString().padStart(6, "0").replace(/0+$/, "").padEnd(2, "0")}`;
@@ -57,15 +54,16 @@ export function ProfileActivity({
   showIdentity = false,
   cycles,
   census,
+  summary,
 }: {
   login: string;
   actorId?: string;
   showIdentity?: boolean;
   cycles?: CycleIndex;
   census: ReturnType<typeof useProfiles>;
+  summary?: ReactNode;
 }) {
   const { state, retry } = census;
-  const [failedImage, setFailedImage] = useState<string | null>(null);
   const matches =
     state.status === "ready"
       ? state.index.people.filter((p) =>
@@ -126,46 +124,19 @@ export function ProfileActivity({
   return (
     <section className="profile-activity" aria-label="Contributor profile">
       {showIdentity ? (
-        <div className="profile-hero">
-          {failedImage === image ? (
-            <span className="avatar avatar-large" aria-hidden="true">
-              {login.slice(0, 2).toUpperCase()}
-            </span>
-          ) : (
-            <img
-              className="avatar avatar-large"
-              src={image}
-              alt=""
-              width={80}
-              height={80}
-              onError={() => setFailedImage(image)}
-            />
-          )}
-          <div className="profile-identity">
-            <h1>{p?.login ?? login}</h1>
-            <a
-              href={`https://github.com/${encodeURIComponent(p?.login ?? login)}`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              GitHub · @{p?.login ?? login}
-            </a>
-          </div>
-        </div>
+        <ContributorIdentity
+          actor={{
+            login: p?.login ?? login,
+            avatarUrl: image,
+            url: `https://github.com/${encodeURIComponent(p?.login ?? login)}`,
+          }}
+        />
       ) : null}
       <h2>Contribution record</h2>
-      {state.status === "error" ? (
-        <p role="status">
-          PR counts are unavailable.{" "}
-          <button type="button" onClick={retry}>
-            Retry profile
-          </button>
-        </p>
-      ) : state.status === "loading" ? (
-        <p role="status">Loading PR history…</p>
-      ) : (
-        <>
-          <div className="profile-totals">
+      <div className="profile-totals">
+        {summary}
+        {state.status === "ready" ? (
+          <>
             {(
               [
                 ["Merged", "merged"],
@@ -180,7 +151,37 @@ export function ProfileActivity({
                 <span>PRs {label.toLowerCase()}</span>
               </div>
             ))}
-          </div>
+          </>
+        ) : null}
+        <div>
+          <strong>
+            {payments
+              ? dollars(payments.reduce((n, r) => n + r.amount, 0n))
+              : "Unavailable"}
+          </strong>
+          <span>verified payments received · USDC</span>
+        </div>
+        <div>
+          <strong>
+            {id
+              ? dollars(direct.reduce((n, r) => n + r.amount, 0n))
+              : "Unavailable"}
+          </strong>
+          <span>direct payments reported · USDC</span>
+        </div>
+      </div>
+
+      {state.status === "error" ? (
+        <p role="status">
+          PR counts are unavailable.{" "}
+          <button type="button" onClick={retry}>
+            Retry profile
+          </button>
+        </p>
+      ) : state.status === "loading" ? (
+        <p role="status">Loading PR history…</p>
+      ) : (
+        <>
           <p className="points-meta">
             Slop repository history · updated{" "}
             {new Date(state.index.generatedAt).toLocaleString()}
@@ -213,24 +214,6 @@ export function ProfileActivity({
           ) : null}
         </>
       )}
-      <div className="profile-totals">
-        <div>
-          <strong>
-            {payments
-              ? dollars(payments.reduce((n, r) => n + r.amount, 0n))
-              : "Unavailable"}
-          </strong>
-          <span>verified payments received · USDC</span>
-        </div>
-        <div>
-          <strong>
-            {id
-              ? dollars(direct.reduce((n, r) => n + r.amount, 0n))
-              : "Unavailable"}
-          </strong>
-          <span>direct payments reported · USDC</span>
-        </div>
-      </div>
       <p className="points-meta">
         Direct payments come from published disclosures outside Slop’s verified
         settlement process.

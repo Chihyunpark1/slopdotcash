@@ -599,7 +599,9 @@ test("renders contributor and cycle records from validated public data", {
   });
   await expect(page.getByRole("heading", { name: actor.login })).toBeVisible();
   await expect(
-    page.locator(".profile-totals").getByText("paid", { exact: true }),
+    page
+      .locator(".profile-totals")
+      .getByText("verified payments received · USDC", { exact: true }),
   ).toBeVisible();
   await expect(
     page

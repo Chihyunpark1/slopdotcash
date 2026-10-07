@@ -367,11 +367,11 @@ export function PointsLabel({
         .filter((a) => a.projectId === projectId)
         .reduce((s, a) => s + a.amount, 0) ?? 0)
     : (m?.total ?? 0);
-  return (
-    <span className="points-label">{n.toLocaleString()} pts</span>
-  );
+  return <span className="points-label">{n.toLocaleString()} pts</span>;
 }
 export function ProfilePoints({
+  actorId,
+  summary,
   login,
   cycles,
   showIdentity = false,
@@ -379,13 +379,17 @@ export function ProfilePoints({
   login: string;
   cycles?: CycleIndex;
   showIdentity?: boolean;
+  summary?: ReactNode;
+  actorId?: string;
 }) {
   const { state, me } = useContext(Context);
   const census = useProfiles();
   const censusMatches =
     census.state.status === "ready"
-      ? census.state.index.people.filter(
-          (p) => p.login.toLowerCase() === login.toLowerCase(),
+      ? census.state.index.people.filter((p) =>
+          actorId
+            ? p.id === actorId
+            : p.login.toLowerCase() === login.toLowerCase(),
         )
       : [];
   const recorded = censusMatches.length === 1 ? censusMatches[0] : undefined;
@@ -424,8 +428,10 @@ export function ProfilePoints({
           (m) => m.actor.login.toLowerCase() === login.toLowerCase(),
         )
       : [];
-  const identity = own ?? joined;
-  const resolvedActorId = identity?.actor.id ?? recorded?.id;
+  const membership = own ?? joined;
+  const identity =
+    !actorId || membership?.actor.id === actorId ? membership : null;
+  const resolvedActorId = actorId ?? identity?.actor.id ?? recorded?.id;
   const m =
     state.status === "ready"
       ? resolvedActorId
@@ -434,28 +440,46 @@ export function ProfilePoints({
           ? named[0]
           : undefined
       : undefined;
+  const recentAwards = new Map<string, PointsMember["awards"]>();
+  for (const award of m?.awards.slice(0, 20) ?? []) {
+    const day = award.occurredAt.slice(0, 10);
+    const awards = recentAwards.get(day) ?? [];
+    awards.push(award);
+    recentAwards.set(day, awards);
+  }
   const [copied, setCopied] = useState("");
   return (
     <section className="points-panel" aria-label="Slop Points">
       <ProfileActivity
         login={login}
-        actorId={(m?.actor ?? identity?.actor ?? recorded)?.id}
+        actorId={resolvedActorId ?? m?.actor.id}
         census={census}
         cycles={cycles}
         showIdentity={showIdentity}
+        summary={
+          <>
+            {summary}
+            <div>
+              <strong>
+                {state.status === "ready" && (m || identity || recorded)
+                  ? (
+                      (m?.total ?? 0) +
+                      (identity?.welcome ?? 0) +
+                      (identity?.socialPoints ?? 0)
+                    ).toLocaleString()
+                  : state.status === "loading"
+                    ? "Loading…"
+                    : "Unavailable"}
+              </strong>
+              <span>Points · recorded history</span>
+            </div>
+          </>
+        }
       />
       <h2>Slop Points</h2>
       <Notice />
       {state.status === "ready" && (m || identity || recorded) ? (
         <>
-          <p className="points-total">
-            {(
-              (m?.total ?? 0) +
-              (identity?.welcome ?? 0) +
-              (identity?.socialPoints ?? 0)
-            ).toLocaleString()}{" "}
-            <span>pts</span>
-          </p>
           <p>
             {m?.monthly.toLocaleString() ?? "0"} earned points this month
             {identity
@@ -468,21 +492,30 @@ export function ProfilePoints({
             />
           ) : null}
           <p>{m?.badges.join(" · ") ?? "Welcome to Slop"}</p>
-          <ul className="points-history">
-            {m?.awards.slice(0, 20).map((a) => (
-              <li key={a.key}>
-                <a href={a.sourceUrl} rel="noreferrer" target="_blank">
-                  +{a.amount.toLocaleString()} pts ·{" "}
-                  {findProject(a.projectId)?.name} ·{" "}
-                  {a.category.replaceAll("-", " ")}
-                </a>
-                <small>
-                  {a.occurredAt.slice(0, 10)}
-                  {a.provisional ? " · provisional tier" : ""}
-                </small>
-              </li>
-            ))}
-          </ul>
+          {recentAwards.size > 0 ? (
+            <details>
+              <summary>Recent points activity</summary>
+              {[...recentAwards].map(([day, awards]) => (
+                <section key={day}>
+                  <h3>
+                    <time dateTime={day}>{day}</time>
+                  </h3>
+                  <ul className="points-history">
+                    {awards.map((a) => (
+                      <li key={a.key}>
+                        <a href={a.sourceUrl} rel="noreferrer" target="_blank">
+                          +{a.amount.toLocaleString()} pts ·{" "}
+                          {findProject(a.projectId)?.name} ·{" "}
+                          {a.category.replaceAll("-", " ")}
+                        </a>
+                        {a.provisional ? <small>Provisional tier</small> : null}
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              ))}
+            </details>
+          ) : null}
           <button
             type="button"
             onClick={() => {

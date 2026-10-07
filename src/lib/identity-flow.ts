@@ -145,9 +145,7 @@ export async function requestIdentityAssertion(options: {
     break;
   }
   if (!assertion)
-    throw new Error(
-      "GitHub sign-in expired. Please sign in again.",
-    );
+    throw new Error("GitHub sign-in expired. Please sign in again.");
   options.saveAuthorization?.(null);
   return assertion;
 }

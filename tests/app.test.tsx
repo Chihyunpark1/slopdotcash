@@ -1087,7 +1087,9 @@ describe("public records", () => {
     expect(
       await screen.findByRole("heading", { name: "finish-line" }),
     ).toBeInTheDocument();
-    const totals = document.querySelector("main > .profile-totals");
+    const totals = screen
+      .getByRole("region", { name: "Contributor profile" })
+      .querySelector(".profile-totals");
     expect(totals).not.toBeNull();
     expect(totals).toHaveTextContent("recorded score");
     expect(totals).not.toHaveTextContent(/all-time/u);
@@ -1883,7 +1885,7 @@ describe("direct project funding", () => {
       await vi.advanceTimersByTimeAsync(12_000);
     });
     expect(screen.getByRole("alert")).toHaveTextContent(
-      "Funding records unavailable: funding request timed out",
+      "Funding records unavailable: Request timed out",
     );
   });
 

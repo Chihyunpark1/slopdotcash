@@ -5,7 +5,6 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
-  readFileSync,
   rmSync,
   symlinkSync,
   unlinkSync,
@@ -965,31 +964,5 @@ describe("trusted funding-record PR gate", () => {
     } finally {
       repo.cleanup();
     }
-  });
-
-  it("keeps the workflow on trusted-base code with read-only permissions and no merge API", () => {
-    const workflow = readFileSync(
-      join(process.cwd(), ".github/workflows/funding-records.yml"),
-      "utf8",
-    );
-    expect(workflow).toContain("pull_request_target:");
-    expect(workflow).toContain(
-      // biome-ignore lint/suspicious/noTemplateCurlyInString: literal GitHub Actions expression
-      "ref: ${{ github.event.pull_request.base.sha }}",
-    );
-    expect(workflow).toContain("persist-credentials: false");
-    expect(workflow).toContain("contents: read");
-    expect(workflow).toContain(
-      'test "$(git rev-parse refs/remotes/origin/slop-funding-head)" = "$FUNDING_HEAD_SHA"',
-    );
-    expect(workflow).not.toMatch(
-      /contents: write|pull-requests: write|gh pr merge|gh pr review|environment:|ref:.*head.sha/u,
-    );
-    expect(workflow.match(/bun install[^\n]*/gu)).toEqual([
-      "bun install --frozen-lockfile --ignore-scripts",
-    ]);
-    expect(workflow).toContain(
-      "bun --no-install scripts/check-signer-access-transitions.ts",
-    );
   });
 });

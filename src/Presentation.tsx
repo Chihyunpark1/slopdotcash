@@ -121,6 +121,10 @@ export function reviewBudgetLabel(
     : `${reviewBudget.monthlyCapDisplay} cap · additive review line · uncommitted pledge`;
 }
 
+/**
+ * Commitment is a balance claim, never proof that signers can act. This
+ * protocol has no authenticated accessibility evidence type yet.
+ */
 export function monthlyPoolUnfunded(
   reward: Pick<ProjectDefinition["reward"], "committedMinor" | "fundingState">,
 ): boolean {
@@ -144,7 +148,7 @@ export function Avatar({
   actor,
   size = "medium",
 }: {
-  actor: GitHubActor;
+  actor: Pick<GitHubActor, "login" | "avatarUrl">;
   size?: "large" | "medium" | "small";
 }) {
   const label = actor.login.slice(0, 2).toUpperCase();
@@ -171,4 +175,44 @@ export function formatPercent(partsPerMillion: number): string {
   return `${(partsPerMillion / 10_000).toFixed(2)}%`;
 }
 
+/** A pledged pool never headlines its cap; the cap is small print only. */
 export const UNFUNDED_POOL_HEADLINE = "Not funded yet";
+
+export function formatCompact(value: number): string {
+  return new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: 1,
+    notation: value >= 1_000 ? "compact" : "standard",
+  }).format(value);
+}
+
+export function formatScore(value: number): string {
+  return new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: 2,
+    minimumFractionDigits: 0,
+    useGrouping: true,
+  }).format(value);
+}
+
+/** One identity header for scored, historical and newly registered contributors. */
+export function ContributorIdentity({
+  actor,
+  children,
+}: {
+  actor: Pick<GitHubActor, "login" | "avatarUrl" | "url">;
+  children?: ReactNode;
+}) {
+  return (
+    <section className="profile-hero">
+      <Avatar actor={actor} size="large" />
+      <div className="profile-identity">
+        <h1>{actor.login}</h1>
+        <div className="profile-links">
+          <ExternalLinkAnchor href={actor.url}>
+            GitHub · @{actor.login}
+          </ExternalLinkAnchor>
+          {children}
+        </div>
+      </div>
+    </section>
+  );
+}

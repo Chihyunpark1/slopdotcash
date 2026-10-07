@@ -173,7 +173,12 @@ test("social membership shows connection points, respects privacy and survives d
   await community
     .getByRole("link", { name: "social-member", exact: true })
     .click();
-  await expect(page.locator(".points-total")).toHaveText("15 pts");
+  await expect(
+    page
+      .getByText("Points · recorded history", { exact: true })
+      .locator("..")
+      .locator("strong"),
+  ).toHaveText("15");
   await expect(page.getByText(/10 X connection points/)).toBeVisible();
   expect(errors).toEqual([]);
   expect(failures).toEqual([]);

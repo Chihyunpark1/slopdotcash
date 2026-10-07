@@ -110,7 +110,7 @@ describe("points product", () => {
     );
     await waitFor(() =>
       expect(
-        screen.getByText("30", { selector: ".points-total" }),
+        screen.getByText("30", { selector: ".profile-totals strong" }),
       ).toBeVisible(),
     );
     expect(
@@ -166,7 +166,7 @@ describe("points product", () => {
     );
     await waitFor(() =>
       expect(
-        screen.getByText("30", { selector: ".points-total" }),
+        screen.getByText("30", { selector: ".profile-totals strong" }),
       ).toBeVisible(),
     );
     expect(screen.getByText("First accepted contribution")).toBeVisible();
