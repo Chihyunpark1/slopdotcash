@@ -454,19 +454,11 @@ describe("discovery", () => {
     expect(screen.queryByText(/No accepted outcomes/u)).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Eliza" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "Delta Star" })).toBeVisible();
-    expect(vi.mocked(fetch).mock.calls.map(([url]) => String(url))).not.toEqual(
-      expect.arrayContaining([
-        expect.stringContaining("/data/leaderboard.json"),
-      ]),
-    );
+    expect(screen.getByText("Loading records…")).toBeVisible();
     expect(
       vi
         .mocked(fetch)
-        .mock.calls.some(
-          ([url]) =>
-            String(url).includes("/data/cycles/") ||
-            String(url).includes("github"),
-        ),
+        .mock.calls.some(([url]) => String(url).includes("github")),
     ).toBe(false);
   });
 
@@ -502,6 +494,15 @@ describe("discovery", () => {
     snapshot.attributions = [];
     mockSnapshot(snapshot);
     render(<App />);
+    expect(
+      await screen.findByText(/No score records cover this period/),
+    ).toBeVisible();
+    expect(
+      screen.queryByText("No recorded contributions match this view."),
+    ).toBeNull();
+    fireEvent.change(screen.getByLabelText("Period"), {
+      target: { value: "lifetime" },
+    });
 
     expect(
       await screen.findByText("No recorded contributions match this view."),

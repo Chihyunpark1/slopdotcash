@@ -64,11 +64,11 @@ import {
   whoBuildsDateLabel,
 } from "./lib/who-builds";
 import {
+  ContributorStandings,
   LoginPage,
   PointsNav,
   PointsPage,
   PointsProvider,
-  PointsStandings,
   PublicXLink,
 } from "./Points";
 import {
@@ -403,7 +403,7 @@ function GlobalLeaderboard() {
       className="section shell home-leaderboard-section"
       id="leaderboard"
     >
-      <PointsStandings compact title="Leaderboard" />
+      <ContributorStandings compact title="Leaderboard" />
     </section>
   );
 }
@@ -1281,6 +1281,8 @@ function ProjectPage({
         <ProjectPaymentHistory project={project} state={state} />
         {view && state.status === "ready" ? (
           <ProjectLeaderboard
+            state={state}
+            retry={retry}
             updatedAt={state.snapshot.generatedAt}
             view={view}
           />

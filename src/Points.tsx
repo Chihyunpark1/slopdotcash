@@ -1,6 +1,7 @@
 import {
   createContext,
   type ReactNode,
+  useCallback,
   useContext,
   useEffect,
   useId,
@@ -13,6 +14,10 @@ import {
   readBoundedJson,
   readBoundedText,
 } from "./lib/browser-json";
+import {
+  contributorStandings,
+  type StandingsSort,
+} from "./lib/contributor-standings";
 import type { CycleIndex } from "./lib/cycle-index";
 import { requestIdentityAssertion } from "./lib/identity-flow";
 import {
@@ -24,6 +29,8 @@ import {
   pointMembers,
 } from "./lib/points";
 import { findProject, PROJECTS } from "./lib/projects.mjs";
+import { type DataState, useSnapshot } from "./lib/use-snapshot";
+import { DataNotice, formatMicroUsdc, formatScore } from "./Presentation";
 import { ContributorDirectory, ProfileActivity, useProfiles } from "./Profiles";
 
 const productOrigin = () =>
@@ -760,7 +767,7 @@ export function PointsPage() {
       <SocialConnections />
       <CommunityPeople />
       <ContributorDirectory />
-      <PointsStandings />
+      <ContributorStandings />
       <section className="points-panel">
         <h2>Ways to earn</h2>
         <p>
@@ -789,7 +796,9 @@ export function PointsPage() {
     </main>
   );
 }
-export function PointsStandings({
+export function ContributorStandings({
+  scoreState,
+  retryScore,
   projectId,
   compact = false,
   title,
@@ -797,12 +806,60 @@ export function PointsStandings({
   projectId?: string;
   compact?: boolean;
   title?: string;
+  scoreState?: DataState;
+  retryScore?: () => void;
 }) {
+  const [loadedScore, retryLoadedScore] = useSnapshot(!scoreState);
+  const scores = scoreState ?? loadedScore;
+  const readFilters = useCallback(() => {
+    const params = new URLSearchParams(window.location.search);
+    const sort = params.get("sort");
+    const period = params.get("period");
+    return {
+      sort:
+        sort === "points" || sort === "money"
+          ? sort
+          : ("score" as StandingsSort),
+      period: period === "lifetime" || period === "new" ? period : "month",
+      query: params.get("q") ?? "",
+      project: projectId ?? findProject(params.get("project") ?? "")?.id ?? "",
+      page: Math.max(
+        0,
+        Number.parseInt(params.get("page") ?? "1", 10) - 1 || 0,
+      ),
+    };
+  }, [projectId]);
+  const [filters, setFilters] = useState(readFilters);
+  const { sort, period, query, project, page } = filters;
+  const setSort = (sort: StandingsSort) =>
+    setFilters((v) => ({ ...v, sort, page: 0 }));
+  const setPeriod = (period: string) =>
+    setFilters((v) => ({ ...v, period, page: 0 }));
+  const setQuery = (query: string) =>
+    setFilters((v) => ({ ...v, query, page: 0 }));
+  const setProject = (project: string) =>
+    setFilters((v) => ({ ...v, project, page: 0 }));
+  const setPage = (page: number) => setFilters((v) => ({ ...v, page }));
+  useEffect(() => {
+    const restore = () => setFilters(readFilters());
+    window.addEventListener("popstate", restore);
+    return () => window.removeEventListener("popstate", restore);
+  }, [readFilters]);
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    for (const [key, value] of Object.entries({
+      sort: sort === "score" ? "" : sort,
+      period: period === "month" ? "" : period,
+      q: query,
+      project: projectId ? "" : project,
+      page: page ? String(page + 1) : "",
+    })) {
+      if (value) url.searchParams.set(key, value);
+      else url.searchParams.delete(key);
+    }
+    window.history.replaceState(window.history.state, "", url);
+  }, [sort, period, query, project, page, projectId]);
   const { state } = useContext(Context);
-  const [period, setPeriod] = useState("month");
-  const [query, setQuery] = useState("");
-  const [project, setProject] = useState(projectId ?? "");
-  const [page, setPage] = useState(0);
   const members = useMemo(() => {
     if (state.status !== "ready") return [];
     return pointMembers(
@@ -811,19 +868,33 @@ export function PointsStandings({
       project || undefined,
     );
   }, [state, project]);
-  const metric = (m: PointsMember) =>
-    period === "month" ? m.monthly : m.total;
-  const ranked = [...members]
+  const metric = (
+    m: ReturnType<typeof contributorStandings>["rows"][number],
+  ) => (sort === "score" ? m.score : sort === "points" ? m.points : m.money);
+  const projection = contributorStandings(
+    scores,
+    state.status === "ready" ? members : null,
+    period === "month" ? new Date().toISOString().slice(0, 7) : null,
+    project,
+  );
+  const ranked = projection.rows
     .filter(
       (m) =>
         period !== "new" ||
-        Date.parse(m.firstContributionAt) >= Date.now() - 30 * 86400000,
+        (m.firstContributionAt !== null &&
+          Date.parse(m.firstContributionAt) >= Date.now() - 30 * 86400000),
     )
-    .sort(
-      (a, b) => metric(b) - metric(a) || a.actor.id.localeCompare(b.actor.id),
-    );
+    .filter((m) => metric(m) !== null)
+    .sort((a, b) => {
+      const left = metric(a) ?? 0;
+      const right = metric(b) ?? 0;
+      return (
+        (left < right ? 1 : left > right ? -1 : 0) ||
+        a.actor.id.localeCompare(b.actor.id)
+      );
+    });
   const ranks = new Map<string, number>();
-  let previous = -1;
+  let previous: number | bigint | null = null;
   let rank = 0;
   ranked.forEach((m, i) => {
     if (metric(m) !== previous) rank = i + 1;
@@ -832,7 +903,7 @@ export function PointsStandings({
   });
   const rows = ranked.filter(
     (m) =>
-      metric(m) > 0 &&
+      ((m.score ?? 0) !== 0 || (m.points ?? 0) > 0 || (m.money ?? 0n) > 0n) &&
       m.actor.login.toLowerCase().includes(query.toLowerCase()),
   );
   const pageSize = compact ? 10 : 25;
@@ -841,10 +912,42 @@ export function PointsStandings({
     Math.max(0, Math.ceil(rows.length / pageSize) - 1),
   );
   return (
-    <section className="points-panel" aria-label={title ?? "Points standings"}>
-      <h2>{title ?? (compact ? "Contribution points" : "Points standings")}</h2>
+    <section
+      className="points-panel"
+      aria-label={title ?? "Contributor standings"}
+    >
+      <h2>{title ?? "Contributor standings"}</h2>
+      {!scoreState ? (
+        <DataNotice state={scores} retry={retryScore ?? retryLoadedScore} />
+      ) : null}
       <Notice />
+      {scores.status === "ready" ? (
+        <p className="points-meta">
+          Score records: {scores.snapshot.window.from} to{" "}
+          {scores.snapshot.window.to}, plus closed cycles.
+          {period === "month"
+            ? ` Selected month: ${new Date().toISOString().slice(0, 7)} (UTC).`
+            : " Recorded history; coverage may have gaps."}
+          {!projection.scoreAvailable
+            ? " No score records cover this period. Select Recorded history or retry after the next update."
+            : ""}
+        </p>
+      ) : null}
       <div className="points-controls">
+        <label>
+          Sort by
+          <select
+            value={sort}
+            onChange={(e) => {
+              setSort(e.target.value as StandingsSort);
+              setPage(0);
+            }}
+          >
+            <option value="score">Slop Score</option>
+            <option value="points">Points</option>
+            <option value="money">Money received</option>
+          </select>
+        </label>
         <label>
           Period
           <select
@@ -892,7 +995,12 @@ export function PointsStandings({
           />
         </label>
       </div>
-      {state.status === "ready" ? (
+      {(
+        sort === "points"
+          ? state.status === "ready"
+          : scores.status === "ready" &&
+            (sort !== "score" || projection.scoreAvailable)
+      ) ? (
         <>
           <div className="points-table">
             <table>
@@ -900,7 +1008,9 @@ export function PointsStandings({
                 <tr>
                   <th scope="col">Rank</th>
                   <th scope="col">Contributor</th>
+                  <th scope="col">Slop Score</th>
                   <th scope="col">Points</th>
+                  <th scope="col">Money received · USDC</th>
                 </tr>
               </thead>
               <tbody>
@@ -916,7 +1026,21 @@ export function PointsStandings({
                           {m.actor.login}
                         </a>
                       </td>
-                      <td>{metric(m).toLocaleString()} pts</td>
+                      <td>
+                        {m.score === null
+                          ? "Unavailable"
+                          : formatScore(m.score)}
+                      </td>
+                      <td>
+                        {m.points === null
+                          ? "Unavailable"
+                          : `${m.points.toLocaleString()} pts`}
+                      </td>
+                      <td>
+                        {m.money === null
+                          ? "Unavailable"
+                          : formatMicroUsdc(m.money.toString())}
+                      </td>
                     </tr>
                   ))}
               </tbody>
@@ -948,8 +1072,9 @@ export function PointsStandings({
         </>
       ) : null}
       <p className="points-meta">
-        Contribution and verified payout points. Equal totals share a rank.
-        Historical review coverage follows verified records.
+        Slop Score measures accepted work. Points record recognition. Money
+        received is verified finalized USDC principal. Equal values share a
+        rank. Historical review coverage follows verified records.
       </p>
       {compact ? <a href="/points">Your profile and ways to earn</a> : null}
     </section>

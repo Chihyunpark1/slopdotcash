@@ -5,7 +5,8 @@ import {
   type ReviewerLeader,
   selectReviewerLeaders,
 } from "./lib/reviewer-leaders";
-import { PointsLabel, PointsStandings } from "./Points";
+import type { DataState } from "./lib/use-snapshot";
+import { ContributorStandings, PointsLabel } from "./Points";
 import {
   Avatar,
   EmptyState,
@@ -21,9 +22,13 @@ import {
 
 export function ProjectLeaderboard({
   updatedAt,
+  state,
+  retry,
   view,
 }: {
   updatedAt: string;
+  state: DataState;
+  retry: () => void;
   view: ProjectView;
 }) {
   const reviewers = new Map(
@@ -34,7 +39,12 @@ export function ProjectLeaderboard({
   );
   return (
     <>
-      <PointsStandings projectId={view.project.id} compact />
+      <ContributorStandings
+        projectId={view.project.id}
+        scoreState={state}
+        retryScore={retry}
+        compact
+      />
       <section className="section project-leader-section">
         <div className="section-heading">
           <h2>{formatCycleMonth(view.cycle.id)} leaderboard.</h2>

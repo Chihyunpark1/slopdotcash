@@ -25,7 +25,20 @@ test(
     await expect(
       page.getByRole("heading", { name: "Slop Points", exact: true }),
     ).toBeVisible();
+    await expect(page.getByLabel("Sort by")).toHaveValue("score");
+    await page.getByLabel("Period", { exact: true }).selectOption("lifetime");
     await expect(page.getByRole("table")).toBeVisible({ timeout: 30000 });
+    await expect(
+      page.getByRole("columnheader", { name: "Slop Score", exact: true }),
+    ).toBeVisible();
+    await page.getByLabel("Sort by").selectOption("money");
+    await expect(page).toHaveURL(/sort=money/);
+    await page.reload();
+    await expect(page.getByLabel("Sort by")).toHaveValue("money");
+    await expect(page.getByLabel("Period", { exact: true })).toHaveValue(
+      "lifetime",
+    );
+    await page.getByLabel("Sort by").selectOption("points");
     await expect(page.getByText(/Points have no monetary value/)).toBeVisible();
     await expect(
       page

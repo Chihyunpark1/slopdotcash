@@ -160,6 +160,8 @@ export function CyclePage({
       </ol>
       {view ? (
         <ProjectLeaderboard
+          state={state}
+          retry={retry}
           updatedAt={state.snapshot.generatedAt}
           view={view}
         />

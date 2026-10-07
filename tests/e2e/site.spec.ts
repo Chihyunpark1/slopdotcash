@@ -175,7 +175,7 @@ test("shows signer loss and expired capability without payout availability", asy
   });
 });
 
-test("discovers projects and one points-ranked homepage leaderboard", async ({
+test("discovers projects and one score-ranked homepage leaderboard", async ({
   page,
 }) => {
   await page.emulateMedia({ reducedMotion: "no-preference" });
@@ -309,7 +309,7 @@ test("discovers projects and one points-ranked homepage leaderboard", async ({
     name: "Leaderboard",
     exact: true,
   });
-  await expect(leaderboard.getByRole("table")).toBeVisible();
+  await expect(leaderboard.getByLabel("Sort by")).toHaveValue("score");
   await expect(
     page.getByRole("heading", { name: "Contribution points", exact: true }),
   ).toHaveCount(0);
@@ -322,12 +322,11 @@ test("discovers projects and one points-ranked homepage leaderboard", async ({
   await leaderboard
     .getByLabel("Period", { exact: true })
     .selectOption("lifetime");
+  await expect(leaderboard.getByRole("table")).toBeVisible();
   const pointValues = await leaderboard
-    .locator("tbody tr td:last-child")
+    .locator("tbody tr td:nth-child(3)")
     .allTextContents();
-  const totals = pointValues.map((value) =>
-    Number(value.replace(/[^0-9]/g, "")),
-  );
+  const totals = pointValues.map((value) => Number(value.replaceAll(",", "")));
   expect(totals.length).toBeGreaterThan(0);
   expect(totals).toEqual([...totals].sort((a, b) => b - a));
   const firstLogin = await leaderboard

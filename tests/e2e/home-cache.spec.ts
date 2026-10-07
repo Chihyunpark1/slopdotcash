@@ -60,11 +60,7 @@ test("renders bundled projects with data stalled and GitHub blocked", async ({
       .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
       .analyze();
     expect(accessibility.violations).toEqual([]);
-    expect(
-      requests.filter((url) =>
-        /github|\/data\/leaderboard\.json|\/data\/cycles\//.test(url),
-      ),
-    ).toEqual([]);
+    expect(requests.filter((url) => /github/.test(url))).toEqual([]);
     expect(errors).toEqual([]);
   } finally {
     await test.info().attach("homepage-network-and-console", {
