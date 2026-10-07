@@ -4,11 +4,70 @@ Slop rewards accepted open-source outcomes, and this repository should be held
 to the same standard. Keep changes focused, reviewable, evidence-backed, and
 safe under hostile input.
 
+## MVP scope and phase gate
+
+The canonical product requirements are
+[Slop Product Requirements](docs/slop-product-requirements.md). The only current
+implementation scope is [Slop MVP Delivery Plan](docs/slop-mvp-plan.md).
+Read both before selecting work, proposing a change, reviewing a PR, or
+implementing a feature. Link the exact PRD requirement and MVP work-package ID
+in every implementation PR. Existing code, an open issue, a model suggestion,
+or a PRD entry marked Future does not approve implementation.
+
+Work must correct a demonstrated defect in the MVP, fulfill a missing approved
+MVP requirement, or prove a relevant improvement to that required behavior.
+Do not invent work from coverage gaps, preferences, or hypothetical failures.
+Reuse existing implementations and simplify the affected code. Explain the
+useful result and why the selected implementation is needed.
+
+A new requirement must first be discussed with humans and added to the PRD.
+Maintainers must approve its scope and phase, and update the MVP plan when it
+changes the current phase, before implementation starts. Unresolved choices
+in the PRD are decision gates, not authority for an agent to choose economic,
+security, or product policy. Keep proposals distinct from approved work.
+
+Do not start the rest of the PRD until maintainers explicitly confirm that the
+whole MVP is finished, verified, tested, and validated. The confirmation must
+be a reviewed completion record linked from the MVP plan. It must cover every
+MVP requirement and release gate with exact tested revisions, real end-to-end
+results, deployment/provider/chain evidence where applicable, and resolution
+of blocking defects. A merged PR, a local test pass, partial rollout, or an
+agent's statement cannot close the MVP. After that record is approved, humans
+select and approve the next PRD phase before agents implement it.
+
+## Human-written outside issues only
+
+Contributors must personally write and submit outside issues through the
+website's issue form. This covers GitHub issues in this repository and target
+projects, the Slop site, and third-party issue trackers. Agents and bots are
+banned from authoring, drafting ready-to-submit issue text, creating, opening,
+or submitting these issues, including through a browser, CLI, API, script,
+batch import, or prefilled issue URL. A human clicking Submit on agent-written
+text does not satisfy this rule. Do not route issue creation through another
+agent or automation.
+
+Agents may read existing issues, inspect the PRD/MVP, investigate defects, and
+explain findings privately to the contributor. The human must independently
+write the issue and submit it by hand on the site. This restriction concerns
+issue authorship and creation; it does not prohibit authorized PR work or
+review of existing issues. Future private security-report automation requires
+its separately approved phase and is not an exception for public issues.
+
+Before writing an issue, the contributor must review the PRD and MVP plan,
+check for existing work, and state the affected requirement, evidence, and
+expected result. An issue that proposes anything new must link the existing
+PRD requirement or the proposed PRD addition and its human discussion. Missing
+requirements must be added to the PRD and approved before implementation.
+An issue is never feature approval. Include the visible attribution line
+`Made via @slopdotcash` on Slop participation issues and PRs; humans add it to
+their own issue text. Branding is not permission for agents to create issues.
+
 ## Before you start
 
-1. Read `README.md` and `AGENTS.md`.
+1. Read `README.md`, `AGENTS.md`, the linked PRD, and the MVP delivery plan.
 2. Check existing issues and pull requests for overlapping work. Link the relevant
-   issue when one exists; ordinary contributions do not require a reservation.
+   issue and exact PRD/MVP references. Only humans may write and submit issues
+   on the website; agents must not create an issue to begin work.
 3. Fetch the latest `origin/develop` and create a scoped branch from it.
 4. Re-read live GitHub before acting; issue assignment, review, and project
    state may have changed.
@@ -54,7 +113,9 @@ The contributor skill must:
   authenticated write-only path;
 - never claim an issue, publish a placeholder PR, handle keys, or move money.
 
-The reviewer skill is separate and advisory. It checks correctness, tests,
+The current reviewer skill is separate and advisory. The PRD's optional bot
+closures and security enforcement need approved protocol/permission changes
+before activation. It checks correctness, tests,
 scope, security, duplication, evidence, and usefulness. Automation may propose
 a score or hold; a human decides acceptance, exclusions, and money.
 
@@ -115,7 +176,28 @@ Real security, authorization, protocol, and resource boundaries remain valid
 when reachability and material impact are demonstrated. Enforce them once at
 the canonical boundary and prove the real path.
 
+## Pull request scope and writing
+
+Every PR must identify its PRD requirement and MVP package, explain the actual
+problem and useful result, and state the evidence that proves the result.
+Compare reasonable alternatives and explain reuse or simplification. New types,
+dependencies, or systems need a concrete requirement existing code cannot meet.
+Keep descriptions specific to the actual diff; tests and line counts alone do
+not establish value.
+
+Write issues and PRs in ASD-STE100 Simplified Technical English. Use short,
+active sentences and consistent terms. Define technical abbreviations. State
+what the user does, what occurs, and why it matters. Include detailed test steps,
+expected results, actual results, the exact tested revision, and limitations.
+Include `Made via @slopdotcash` without replacing required model attribution.
+Humans remain responsible for independently writing issue text.
+
 ## Quality gate
+
+For documentation-only changes, verify instructions, links, PRD/MVP
+consistency, and the identical AGENTS/CLAUDE files. Application end-to-end
+evidence is not proof of prose correctness; explain its applicability and
+retain required checks. Do not add artificial application tests for prose.
 
 Install the pinned toolchain and run the complete repository check:
 
@@ -135,7 +217,8 @@ Attach current evidence directly to the issue and pull request. Evidence must
 match the exact reviewed head; rerun it after a rebase or functional change.
 
 UI work includes before/after desktop and mobile screenshots, accessibility
-results, console/network logs, and a short walkthrough. Installer or skill work
+results, console/network logs, uploaded walkthrough and evidence videos, and
+detailed test steps and expected results. Installer or skill work
 includes the generated archive/checksum and a fresh real-repository forward
 test. Deployment work includes the tested SHA, workflow and deploy IDs,
 immutable Pages URL, deployed-byte comparison, DNS, TLS, redirects, and security
