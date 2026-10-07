@@ -3,6 +3,8 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 import { homeProjects } from "../../src/lib/home-projects";
 
+test.use({ video: "on" });
+
 test("renders bundled projects with data stalled and GitHub blocked", async ({
   page,
 }) => {
@@ -59,6 +61,10 @@ test("renders bundled projects with data stalled and GitHub blocked", async ({
       fullPage: true,
     });
   } finally {
+    await test.info().attach("homepage-network-and-console", {
+      body: JSON.stringify({ requests, errors }, null, 2),
+      contentType: "application/json",
+    });
     release();
   }
 });
