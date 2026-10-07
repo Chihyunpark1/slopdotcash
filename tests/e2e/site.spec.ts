@@ -378,15 +378,21 @@ test("starts Eliza with one prompt and no separate payout form", async ({
 }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.goto("/projects/eliza", { waitUntil: "networkidle" });
-  const homeLink = page.getByRole("link", { name: "Home", exact: true });
+  const homeLink = page.getByRole("link", { name: "Slop home", exact: true });
+  await expect(homeLink).toBeVisible();
+  await expect(homeLink).toHaveAttribute("href", "/");
+  const projectLink = page.locator("#primary-navigation").getByRole("link", {
+    name: "Projects",
+    exact: true,
+  });
   if (await page.getByRole("button", { name: "Open navigation" }).isVisible()) {
     await page.getByRole("button", { name: "Open navigation" }).click();
-    await expect(homeLink).toBeVisible();
-    await expect(homeLink).toHaveAttribute("href", "/");
+    await expect(projectLink).toBeVisible();
+    await expect(projectLink).toHaveAttribute("href", "/#projects");
     await page.getByRole("button", { name: "Close navigation" }).click();
   } else {
-    await expect(homeLink).toBeVisible();
-    await expect(homeLink).toHaveAttribute("href", "/");
+    await expect(projectLink).toBeVisible();
+    await expect(projectLink).toHaveAttribute("href", "/#projects");
   }
   await expect(
     page.getByRole("heading", { name: "Make money building agents." }),
