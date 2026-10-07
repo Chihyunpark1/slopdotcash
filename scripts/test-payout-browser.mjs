@@ -132,7 +132,7 @@ try {
     name: "Payment history details; scroll horizontally for all columns",
   });
   await history.focus();
-  await page.keyboard.press("End");
+  await page.keyboard.press("ArrowRight");
   await page.waitForTimeout(200);
   if (!(await history.evaluate((element) => element.scrollLeft > 0)))
     throw new Error(
