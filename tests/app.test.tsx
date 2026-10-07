@@ -505,9 +505,26 @@ describe("discovery", () => {
     ).not.toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(screen.queryByText(/No accepted outcomes/u)).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Eliza" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Delta Star" })).toBeVisible();
+    expect(vi.mocked(fetch).mock.calls.map(([url]) => String(url))).not.toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("/data/leaderboard.json"),
+      ]),
+    );
+    expect(
+      vi
+        .mocked(fetch)
+        .mock.calls.some(
+          ([url]) =>
+            String(url).includes("/data/cycles/") ||
+            String(url).includes("github"),
+        ),
+    ).toBe(false);
   });
 
   it("labels an old but valid snapshot as stale rather than unavailable", async () => {
+    route("/projects/eliza");
     const snapshot = snapshotFixture();
     const generatedAt = new Date(
       Date.now() - 9 * 60 * 60 * 1_000,
@@ -618,7 +635,7 @@ describe("discovery", () => {
     expect(
       screen.getByRole("heading", { name: "Featured" }),
     ).toBeInTheDocument();
-    expect(screen.queryByText("Community projects")).not.toBeInTheDocument();
+
     expect(screen.getByRole("heading", { name: "Eliza" })).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: "Delta Star" }),
@@ -709,6 +726,7 @@ describe("discovery", () => {
   });
 
   it("renders malformed public data as an error and retries explicitly", async () => {
+    route("/projects/eliza");
     let serveValidData = false;
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
@@ -733,7 +751,7 @@ describe("discovery", () => {
     serveValidData = true;
     fireEvent.click(retry);
     expect(
-      await screen.findByRole("heading", { name: "Leaderboard" }),
+      await screen.findByRole("heading", { name: /leaderboard\./u }),
     ).toBeVisible();
     await waitFor(() =>
       expect(screen.queryByRole("alert")).not.toBeInTheDocument(),
@@ -742,6 +760,7 @@ describe("discovery", () => {
   });
 
   it("aborts the abandoned sibling request before an automatic retry", async () => {
+    route("/projects/eliza");
     const abandonedAbort = vi.fn();
     let snapshotAttempts = 0;
     vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
@@ -771,7 +790,7 @@ describe("discovery", () => {
     expect(
       await screen.findByRole(
         "heading",
-        { name: "Leaderboard" },
+        { name: /leaderboard\./u },
         { timeout: 5_000 },
       ),
     ).toBeVisible();
@@ -780,6 +799,7 @@ describe("discovery", () => {
   });
 
   it("rejects a declared snapshot larger than the browser safety limit", async () => {
+    route("/projects/eliza");
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       if (String(input).includes("/data/cycles/")) {
         return Response.json(cycleIndexFixture());

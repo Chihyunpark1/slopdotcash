@@ -1,6 +1,7 @@
 import { Link, useInitialHashScroll } from "./Link";
 import { CONTACT_EMAIL, CONTACT_MAILTO } from "./lib/contact";
 import { copyText } from "./lib/copy-text";
+import { homeProjects } from "./lib/home-projects";
 import { SOURCE_REPOSITORY } from "./lib/source-repository";
 import {
   LoginPage,
@@ -651,15 +652,8 @@ function GlobalLeaderboard() {
   );
 }
 
-function HomePage({ state, retry }: { state: DataState; retry: () => void }) {
-  const views = state.status === "ready" ? state.views : [];
-  const promotedProjects = PROJECTS.filter((project) =>
-    projectPromotionEligible(
-      project,
-      state.status === "ready" ? state.cycleIndex.cycles : null,
-      views.find((view) => view.project.id === project.id)?.cycle.id ?? null,
-    ),
-  );
+function HomePage() {
+  const promotedProjects = homeProjects();
   const featuredProjects = promotedProjects.filter(
     (project) => project.listingTier === "featured",
   );
@@ -669,8 +663,6 @@ function HomePage({ state, retry }: { state: DataState; retry: () => void }) {
   return (
     <main>
       <section className="hero shell">
-        <DataNotice state={state} retry={retry} />
-
         <TypewriterHeroHeading />
         <p className="hero-copy">
           Fund accepted work on GitHub. Slop calculates allocations from public
@@ -4612,6 +4604,7 @@ function AppContent() {
   const route = useRoute();
   useInitialHashScroll();
   const needsSnapshot = ![
+    "home",
     "points",
     "login",
     "how-it-works",
@@ -4624,7 +4617,7 @@ function AppContent() {
   const [state, retry] = useSnapshot(needsSnapshot);
   const [archive, retryArchive] = useCycleIndex(route.kind === "cycle-archive");
   let content: ReactNode;
-  if (route.kind === "home") content = <HomePage retry={retry} state={state} />;
+  if (route.kind === "home") content = <HomePage />;
   else if (route.kind === "points") content = <PointsPage />;
   else if (route.kind === "login") content = <LoginPage />;
   else if (route.kind === "how-it-works") content = <HowItWorksPage />;
