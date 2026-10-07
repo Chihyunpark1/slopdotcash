@@ -182,11 +182,11 @@ async function fixture() {
 }
 
 describe("complete authenticated signer history", () => {
-  it("fetches accepted loss rather than trusting a stale local develop ref", async () => {
+  it("fetches accepted loss rather than trusting a stale local main ref", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-09-06T00:00:00.000Z"));
     const f = await fixture();
-    f.git("branch", "-M", "develop");
+    f.git("branch", "-M", "main");
     f.git("remote", "add", "origin", f.root);
     f.git("update-ref", "refs/remotes/origin/main", f.input().baseSha);
     await f.add();

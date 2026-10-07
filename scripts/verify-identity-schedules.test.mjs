@@ -199,13 +199,18 @@ describe("identity cleanup schedule readback", () => {
       ),
       "utf8",
     );
+    const productionWorkflow = workflow.slice(workflow.indexOf("\n  deploy:"));
     const command = "bun scripts/verify-identity-schedules.mjs";
-    expect(workflow.split(command)).toHaveLength(3);
-    expect(workflow.indexOf(command)).toBeLessThan(
-      workflow.indexOf("./node_modules/.bin/wrangler d1 migrations apply"),
+    expect(productionWorkflow.split(command)).toHaveLength(3);
+    expect(productionWorkflow.indexOf(command)).toBeLessThan(
+      productionWorkflow.indexOf(
+        "./node_modules/.bin/wrangler d1 migrations apply",
+      ),
     );
-    expect(workflow.lastIndexOf(command)).toBeGreaterThan(
-      workflow.indexOf("./node_modules/.bin/wrangler versions deploy"),
+    expect(productionWorkflow.lastIndexOf(command)).toBeGreaterThan(
+      productionWorkflow.indexOf(
+        "./node_modules/.bin/wrangler versions deploy",
+      ),
     );
   });
 });
