@@ -425,7 +425,7 @@ This inventory covers the routes in inspected upstream `src/App.tsx` and related
 | `/projects/new` | Large manifest form and GitHub handoff | Five-step authenticated wizard, draft persistence, authority checks, publication progress |
 | `/projects/:id/manage` | Draft updates and cycle actions | Policy, optional bot setup/health, eligibility/ignore/closure settings, funding, distinct payout exclusions, approvals and outcome ratios |
 | `/contributors/:login` | Public work, points, X and payment history | Stable actor profile with Slop Score, Points, money received, PR/issue ratios and penalty/reversal history; private settings separate |
-| `/points` | Sign-in, recognition rules, standings, social connection, community | Focus on standings/rules; move personal setup to Account; retain compatibility links |
+| `/points` | Sign-in, recognition rules, standings, social connection, community | Compatibility entry to leaderboard rules; move setup to Account and people to shared discovery; preserve old fragments |
 | `/login` | GitHub membership login | Clear account creation/login, safe return destination, cancel/retry without losing draft |
 | `/wallet` | Solana registration flow | Compatibility route into Account Wallets, with Base/Solana and pending-change state |
 | `/cycles` | Cycle archive | Filter by project/month/state; explicit complete coverage and downloadable records |
@@ -434,7 +434,7 @@ This inventory covers the routes in inspected upstream `src/App.tsx` and related
 | `/how-it-works` | Detailed mechanism | Short contributor/maintainer paths with deeper scoring, fees, privacy and trust links |
 | `/receipts` | Signed run metadata | Search/filter; distinguish device continuity, attribution, trace digest, and payment receipt |
 | `/models` | Self-reported model outcomes | Keep diagnostic, expose coverage and model/client attribution limits; no inferred billing truth |
-| `/verification` | Settlement verification tool | Read-only evidence utility; show success, failure, uncertainty and exact verification scope |
+| `/verification` | Settlement verification tool | Compatibility entry to How it works verification; preserve read-only tools, result states and exact scope |
 | Raw Markdown, terms, skill guides and downloads | Machine and manual onboarding | Stable discoverable links, exact version/digest, working copy/download feedback |
 | Unknown routes | Not-found state | Useful recovery links; no misleading empty project or account |
 | Proposed `/account` and subpages | Missing unified personal area | Profile, Connections, Wallets, Earnings, Notifications, Sessions |
@@ -447,6 +447,82 @@ Preserve existing public URLs through redirects or compatibility routes. Put acc
 Every interactive surface needs distinct loading, empty, stale, invalid, permission-denied, unavailable, and failed states. A wrong-network wallet prompts a network-specific correction. A denied OAuth flow returns to the draft. A pending GitHub review says who must act. A failed copy action offers selectable text. Persist form progress without persisting credentials.
 
 Meet WCAG AA, keyboard navigation, visible focus, useful screen-reader announcements, reduced motion, mobile layouts, and 200% zoom. Never encode financial status only by color. Confirm full destinations before wallet actions. Avoid dashboard clutter by showing the next required action first and audit details on demand.
+
+### Quality review requirements
+
+These requirements incorporate the requested [complete page quality review](slop-quality-review.md).
+The review was recorded on 24 September 2026. Recheck its observations before implementation.
+The user requested this requirements update on 6 October 2026. This update does not change economic policy or activate features.
+Current requirements take precedence over dated review recommendations, as listed in the review's precedence note.
+Deliver these requirements through MVP-10 with the existing dependent packages. Do not create a separate product phase.
+
+**UX-01 — Shared layout and navigation.** Keep cream, black, orange, strong headings and restrained borders. Reserve large display headings for landing pages. Use consistent buttons, terms, number and date formats. Keep the account avatar farthest right. Show identity and points after it opens. Remove redundant Home navigation and group record links in the footer.
+
+Acceptance: Each route has one clear purpose and next action. Header, footer and controls use consistent names. Long names, numbers and mobile layouts remain readable.
+
+**UX-02 — Home and discovery.** Remove duplicate feature and process explanations. Show projects, a leaderboard preview and one short process summary. Keep the full promise legible during motion. Put target, commitment and payment state beside each amount. Label external prizes. Give funding and project creation different destinations.
+
+Acceptance: A visitor can find work and identify its real funding state without opening policy documents. Preserve Featured and Community requirements in DSC-01–04.
+
+**UX-03 — Leaderboard and people.** Reuse one ranking view across global and project surfaces. Preserve LDR-01–03: Slop Score default, separate Points and Money received sorts. Combine member and contributor discovery. Separate cohort filters from time windows. Show coverage and point-category rules.
+
+Acceptance: Selected sort and filters remain shareable. Zero-score people remain discoverable. Setup bonuses do not change accepted-work score. Allocation weight remains separate.
+
+**UX-04 — Project detail and variants.** Combine reward, participation and funding notices into one status summary. Put the skill action near it. Keep advanced installation and evidence available. Separate public ranking from allocation details. Remove repeated inactive funding controls. Lead archived projects with their successor, and restricted projects with permission requirements.
+
+Acceptance: Monthly, external-prize, paused, archived and permission-gated projects each show the correct action and state. Read project facts from manifests. Preserve history and downloads.
+
+**UX-05 — Contributor profiles.** Use one identity header and one summary for Slop Score, Points, verified money received and merged/open/closed work. Keep issue outcomes and penalty history required by SCR visible through details. Combine work, points and payment activity. Group repeated entries by date with source links. Remove duplicate payment totals and repeated evidence guidance.
+
+Acceptance: The first useful viewport answers identity and contribution totals. Every metric has a scope. Format fractional scores. Label simulated money locally. Keep reported payments separate from verified payments.
+
+**UX-06 — Account and points compatibility.** Move personal setup to Account. Remove duplicate standings and people search from settings. Use one X connection row and one X visibility control. Put earning rules beside the leaderboard. Preserve separate membership privacy and public contribution records.
+
+Acceptance: Old `/points` and fragment links reach the correct account, people or rules destination. Settings have saved and error feedback. Points remain nonfinancial.
+
+**UX-07 — Login and wallets.** Use one login title and GitHub action. Defer optional setup. Keep the safe return route and draft. Present address, confirmation and saved states within Account Wallets for Base and Solana. Put public-registration consequences before confirmation. Move digests to details.
+
+Acceptance: Real login and wallet workflows retain consent, identity checks, network validation and recovery. No new login provider or unsupported wallet capability appears.
+
+**UX-08 — How it works and verification.** Replace repeated prose with short contributor and maintainer paths. Use a payment-stage diagram with unresolved branches and a labeled allocation example. Hide implementation units in technical details. Keep Verification inside this page, with advanced derivation tools on demand.
+
+Acceptance: Projected, review, approved, scheduled and paid remain distinct. Old verification links work. Technical references and exact evidence remain accessible. No diagram implies automatic payment.
+
+**UX-09 — Sponsors.** Show funding choices before the audience report. Reduce audience prose to dated statistics and a focused chart when useful. Move the full report into details. Reuse payment definitions. Show awards, applicable fee and total together. Put optional review budget in setup.
+
+Acceptance: A sponsor can select a project and understand rights, fees and availability. Preserve denominators and evidence. Do not imply repository endorsement or funding guarantees.
+
+**UX-10 — Project creation and updates.** Reuse fields and validation across the approved setup and update flows. Look up repository IDs and license evidence where possible. Keep unknown facts explicit. Show a human-readable preview before raw JSON. Put copy/download alternatives after the primary GitHub handoff. Consolidate allocation editing into payout management.
+
+Acceptance: The approved setup steps remain intact. Failed lookup does not fabricate facts. Drafts persist without credentials. A draft or copied proposal never appears published.
+
+**UX-11 — Funding and payout workspace.** Separate public records from maintainer actions. Keep four payout steps with blockers and next actions. Expand recipient details on demand. Preserve edits during search and pagination. Show compact amounts for scanning and exact amounts for editing, confirmation and export.
+
+Acceptance: A transaction-history link opens records. Maintainers can find missing destinations and changed awards. Balance, signer capability, approval and payment remain separate. Use existing funding work.
+
+**UX-12 — Models and clients.** Shorten the introduction. Keep a visible self-reporting qualification. Show ranked outcome bars and coverage where useful. Reduce default table columns and expand diagnostics. Use readable mobile rows or an accessible horizontal table. Group clients as a local view. Preserve exact declarations and reviewed alias mappings.
+
+Acceptance: No header or number wraps one character per line. Each share has its denominator and period. Overlapping shares never use a pie chart. Allocation score is not labeled participation points.
+
+**UX-13 — Run receipts.** Use a searchable list with expandable metadata instead of repeated large cards. Lead with linked work and actor when known. Describe the precise signature property. Keep IDs, digests and token details available. Distinguish missing usage from measured zero.
+
+Acceptance: A user can find a receipt from a contribution or model view. Device signatures never imply provider verification. No private trace body becomes public.
+
+**UX-14 — Cycle archive and detail.** Use compact project/month/state records. Add filters when the record count warrants them. Label amounts Suggested, Approved or Paid. Show actual stage and dates. Collapse hashes into Evidence. Keep external-prize shares separate from dollar records.
+
+Acceptance: The cycle uses its frozen source and historical policy. Users can distinguish amount states and download the original records.
+
+**UX-15 — Loading, failures and accessibility.** Keep route identity while loading. Distinguish empty, stale, invalid, denied, unavailable and failed states. Provide Retry or the next action. Use accessible text with charts and state colors. Preserve keyboard, focus, reduced motion and zoom support.
+
+Acceptance: Unknown data never becomes zero, paused or success. Test affected routes at desktop/mobile widths and 200% zoom. Meet WCAG AA and preserve copy/download/link feedback.
+
+**UX-16 — Copy and duplication.** Delete repeated explanations before adding controls. Keep one canonical explanation for points, payment states, privacy and evidence. Put material restrictions beside actions. Keep long technical details available on demand. Use short functional page titles and plain terms.
+
+Acceptance: Compare default-visible explanatory word counts on the same routes and states. Seek roughly 40–60% less copy where useful. Report the actual result; do not remove necessary consent or facts to meet a quota.
+
+**UX-17 — Evidence and completion.** Reproduce dated findings and compare alternatives before implementation. Reuse current components. Supply real affected-workflow evidence and an uploaded walkthrough video for each UI PR. Keep documentation adoption separate from delivery.
+
+Acceptance: Map each requirement to the exact tested revision, steps, expected and actual results, screenshots, video, accessibility and console/network evidence. Explain inapplicable checks. Do not mark implementation complete from this document.
 
 ## 17 Backend and system architecture
 
