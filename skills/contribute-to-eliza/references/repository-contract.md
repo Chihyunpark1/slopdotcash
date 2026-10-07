@@ -126,8 +126,16 @@ gh api --method GET <endpoint>
 
 Run `scripts/live-report.mjs --repo elizaOS/eliza` from this skill for a
 paginated candidate and compliance report. The report is a heuristic filter,
-not authority. It performs GET-only GitHub calls and must not post claims,
+not authority. It makes read-only GitHub calls and must not post claims,
 comments, labels, reviews, or mutations.
+
+The report lists all open items before it reads activity. If listing metadata
+already excludes an item, the report can skip its activity and names that item
+in `audits.skipped`. This is not a completed compliance audit. Unknown review
+decisions on those PRs are `null`. Possible candidates still receive complete
+activity checks. A full scan remains the fallback when targeted reads cannot
+save requests or fit the existing command budget. Repeat the live publication
+check for the selected exact head before any GitHub write.
 
 ## Attribution and payout evidence
 
