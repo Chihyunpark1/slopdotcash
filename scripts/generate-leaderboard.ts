@@ -173,6 +173,10 @@ interface ParsedMergedPullRequestReview {
 interface ParsedIssue {
   record: IssueRecord;
   state: string;
+  references: ConnectionPage<{
+    id: string;
+    pullRequestId: string | null;
+  }> | null;
   pages: {
     comments: NestedPageState;
     closedByPullRequests: NestedPageState;
@@ -411,6 +415,17 @@ const MERGED_PULL_REQUEST_REVIEW_FRAGMENT = `
   }
 `;
 
+const ISSUE_REFERENCE_FIELDS = `
+  totalCount
+  pageInfo { hasNextPage endCursor }
+  nodes {
+    ... on CrossReferencedEvent {
+      id
+      source { __typename ... on PullRequest { id } }
+    }
+  }
+`;
+
 const ISSUE_FRAGMENT = `
   fragment LeaderboardIssue on Issue {
     id
@@ -427,6 +442,7 @@ const ISSUE_FRAGMENT = `
     labels(first: 100) { ${LABEL_FIELDS} }
     assignees(first: 100) { ${ASSIGNEE_FIELDS} }
     comments(first: 100) { ${COMMENT_FIELDS} }
+    timelineItems(first: 100, itemTypes: [CROSS_REFERENCED_EVENT]) @include(if: $includeReferences) { ${ISSUE_REFERENCE_FIELDS} }
     closedByPullRequestsReferences(first: 100) {
       totalCount
       pageInfo { hasNextPage endCursor }
@@ -528,7 +544,7 @@ const REVIEWED_PULL_REQUEST_REFERENCES_QUERY = `
 `;
 
 const ISSUE_DETAILS_QUERY = `
-  query LeaderboardIssueDetails($ids: [ID!]!) {
+  query LeaderboardIssueDetails($ids: [ID!]!, $includeReferences: Boolean!) {
     nodes(ids: $ids) {
       __typename
       ... on Issue { ...LeaderboardIssue }
@@ -597,6 +613,17 @@ const MORE_PULL_REQUEST_COMMENTS_QUERY = `
     rateLimit { cost limit remaining resetAt }
   }
   ${ACTOR_FRAGMENT}
+`;
+
+const MORE_ISSUE_REFERENCES_QUERY = `
+  query LeaderboardMoreIssueReferences($id: ID!, $after: String!) {
+    node(id: $id) {
+      ... on Issue {
+        timelineItems(first: 100, after: $after, itemTypes: [CROSS_REFERENCED_EVENT]) { ${ISSUE_REFERENCE_FIELDS} }
+      }
+    }
+    rateLimit { cost limit remaining resetAt }
+  }
 `;
 
 const MORE_ISSUE_COMMENTS_QUERY = `
@@ -674,6 +701,9 @@ const MORE_FILES_QUERY = `
   query LeaderboardMoreFiles($id: ID!, $after: String!) {
     node(id: $id) {
       ... on PullRequest {
+        state
+        isDraft
+        headRefOid
         files(first: 100, after: $after) { ${FILE_FIELDS} }
       }
     }
@@ -733,6 +763,7 @@ export const LEADERBOARD_QUERY_DOCUMENTS = {
   reviewInlineComments: REVIEW_INLINE_COMMENTS_QUERY,
   morePullRequestComments: MORE_PULL_REQUEST_COMMENTS_QUERY,
   moreIssueComments: MORE_ISSUE_COMMENTS_QUERY,
+  moreIssueReferences: MORE_ISSUE_REFERENCES_QUERY,
   moreReviews: MORE_REVIEWS_QUERY,
   moreFormalReviews: MORE_FORMAL_REVIEWS_QUERY,
   moreReviewInlineComments: MORE_REVIEW_INLINE_COMMENTS_QUERY,
@@ -1105,6 +1136,32 @@ function parseMergedPullRequestReview(
   };
 }
 
+function parseIssueReferences(
+  value: unknown,
+  path: string,
+): NonNullable<ParsedIssue["references"]> {
+  const connection = asRecord(value, path);
+  return {
+    totalCount: asNumber(connection.totalCount, `${path}.totalCount`),
+    pageInfo: parsePageInfo(connection.pageInfo, `${path}.pageInfo`),
+    nodes: asArray(connection.nodes, `${path}.nodes`).map((value, index) => {
+      const nodePath = `${path}.nodes[${index}]`;
+      const node = asRecord(value, nodePath);
+      const source = child(node, "source", nodePath);
+      const kind = asString(source.__typename, `${nodePath}.source.__typename`);
+      if (kind !== "Issue" && kind !== "PullRequest")
+        throw new Error(`${nodePath} has an unsupported reference source`);
+      return {
+        id: asString(node.id, `${nodePath}.id`),
+        pullRequestId:
+          kind === "PullRequest"
+            ? asString(source.id, `${nodePath}.source.id`)
+            : null,
+      };
+    }),
+  };
+}
+
 function parseIssue(value: unknown, path: string): ParsedIssue {
   const node = asRecord(value, path);
   const id = asString(node.id, `${path}.id`);
@@ -1114,6 +1171,10 @@ function parseIssue(value: unknown, path: string): ParsedIssue {
     `${path}.closedByPullRequestsReferences`,
   );
   return {
+    references:
+      node.state === "OPEN"
+        ? parseIssueReferences(node.timelineItems, `${path}.timelineItems`)
+        : null,
     state: asString(node.state, `${path}.state`),
     record: {
       id,
@@ -2199,10 +2260,20 @@ async function completePullRequestConnections(
       id: pullRequest.id,
       after: filesState.pageInfo.endCursor,
     });
-    const page = parseFiles(
-      child(data, "node", "data").files,
-      "data.node.files",
-    );
+    const node = child(data, "node", "data");
+    if (
+      node.files === null &&
+      parsed.state === "OPEN" &&
+      pullRequest.isDraft &&
+      node.state === "OPEN" &&
+      node.isDraft === true &&
+      node.headRefOid === pullRequest.headRefOid
+    ) {
+      // A later page can become unavailable too. Discard the partial diff.
+      pullRequest.files = null;
+      break;
+    }
+    const page = parseFiles(node.files, "data.node.files");
     if (pullRequest.files === null) {
       throw new Error(`PR #${pullRequest.number} file detail is unavailable`);
     }
@@ -2231,7 +2302,8 @@ async function completePullRequestConnections(
 
   pullRequest.closingIssueIds = [...new Set(pullRequest.closingIssueIds)];
   if (
-    pullRequest.files?.length !== parsed.pages.files?.totalCount ||
+    (pullRequest.files !== null &&
+      pullRequest.files.length !== parsed.pages.files?.totalCount) ||
     pullRequest.closingIssueIds.length !== parsed.pages.closingIssues.totalCount
   ) {
     throw new Error(
@@ -2258,6 +2330,43 @@ async function completeIssueConnections(
   parsed: ParsedIssue,
 ): Promise<IssueRecord> {
   const issue = parsed.record;
+  if (parsed.references) {
+    const references = [...parsed.references.nodes];
+    let referenceState = pageState(parsed.references);
+    const cursors = new Set<string>();
+    while (referenceState.pageInfo.hasNextPage) {
+      const cursor = referenceState.pageInfo.endCursor;
+      if (!cursor || cursors.has(cursor))
+        throw new Error(
+          `Issue #${issue.number} reference cursor is missing or repeated`,
+        );
+      cursors.add(cursor);
+      const data = await client.execute(MORE_ISSUE_REFERENCES_QUERY, {
+        id: issue.id,
+        after: cursor,
+      });
+      const page = parseIssueReferences(
+        child(data, "node", "data").timelineItems,
+        "data.node.timelineItems",
+      );
+      if (page.totalCount !== parsed.references.totalCount)
+        throw new Error(
+          `Issue #${issue.number} references changed during collection`,
+        );
+      references.push(...page.nodes);
+      referenceState = pageState(page);
+    }
+    const uniqueReferences = dedupeByNodeId(references);
+    if (uniqueReferences.length !== parsed.references.totalCount)
+      throw new Error(`Issue #${issue.number} reference count is incomplete`);
+    issue.referencedPullRequestIds = [
+      ...new Set(
+        uniqueReferences.flatMap((reference) =>
+          reference.pullRequestId ? [reference.pullRequestId] : [],
+        ),
+      ),
+    ];
+  }
   let commentsState = parsed.pages.comments;
   while (commentsState.pageInfo.hasNextPage) {
     if (!commentsState.pageInfo.endCursor) {
@@ -2504,6 +2613,7 @@ async function finalizePullRequests(
         submittedAt: review.submittedAt,
         url: review.url,
         author: review.author,
+        commitId: review.commitId,
         inlineCommentCount,
       };
     });
@@ -2603,7 +2713,10 @@ async function hydrateIssues(
   for (const batch of chunks(references, DETAIL_BATCH_SIZE)) {
     const hydratedBatch = await retryOpenBatch(expectedState, async () => {
       const ids = batch.map((reference) => reference.id);
-      const data = await client.execute(ISSUE_DETAILS_QUERY, { ids });
+      const data = await client.execute(ISSUE_DETAILS_QUERY, {
+        ids,
+        includeReferences: expectedState === "open",
+      });
       const parsed = parseDetailBatch(data, ids, "Issue", parseIssue);
       const completed: IssueRecord[] = [];
       for (const value of parsed) {

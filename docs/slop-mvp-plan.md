@@ -28,7 +28,7 @@ The rest of the PRD is blocked until maintainers approve an explicit MVP complet
 | MVP-07 | PAY-01–08 | Human approval, manual/automatic execution, late wallet dispatch, finality and receipts | MVP-06; full same-scenario test deployment evidence on both chains |
 | MVP-08 | ELG-01–03 | Prospective maintainer exclusions, moderation, financial holds and appeals | MVP-00/03/07; scoped human decisions and protected accrued obligations |
 | MVP-09 | SCR-01–03, LDR-01–03, DSC-01–04 | Separate signed Slop Score/points, closure debits/reversals, issue/PR ratios and score-default sorting | MVP-00/03/05/07/08; exact source coverage, ties, zero denominators, no duplicate penalties or financial seizure |
-| MVP-10 | ADM-01–06, NOT-01, PRD sections 16–17 | Unified pages, bot health, security evidence, admin featuring/bans, notifications and recovery | Relevant prior packages; permissions, canonical sync, cached/direct-route enforcement, appeals and browser evidence |
+| MVP-10 | ADM-01–06, NOT-01, UX-01–17, PRD sections 16–17 | Unified pages, bot health, security evidence, admin featuring/bans, notifications and recovery | Relevant prior packages; permissions, canonical sync, cached/direct-route enforcement, appeals and browser evidence |
 | MVP-12 | VET-01–08 | Revision-bound secure-VM vetting, full declared telemetry, binary/obfuscation quarantine, Astra and Opus reviews, confirmed-malware bans | MVP-00/01 and project drafts; required before community/featured executable onboarding; isolated clean/malicious fixture evidence |
 | MVP-11 | PRD sections 20–23 | Versioned migration and limited production activation | All release gates; authorized production proof and reconciliation |
 
@@ -70,3 +70,24 @@ Define the intended Robinhood integration separately. Ethereum mainnet and addit
 The maintainer-approved merge adopting this PRD and plan records scope approval. Record its PR/revision and the choices adopted from PRD section 22; unresolved choices remain implementation gates. Adoption does not activate bot closure, penalties, project bans, money movement, or a future phase without the corresponding reviewed implementation and policy activation.
 
 **MVP completion: not confirmed. Future implementation: blocked.** The later completion record must identify the responsible maintainers, approval date and decision link; every MVP package/requirement; exact tested/deployed revisions; end-to-end, security, provider and chain evidence; resolved defects; and the approved next phase. Add the real record only after these conditions hold. Do not prefill completion, waive missing evidence silently, or infer completion from this document merge.
+
+## Quality review delivery
+
+The [PRD quality requirements](slop-product-requirements.md#quality-review-requirements) and
+[dated full review](slop-quality-review.md) belong to MVP-10. This plan does not mark them implemented.
+Reuse MVP-01/02 for account and wallet changes, MVP-03 for project forms, MVP-07 for payouts, and MVP-09 for rankings.
+Retain Slop Score as the default. Keep financial-policy decisions in PRD section 22.
+
+| Pass | Requirement IDs | Required result |
+| --- | --- | --- |
+| 1. Correct misleading displays | UX-02–05, UX-12, UX-14–15 | Accurate amount/state labels, readable mobile model data, formatted scores and explicit loading states |
+| 2. Combine duplicate workflows | UX-01, UX-03–07, UX-10–11 | One account area, consistent rankings, shared people discovery, one profile summary and shared proposal/payout controls |
+| 3. Reduce explanations | UX-08–09, UX-13, UX-16 | Shorter pages, canonical explanations, searchable evidence and preserved material conditions |
+| 4. Show useful visuals | UX-05, UX-08–09, UX-11–12 | Readable process, payment stages, allocation/fee arithmetic, model coverage and funding readiness |
+| 5. Verify quality | UX-17 and all affected requirements | Real browser workflows, before/after measures, uploaded walkthrough and evidence video, accessibility and recovery results |
+
+Reproduce the dated defects first. Link existing fixes and omit work already complete.
+Track every page and project-state variant from the review. Record any omitted suggestion and its requirement-based reason.
+Do not use arbitrary copy quotas, decorative charts, extra tests or new abstractions as completion criteria.
+Use the same inputs and states for before/after comparisons. Keep hashes, financial precision, consent and historical records available.
+Documentation-only updates require link and consistency checks. Application E2E and UI videos apply to later implementation changes.

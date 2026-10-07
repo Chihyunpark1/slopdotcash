@@ -7,8 +7,8 @@
 import { createHash } from "node:crypto";
 import AxeBuilder from "@axe-core/playwright";
 import { type APIRequestContext, test as base, expect } from "@playwright/test";
-import { projectPromotionEligible } from "../../src/lib/allocation-funding";
 import { assertCycleIndex, type CycleIndex } from "../../src/lib/cycle-index";
+import { homeProjects } from "../../src/lib/home-projects";
 import {
   assertLeaderboardSnapshot,
   type LeaderboardSnapshot,
@@ -177,12 +177,9 @@ test("shows signer loss and expired capability without payout availability", asy
 
 test("discovers projects and one points-ranked homepage leaderboard", async ({
   page,
-  request,
 }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.reload({ waitUntil: "networkidle" });
-  const snapshot = await loadSnapshot(request);
-  const cycles = await loadCycles(request);
 
   await expect(
     page.getByRole("heading", {
@@ -227,18 +224,8 @@ test("discovers projects and one points-ranked homepage leaderboard", async ({
     page.getByRole("heading", { exact: true, name: "Featured" }),
   ).toBeVisible();
   const community = page.locator("details.community-projects");
-  const eligibleCommunity = PROJECTS.filter(
-    (project) =>
-      project.status === "active" &&
-      project.listingTier === "community" &&
-      snapshot.repositories.some(
-        (repository) => repository.projectId === project.id,
-      ) &&
-      projectPromotionEligible(
-        project,
-        cycles.cycles,
-        createProjectView(snapshot, project.id).cycle.id,
-      ),
+  const eligibleCommunity = homeProjects().filter(
+    (project) => project.listingTier === "community",
   );
   if (eligibleCommunity.length === 0) {
     await expect(community).toHaveCount(0);
@@ -267,8 +254,15 @@ test("discovers projects and one points-ranked homepage leaderboard", async ({
     page.getByRole("heading", { exact: true, name: "Delta Star" }),
   ).toBeVisible();
   const elizaCard = page.locator('a.project-card[href="/projects/eliza"]');
-  await expect(elizaCard.getByText("Unfunded", { exact: true })).toHaveCount(0);
-  await expect(elizaCard.getByText("$5k", { exact: true })).toBeVisible();
+  await expect(
+    elizaCard.getByText("Not funded yet", { exact: true }),
+  ).toBeVisible();
+  await expect(elizaCard.getByText("$5k", { exact: true })).toHaveCount(0);
+  await expect(
+    elizaCard.getByText("Target $5k/mo", {
+      exact: true,
+    }),
+  ).toBeVisible();
   await expect(elizaCard.getByText("$5,000", { exact: true })).toHaveCount(0);
   await expect(
     elizaCard.getByText(/Build and verify the elizaOS framework/u),
@@ -410,16 +404,17 @@ test("starts Eliza with one prompt and no separate payout form", async ({
   ).toHaveCount(0);
   await expect(page.getByText("1% platform fee · Solana")).toHaveCount(0);
   const rewardStyle = await page.locator(".reward-card").evaluate((card) => {
-    const amount = card.querySelector<HTMLElement>(".reward-amount-monthly");
+    const amount = card.querySelector<HTMLElement>(":scope > strong");
     const actions = card.querySelector<HTMLElement>(":scope > div");
     if (!amount || !actions) return null;
     return {
-      amountFontSize: Number.parseFloat(getComputedStyle(amount).fontSize),
+      amountText: amount.textContent,
       actionBorderTopWidth: getComputedStyle(actions).borderTopWidth,
     };
   });
   expect(rewardStyle).not.toBeNull();
-  expect(rewardStyle?.amountFontSize ?? 0).toBeGreaterThanOrEqual(48);
+  // Eliza is pledged, so the headline is the funding state, never the cap.
+  expect(rewardStyle?.amountText).toBe("Not funded yet");
   expect(rewardStyle?.actionBorderTopWidth).toBe("0px");
   const projectGaps = await page.evaluate(() => {
     const breadcrumb = document.querySelector(".breadcrumb");
@@ -517,26 +512,26 @@ test("starts Eliza with one prompt and no separate payout form", async ({
   ).toHaveCount(0);
   await expect(page.getByText(/^Updated /u)).toBeVisible();
   await expect(page.getByText(/receipt-linked tokens/u)).toHaveCount(0);
-  const displayedProjectionCents = await page
+  const shareCells = await page
     .locator(".project-leader-row")
     .evaluateAll((rows) =>
-      rows.reduce((total, row) => {
-        const projection = row.querySelectorAll("td")[3]?.textContent ?? "";
-        return (
-          total + Math.round(Number(projection.replace(/[^0-9.-]/gu, "")) * 100)
-        );
-      }, 0),
+      rows.map((row) => row.querySelectorAll("td")[3]?.textContent ?? ""),
     );
   const view = createProjectView(await loadSnapshot(request), "eliza");
-  expect(displayedProjectionCents).toBe(
-    view.leaders.length
-      ? Number(BigInt(view.project.reward.monthlyCapMinor) / 10_000n)
-      : 0,
-  );
+  expect(shareCells).toHaveLength(view.leaders.length);
+  // No committed funds: every row is a share of the score, never dollars.
+  for (const cell of shareCells) {
+    expect(cell).toMatch(/^\d+\.\d{2}% of score$/u);
+  }
   expect(view.leaders.every((leader) => leader.projectedMinor === "0")).toBe(
     true,
   );
-  await expect(page.getByText(/Shares simulate the/u)).toBeVisible();
+  await expect(
+    page.getByRole("columnheader", { name: "Share of score" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/Not funded yet\. Not approved payouts\./u),
+  ).toBeVisible();
   await expect(page.getByText("Live from GitHub")).toHaveCount(0);
   await expect(page.getByText("How credit survives review")).toHaveCount(0);
 });
@@ -548,7 +543,6 @@ test("never presents Delta Star's external prize as platform money", async ({
   await expect(
     page.getByRole("heading", { name: "Make money solving math." }),
   ).toBeVisible();
-  await expect(page.getByText("EXTERNAL OPPORTUNITY")).toBeVisible();
   await expect(
     page.getByText("No platform pool · no dollar projection"),
   ).toBeVisible();
@@ -1104,7 +1098,7 @@ test("shows an explicit error for invalid data and retries", async ({
     }
     await route.fallback();
   });
-  await page.reload({ waitUntil: "networkidle" });
+  await page.goto("/projects/eliza", { waitUntil: "networkidle" });
   await expect(page.getByRole("alert")).toContainText(
     "Live totals unavailable",
   );
@@ -1121,7 +1115,7 @@ test("shows an explicit error for invalid data and retries", async ({
   await page.getByRole("button", { name: /Retry/u }).click();
   await expect(page.getByRole("alert")).toHaveCount(0);
   await expect(
-    page.getByRole("heading", { exact: true, name: "Leaderboard" }),
+    page.getByRole("heading", { name: /leaderboard\./u }),
   ).toBeVisible();
   expect(attempts).toBe(failedAttempts + 1);
 });
