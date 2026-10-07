@@ -3343,6 +3343,17 @@ export function createLeaderboardSnapshot(
       issuePullRequests.set(issueId, linked);
     }
   }
+  const openPullRequestById = new Map(
+    openPullRequests.map((record) => [record.id, record]),
+  );
+  for (const issue of openIssues) {
+    const linked = issuePullRequests.get(issue.id) ?? [];
+    for (const id of issue.referencedPullRequestIds ?? []) {
+      const pullRequest = openPullRequestById.get(id);
+      if (pullRequest) linked.push(pullRequest);
+    }
+    issuePullRequests.set(issue.id, dedupeByNodeId(linked));
+  }
   const issueQueue = openIssues.map((record) =>
     issueWorkItem(
       record,

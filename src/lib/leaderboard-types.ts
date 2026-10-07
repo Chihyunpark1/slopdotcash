@@ -166,6 +166,8 @@ export interface IssueRecord {
   assignees: GitHubActor[];
   labels: GitHubLabel[];
   comments: GitHubTextSource[];
+  /** GitHub timeline references; only an inventoried open PR can claim work. */
+  referencedPullRequestIds?: string[];
   closedByPullRequests: Array<{
     id: string;
     number: number;
