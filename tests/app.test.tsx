@@ -1055,7 +1055,9 @@ describe("public records", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("34")).toBeInTheDocument();
     expect(screen.getByText("$5,000")).toBeInTheDocument();
-    expect(screen.getByText("$0.00")).toBeInTheDocument();
+    expect(
+      screen.getByText("verified payments received · USDC").parentElement,
+    ).toHaveTextContent("$0.00");
     expect(screen.getByText("Eliza")).toBeInTheDocument();
     expect(screen.getByText("Delta Star")).toBeInTheDocument();
     expect(
