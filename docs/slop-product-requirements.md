@@ -284,7 +284,7 @@ Squads separates proposal, vote, and execution permissions; that is useful gover
 
 **PAY-04.** Automatic mode means automatic execution of already approved and funded obligations. It does not mean automatic award approval. A limited relayer pays gas and invokes a constrained payment operation; it cannot select arbitrary recipients, alter amounts, refund reserves, or approve work. The relayer key is held by the project or by a permissionless executor, never by Slop: Slop operates no key, service or scheduled job that originates a transfer of funds. Manual mode requires a human execution trigger or supported external signer, but uses the same obligation IDs, fee rules, destination binding, and verifier. Switching modes must not replay payments.
 
-**PAY-05.** Walletless obligations are reserved for the immutable actor. Recommended policy: no expiry or sponsor reclamation of funded awards. Destination registration activates eligible payment dispatch. The destination written to the contract/program is bound by the contributor's own wallet signature over actor, network, exact destination and purpose (WAL-02), so no Slop-held attester key can redirect unbound funds. Slop may publish and verify the binding; it does not sign it.
+**PAY-05.** Walletless obligations are reserved for the immutable actor. Recommended policy: no expiry or sponsor reclamation of funded awards. Destination registration activates eligible payment dispatch. The contributor must sign the actor, network, exact destination and purpose with the destination wallet (WAL-02). This proves wallet control only. It does not prove control of the named GitHub account. Before implementation, the security and financial-protocol owners must approve how the contract verifies the authenticated GitHub actor-to-wallet binding without a Slop routing key. Name the proof issuer, verification rules, expiry, replay protection, revocation and recovery authority. Document what a compromised issuer or GitHub account could redirect. Until that design is approved and tested, destination binding and payment dispatch remain blocked. An attacker who signs a victim's actor ID with the attacker's wallet must not bind or receive the victim's award. Slop may publish observations; its account database alone cannot authorize an on-chain destination.
 
 **PAY-06.** Mark paid only after successful finalized evidence reconciles the exact project, network, asset, vault, obligation, recipient, principal, and fee. Reject replay, wrong asset/owner, partial principal, overpayment, duplicate source consumption, and inconsistent receipt data. Separate broadcast from finality. Reconcile an uncertain send before retrying, with stable idempotency keys and attempt records.
 
@@ -552,6 +552,8 @@ Optional email requires a verified address and explicit preference. Public GitHu
 
 Keep the React/Cloudflare Pages frontend and existing identity worker. Extend the backend into explicit account, project-control, contribution, points, funding, settlement, and notification boundaries. A boundary need not mean a separate deployment; use shared infrastructure where it preserves authorization and operational simplicity.
 
+Slop owns account sessions and read-only payment projections. Project owners authorize awards. Contributors control destination wallet keys. A project-operated or permissionless executor submits approved payments. The actor-binding proof issuer and recovery authority remain undecided under PAY-05; no component may substitute a Slop signature for that missing proof.
+
 The flow is: GitHub OAuth → scoped account session → private account/wallet API; GitHub App events → durable queue → isolated Slopbot or ingestion → reviewed policy/outcome records; approved allocation → vault commitment → payout queue → finalized chain indexer → public projections and private earnings notifications.
 
 ```mermaid
@@ -564,8 +566,8 @@ flowchart TD
   H --> C[Reviewed allocation]
   C --> O[Owner authorizes funded obligations]
   O --> V[Base or Solana project vault]
-  A --> D[Verified destination binding]
-  D --> P[Limited payout dispatcher]
+  A --> D[Actor and wallet proof: design gate]
+  D --> P[Project-operated or permissionless executor]
   P --> V
   V --> F[Finality and reconciliation]
   F --> R[Public receipts and private earnings]
@@ -660,7 +662,7 @@ Robinhood remains a separate future discovery item: clarify whether the intended
 | Risk | Mitigation and release condition |
 | --- | --- |
 | Account takeover redirects unpaid awards | Recent authentication, possession proof, delayed changes, notification, freeze, independent recovery review |
-| Identity attester compromise | Isolated limited signer, rotation and revocation, deployment-bound messages, monitored binding changes, explicit residual trust |
+| False actor-to-wallet binding | PAY-05 remains blocked until owners approve the proof issuer, contract verification and recovery authority; require victim-actor impersonation, replay, revocation and compromised-issuer evidence |
 | Vault exploit or malicious upgrade | Independent review, invariant tests, verified deployed authority, limited pilot exposure, narrow pause/recovery design |
 | False funded/paid claims | Finalized deterministic verification, exact reconciliation, separate uncertainty and source coverage |
 | Sponsor takes donor money | Enforced deposit classes and withdrawal rights; block public donation activation without them |
@@ -726,7 +728,7 @@ For implementation, retain all required repository checks, lockfile/toolchain pi
 | Canonical PRD/MVP adoption | Adopt this version plus companion plan after review | Product owner and repository maintainers |
 | Account versus project authority | Backend for private accounts; GitHub manifests for active project policy | Product and backend owners |
 | Trace and score conflicts | Reconcile local instructions with upstream protocols; publish one effective rule | Maintainers and protocol owner |
-| Payout execution authority | No Slop-held key originates, routes or redirects a payment: project-operated or permissionless execution, contributor-signed destination binding; the no-sign/no-broadcast promise stands; counsel review before any change | Security, financial-protocol and legal owners |
+| Payout execution authority | No Slop-held key originates, routes or redirects a payment: project-operated or permissionless execution; actor-binding proof and recovery authority remain blocked under PAY-05; a wallet signature alone is insufficient; counsel review before any change | Security, financial-protocol and legal owners |
 | Payout fee | 2%, sponsor-paid on top, reserved beside principal, never deducted from the award; freeze per obligation | Product and finance owners |
 | Withdrawal fee | 10% remains a proposal; validate sponsor demand and retain clear net-refund preview | Product and finance owners |
 | Public donation rights | Nonrefundable reward-restricted class, contract-enforced | Product, protocol and legal owners |
