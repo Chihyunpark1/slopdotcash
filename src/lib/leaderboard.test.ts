@@ -3008,6 +3008,14 @@ describe("scoring and limits", () => {
       ]),
     );
 
+    expect(partly.invalidAttributionMarkers).toContainEqual({
+      sourceId: first.sourceId,
+      sourceUrl: first.sourceUrl,
+      reason: "invalid-attribution",
+    });
+    expect(partly.attributionCoverage.invalidSourceCount).toBe(1);
+    assertLeaderboardSnapshot(JSON.parse(JSON.stringify(partly)));
+
     // Two candidates for one review are ambiguous, so neither is replayed.
     const ambiguous = createLeaderboardSnapshot(
       replayInput({

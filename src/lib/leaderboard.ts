@@ -3352,6 +3352,7 @@ export function createLeaderboardSnapshot(
         : [],
     ),
   );
+  const retainedRejectedSources = new Set<string>();
   for (const event of ledger) {
     const candidate = retainedAttributionCandidates.get(event.id);
     if (!candidate || !input.verifyRunReceipt) continue;
@@ -3363,7 +3364,15 @@ export function createLeaderboardSnapshot(
     );
     // Historical attribution is optional. A rejected replay never removes the
     // independently accepted base review credit.
-    if ("rejection" in replay) continue;
+    if ("rejection" in replay) {
+      retainedRejectedSources.add(event.source.id);
+      overallAttribution.invalidMarkers.push({
+        sourceId: event.source.id,
+        sourceUrl: event.source.url,
+        reason: replay.rejection,
+      });
+      continue;
+    }
     for (const claim of replay.claims) receiptClaims.add(claim);
     event.evidenceBonusBasisPoints = 1_500;
     attributions.push({ ...candidate, run: replay.run });
@@ -3371,10 +3380,14 @@ export function createLeaderboardSnapshot(
   const retainedValidSourceCount =
     attributions.length - overallAttribution.declarations.length;
   const eligibleSourceCount =
-    overallAttribution.coverage.eligibleSourceCount + retainedValidSourceCount;
+    overallAttribution.coverage.eligibleSourceCount +
+    retainedValidSourceCount +
+    retainedRejectedSources.size;
   const validSourceCount =
     overallAttribution.coverage.validSourceCount + retainedValidSourceCount;
-  const invalidSourceCount = overallAttribution.coverage.invalidSourceCount;
+  const invalidSourceCount = new Set(
+    overallAttribution.invalidMarkers.map((marker) => marker.sourceId),
+  ).size;
   const attributionCoverage: AttributionCoverage = {
     ...overallAttribution.coverage,
     status:
@@ -3389,6 +3402,8 @@ export function createLeaderboardSnapshot(
             : "missing",
     eligibleSourceCount,
     validSourceCount,
+    invalidSourceCount,
+    missingSourceCount: eligibleSourceCount - validSourceCount,
   };
   // A receipt can look valid when a review is assessed in isolation but be
   // rejected by the snapshot-wide replay guard because another scored source
