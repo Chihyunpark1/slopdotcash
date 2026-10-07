@@ -256,12 +256,11 @@ test("discovers projects and one points-ranked homepage leaderboard", async ({
   const elizaCard = page.locator('a.project-card[href="/projects/eliza"]');
   await expect(
     elizaCard.getByText("Not funded yet", { exact: true }),
-  ).toBeVisible();
-  await expect(elizaCard.getByText("$5k", { exact: true })).toHaveCount(0);
+  ).toHaveCount(0);
+  await expect(elizaCard.getByText("$5k", { exact: true })).toBeVisible();
+  await expect(elizaCard.getByText("/mo", { exact: true })).toBeVisible();
   await expect(
-    elizaCard.getByText("Target $5k/mo", {
-      exact: true,
-    }),
+    elizaCard.getByText("Vault: Unavailable", { exact: true }),
   ).toBeVisible();
   await expect(elizaCard.getByText("$5,000", { exact: true })).toHaveCount(0);
   await expect(
