@@ -1,3 +1,5 @@
+import { EarningsPage } from "./Earnings";
+import { EscrowFunding } from "./EscrowFunding";
 import { Link, useInitialHashScroll } from "./Link";
 import { CONTACT_EMAIL, CONTACT_MAILTO } from "./lib/contact";
 import { copyText } from "./lib/copy-text";
@@ -157,7 +159,8 @@ interface Route {
     | "cycle-archive"
     | "unknown"
     | "points"
-    | "login";
+    | "login"
+    | "earnings";
   projectId?: string;
   cycleId?: string;
   login?: string;
@@ -171,6 +174,8 @@ function internalRoute(pathname: string): Route {
     return { kind: "unknown" };
   }
   if (segments.length === 0) return { kind: "home" };
+  if (segments.length === 1 && segments[0] === "earnings")
+    return { kind: "earnings" };
   if (segments.length === 1 && segments[0] === "login")
     return { kind: "login" };
   if (segments.length === 1 && segments[0] === "points")
@@ -1199,6 +1204,7 @@ export function ProjectFunding({ project }: { project: ProjectDefinition }) {
     key: string;
     status: "copied" | "error";
   } | null>(null);
+  if (project.escrow) return <EscrowFunding project={project} />;
   const now = Date.now();
   const activeRoutes = project.funding.addresses.filter(
     (route) =>
@@ -4628,6 +4634,7 @@ function AppContent() {
     "home",
     "points",
     "login",
+    "earnings",
     "how-it-works",
     "new-project",
     "wallet",
@@ -4641,6 +4648,7 @@ function AppContent() {
   if (route.kind === "home") content = <HomePage />;
   else if (route.kind === "points") content = <PointsPage />;
   else if (route.kind === "login") content = <LoginPage />;
+  else if (route.kind === "earnings") content = <EarningsPage />;
   else if (route.kind === "how-it-works") content = <HowItWorksPage />;
   else if (route.kind === "sponsors")
     content = <SponsorsPage retry={retry} state={state} />;

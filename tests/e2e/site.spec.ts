@@ -768,9 +768,7 @@ test("creates a valid GitHub-native project handoff", async ({
     .getByLabel("Acceptance criteria")
     .fill("Accepted pull requests with verified tests.");
   await page.getByLabel("Maximum monthly pool, digital dollars").fill("2500");
-  await page
-    .getByLabel("Project-controlled Solana USDC address (optional)")
-    .fill("11111111111111111111111111111111");
+  await page.getByLabel(/Payout network/).selectOption("solana");
 
   const handoff = page.getByRole("link", { name: /Continue on GitHub/u });
   await expect(handoff).toHaveAttribute(
