@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { identityPublicOrigin } from "../workers/identity/contracts";
 import { readBoundedJson, readBoundedText } from "./lib/browser-json";
 import type { CycleIndex } from "./lib/cycle-index";
 import {
@@ -565,15 +566,20 @@ function JoinPoints({
     );
     if (popup) popup.opener = null;
     try {
-      const flow = (await requestJson(
-        "https://identity.slop.cash/v1/oauth/start",
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ audience: "slop-points-web" }),
-          signal: c.signal,
-        },
-      )) as {
+      const identityOrigin = identityPublicOrigin(
+        [
+          "https://staging.slop.cash",
+          "https://slop-staging.pages.dev",
+        ].includes(window.location.origin)
+          ? import.meta.env.VITE_IDENTITY_PUBLIC_ORIGIN
+          : undefined,
+      );
+      const flow = (await requestJson(`${identityOrigin}/v1/oauth/start`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ audience: "slop-points-web" }),
+        signal: c.signal,
+      })) as {
         authorizationUrl: string;
         flowId: string;
         pollCapability: string;
@@ -581,7 +587,7 @@ function JoinPoints({
       };
       const url = new URL(flow.authorizationUrl);
       if (
-        url.origin !== "https://identity.slop.cash" ||
+        url.origin !== identityOrigin ||
         url.pathname !== "/v1/oauth/authorize" ||
         !/^flow_[A-Za-z0-9_-]{20,64}$/.test(flow.flowId) ||
         !/^[A-Za-z0-9_-]{40,128}$/.test(flow.pollCapability) ||
@@ -602,19 +608,16 @@ function JoinPoints({
           }
           c.signal.addEventListener("abort", abort, { once: true });
         });
-        const response = await fetch(
-          "https://identity.slop.cash/v1/oauth/poll",
-          {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              audience: "slop-points-web",
-              flowId: flow.flowId,
-              pollCapability: flow.pollCapability,
-            }),
-            signal: c.signal,
-          },
-        );
+        const response = await fetch(`${identityOrigin}/v1/oauth/poll`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            audience: "slop-points-web",
+            flowId: flow.flowId,
+            pollCapability: flow.pollCapability,
+          }),
+          signal: c.signal,
+        });
         if (response.status === 202) continue;
         if (!response.ok)
           throw new Error("Sign-in expired. Please start again.");

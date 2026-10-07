@@ -135,13 +135,22 @@ export async function onRequest(context: PagesContext): Promise<Response> {
         .split(",")
         .map((id) => id.trim())
         .filter((id) => /^[1-9][0-9]*$/.test(id)),
-      ...(context.env.PAYMENTS_ALLOWED_ORIGIN === "https://staging.slop.cash"
-        ? { allowedOrigins: ["https://staging.slop.cash"] }
+      ...([
+        "https://staging.slop.cash",
+        "https://slop-staging.pages.dev",
+      ].includes(context.env.PAYMENTS_ALLOWED_ORIGIN ?? "")
+        ? { allowedOrigins: [context.env.PAYMENTS_ALLOWED_ORIGIN as string] }
         : {}),
     });
   if (new URL(context.request.url).pathname.startsWith("/api/v1/points/"))
     return handlePointsApi(context.request, {
       db: context.env.SLOP_DB,
+      ...([
+        "https://staging.slop.cash",
+        "https://slop-staging.pages.dev",
+      ].includes(context.env.PAYMENTS_ALLOWED_ORIGIN ?? "")
+        ? { allowedOrigins: [context.env.PAYMENTS_ALLOWED_ORIGIN as string] }
+        : {}),
       rateLimitSecret: context.env.TRACE_AUTH_SECRET,
       identity: context.env.SLOP_IDENTITY,
       x:

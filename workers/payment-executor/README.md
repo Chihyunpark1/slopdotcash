@@ -5,7 +5,7 @@ separate from the public account API and the scheduled payment dispatcher. They
 accept an approved obligation and wallet-claim reference, never caller-supplied
 calldata, amounts, tokens, programs, or arbitrary destinations.
 
-Deploy a separate Worker for each chain and role. The identity attester has only
+Deploy a separate Worker for each test network, isolated database, and role. The identity attester has only
 that chain's test identity key. The gas relayer has only its own test gas key.
 Each Worker has its own SQLite Durable Object journal. The relayer reaches the
 attester through a private service binding. Both roles independently read the
@@ -72,6 +72,7 @@ reviewed deployment registry and an explicitly supplied isolated D1 identity:
 
 ```sh
 node workers/payment-executor/configure.mjs \
+  --network "$TEST_NETWORK" \
   --database-id "$TEST_D1_DATABASE_ID" \
   --database-name "$TEST_D1_DATABASE_NAME" \
   --deployments "$REVIEWED_TEST_DEPLOYMENTS_FILE" \
@@ -80,9 +81,30 @@ node workers/payment-executor/configure.mjs \
 
 This command does not create resources or deploy. Generated configuration has
 `workers_dev: false`, `preview_urls: false`, no routes, and the SQLite Durable
-Object migration. It emits only families present in the reviewed registry.
-Never add a public route. The dispatcher must bind separately to
-`slop-base-relayer-test` and `slop-solana-relayer-test`.
+Object migration. It emits an attester, relayer, and five-minute scheduled dispatcher
+for exactly one network. Every deployment must byte-for-structure match its canonical
+project manifest; empty, invented, mixed-network, and duplicate-project entries fail.
+Use database names `slop-payments-NETWORK` with an optional lowercase suffix, at most
+43 characters. Worker/service names include the complete database name, so separate
+Solana clusters and repeated isolated stacks cannot share keys or journals.
+
+Create a dedicated empty test D1 database using pinned Wrangler `d1 create`, then pass
+its returned ID and name to this command. Never supply a production database ID.
+Inspect the generated JSON and `apply-test-backend.sh` before running it. The apply
+script first bundles all Workers, checks the remote Worker inventory using securely
+supplied `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`, and refuses any existing
+stack. It then applies all repository D1 migrations, deploys the private signers,
+prompts for each role's separate secrets, and creates an inactive dispatcher before
+installing its RPC secrets. The last deploy enables the cron. Failed or partial runs
+must be reconciled explicitly: rerunning will fail closed once a Worker exists.
+This is a fresh-stack installer, not an updater or journal reset tool. Coordinate a
+single release operator to prevent concurrent provisioning races.
+
+The generated `pages-bindings.json` is an integration fragment for an isolated test
+Pages environment, not permission to change an existing staging deployment. Bind its
+`SLOP_DB` to the exact same test D1 as the dispatcher; only one network/database may
+be selected for one frontend environment. Test identity is configured separately as
+below. Never add a public route to a payment signer or dispatcher.
 
 Set secret bindings only through the approved isolated test release process:
 
@@ -117,3 +139,41 @@ reviewed deployed escrow identities, actual test USDC, real GitHub OAuth, hosted
 private Worker deployment, and finalized public receipts. Mainnet enablement,
 production signing operations, lost-identity recovery, donation accounting,
 and independent security review remain separate gates.
+
+## Isolated GitHub login without production identity changes
+
+Use `node workers/identity/configure-test.mjs --public-origin "$TEST_IDENTITY_ORIGIN"
+--database-id "$TEST_IDENTITY_D1_ID" --database-name slop-identity-test
+--output evidence/test-identity`. The origin must be the account's exact
+`https://slop-identity-test.<account-subdomain>.workers.dev` URL. Use a separate
+identity D1 database and dedicated test secrets. No DNS or custom-domain changes are
+needed. This script creates configuration and an exact `oauth-registration.json`;
+it performs no remote operations.
+
+The remaining human registration is a dedicated GitHub OAuth application (or separate
+GitHub App OAuth client) with homepage `https://slop-staging.pages.dev` and callback
+`$TEST_IDENTITY_ORIGIN/v1/oauth/callback`. The existing protocol uses PKCE. Supply its client ID and
+secret as `GITHUB_APP_CLIENT_ID` and `GITHUB_APP_CLIENT_SECRET`; independently generate
+`IDENTITY_STATE_KEY` and `IDENTITY_ASSERTION_KEY` using the existing identity key
+requirements. Never copy production OAuth credentials. With the generated identity
+config, use pinned Wrangler to dry-run, apply D1 migrations remotely, deploy, and set
+those four secrets. The single shared test identity uses the exact database name `slop-identity-test`.
+Its hourly cron cleans expired identity state only and cannot renew production
+private-intake status. Invocation logs are disabled to avoid logging OAuth query data.
+
+Build the isolated frontend with `VITE_IDENTITY_PUBLIC_ORIGIN` set to the same origin.
+Run the identity config generator again with `--frontend-directory <isolated-dist>`
+after the build to replace the generated CSP's identity connect destination with that
+exact origin; source `public/_headers` remains unchanged. Bind test Pages
+`SLOP_IDENTITY` to `slop-identity-test`, set `PAYMENTS_ALLOWED_ORIGIN` to
+`https://slop-staging.pages.dev`, and supply a dedicated `TRACE_AUTH_SECRET` of at least
+32 characters for the login rate limiter. Set `OPERATOR_GITHUB_IDS` only if an operator
+admin test is needed. Production hosts ignore the test frontend override. Test identity
+accepts browser start/poll only from the exact supported staging hosts; production
+identity continues to reject them.
+
+Existing `slop-staging.pages.dev` is owned by another task: coordinate before changing
+its Pages bindings or deploying the isolated artifact. No live OAuth or hosted session
+claim is made until real GitHub sign-in, one-use assertion consumption, same-host cookie,
+wallet control signature, and finalized payout pass there. Use the new login/earnings
+flow; the legacy standalone wallet registration continues to use production identity.
