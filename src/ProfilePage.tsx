@@ -50,6 +50,7 @@ export function ProfilePage({
     return (
       <main className="shell route-main">
         <ProfilePoints
+          key={login.toLowerCase()}
           login={login}
           showIdentity={state.status !== "loading"}
         />
@@ -130,7 +131,12 @@ export function ProfilePage({
       );
     return (
       <main className="shell route-main">
-        <ProfilePoints login={login} cycles={state.cycleIndex} showIdentity />
+        <ProfilePoints
+          key={login.toLowerCase()}
+          login={login}
+          cycles={state.cycleIndex}
+          showIdentity
+        />
       </main>
     );
   }
@@ -225,6 +231,7 @@ export function ProfilePage({
         <Link href="/wallet">Register or update your wallet</Link>
       </ContributorIdentity>
       <ProfilePoints
+        key={login.toLowerCase()}
         actorId={actor.id}
         login={login}
         cycles={state.cycleIndex}
