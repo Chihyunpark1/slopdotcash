@@ -3440,8 +3440,9 @@ describe("scoring and limits", () => {
       reviews: [
         {
           id: "REVIEW_1",
-          body: "The failure path is now covered and the assertion is specific.",
-          state: "APPROVED",
+          body: "The failure path still needs coverage and a specific assertion.",
+          state: "CHANGES_REQUESTED",
+          commitId: "a".repeat(40),
           submittedAt: "2026-07-10T11:00:00.000Z",
           url: "https://github.com/elizaOS/eliza/pull/1#pullrequestreview-1",
           author: reviewer,
@@ -3449,10 +3450,21 @@ describe("scoring and limits", () => {
         },
         {
           id: "REVIEW_2",
-          body: "A second approval must not add another review award.",
+          body: "The corrected failure path now has the specific assertion requested.",
+          commitId: "b".repeat(40),
           state: "APPROVED",
           submittedAt: "2026-07-10T11:30:00.000Z",
           url: "https://github.com/elizaOS/eliza/pull/1#pullrequestreview-2",
+          author: reviewer,
+          inlineCommentCount: 0,
+        },
+        {
+          id: "REVIEW_3",
+          body: "This repeated approval on the same commit adds no work unit.",
+          state: "APPROVED",
+          commitId: "b".repeat(40),
+          submittedAt: "2026-07-10T11:40:00.000Z",
+          url: "https://github.com/elizaOS/eliza/pull/1#pullrequestreview-3",
           author: reviewer,
           inlineCommentCount: 0,
         },
@@ -3506,6 +3518,43 @@ describe("scoring and limits", () => {
     });
     expect(reporterEntry?.score).toBe(4);
     expect(snapshot.ledger).toHaveLength(9);
+    const event = snapshot.ledger.find(
+      (row) => row.category === "substantive-review",
+    );
+    expect(event?.reviewHistory).toEqual(
+      pr.reviews.slice(0, 2).map((review) => ({
+        sourceId: review.id,
+        state: review.state,
+        commitId: review.commitId,
+        submittedAt: review.submittedAt,
+        url: review.url,
+      })),
+    );
+    expect(() => assertLeaderboardSnapshot(snapshot)).not.toThrow();
+    const duplicateHead = structuredClone(snapshot);
+    const history = duplicateHead.ledger.find(
+      (row) => row.category === "substantive-review",
+    )?.reviewHistory;
+    if (!history) throw new Error("Missing review history");
+    history[1].commitId = history[0].commitId;
+    expect(() => assertLeaderboardSnapshot(duplicateHead)).toThrow(
+      "repeats a source or reviewed commit",
+    );
+    const withoutLaterDecision = createLeaderboardSnapshot(
+      input({
+        mergedPullRequests: [{ ...pr, reviews: pr.reviews.slice(0, 1) }],
+        resolvedIssues: [resolved],
+        verifiedEvidence: verifiedPullRequestEvidence([pr]),
+      }),
+    );
+    const withoutHistory = structuredClone(snapshot);
+    for (const row of withoutHistory.ledger) delete row.reviewHistory;
+    expect(withoutHistory.ledger).toEqual(withoutLaterDecision.ledger);
+    expect(
+      withoutLaterDecision.ledger.find(
+        (row) => row.category === "substantive-review",
+      )?.reviewHistory,
+    ).toBeUndefined();
   });
 
   it("excludes bots, self-reviews, and reviews after merge", () => {
