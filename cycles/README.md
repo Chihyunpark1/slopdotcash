@@ -40,6 +40,8 @@ from the validated cycle index. This compact funding history ships with the
 application so homepage project cards never wait for the ledger or cycle fetch.
 `cycles:check` rejects a stale copy; refresh timestamps are excluded so scheduled
 data refreshes preserve application asset bytes.
+Monthly close and selected-cycle proposal workflows include the regenerated
+history in their review PRs. Existing immutable cycle files stay unchanged.
 
 The trusted project-transition gate executes from the immutable base commit.
 For each newly added monthly proposal it requires the frozen funding basis to
