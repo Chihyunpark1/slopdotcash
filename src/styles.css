@@ -3336,10 +3336,6 @@ small {
   line-height: 1.6;
 }
 
-.model-outcomes-table th[scope="row"] {
-  font-weight: 700;
-}
-
 .model-identity {
   font-family: var(--brand-font-data);
   white-space: nowrap;
@@ -3348,11 +3344,6 @@ small {
 .model-identity > span {
   color: var(--muted);
   font-weight: 400;
-}
-
-.model-identity-list {
-  font-family: var(--brand-font-data);
-  min-width: 220px;
 }
 
 .model-share-high {
@@ -3865,5 +3856,76 @@ small {
   .receipt-record summary > svg {
     grid-column: 2;
     grid-row: 1 / 3;
+  }
+}
+
+.model-outcome-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.model-outcome-list > li {
+  border-top: 1px solid var(--line);
+  padding: 20px 0;
+}
+.model-outcome-list h3 {
+  margin: 0 0 12px;
+  font-size: 17px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.model-outcome-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  font-size: 14px;
+}
+.model-outcome-bar {
+  height: 6px;
+  background: var(--line);
+  margin: 12px 0;
+}
+.model-outcome-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--ink);
+}
+.model-outcome-details {
+  margin-top: 12px;
+  font-size: 14px;
+}
+.model-outcome-details summary,
+.model-clients > summary {
+  cursor: pointer;
+  min-height: 44px;
+  padding-block: 12px;
+}
+.model-outcome-details dl {
+  margin: 0;
+}
+.model-outcome-details dl > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  gap: 12px;
+  padding-block: 8px;
+}
+.model-outcome-details dt {
+  color: var(--muted);
+}
+.model-outcome-details dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.model-outcome-details ul {
+  padding-left: 16px;
+}
+.model-clients > summary {
+  font-size: 24px;
+  font-weight: 700;
+}
+@media (max-width: 650px) {
+  .model-outcome-details dl > div {
+    grid-template-columns: 1fr;
+    gap: 4px;
   }
 }

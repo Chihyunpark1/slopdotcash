@@ -4236,7 +4236,7 @@ function ModelsPage({ state, retry }: { state: DataState; retry: () => void }) {
   return (
     <main className="shell evidence-page">
       <section className="evidence-page-hero">
-        <h1>Which models merge. By the receipts.</h1>
+        <h1>Models</h1>
         <p>
           Accepted work, grouped by self-reported model. Declarations and device
           signatures do not verify the provider or change the score.
@@ -4257,6 +4257,10 @@ function ModelOutcomes({ summary }: { summary: ModelOutcomeSummary }) {
   const modelRows = summary.models
     .filter((row) => row.mergedPullRequests > 0 || row.acceptedReviews > 0)
     .slice(0, 30);
+  const largestMergedCount = Math.max(
+    1,
+    ...modelRows.map((row) => row.mergedPullRequests),
+  );
   const concentrated = modelRows.filter(
     (row) =>
       row.mergedPullRequests >= 40 && (row.topContributorShare ?? 0) > 0.5,
@@ -4310,42 +4314,27 @@ function ModelOutcomes({ summary }: { summary: ModelOutcomeSummary }) {
       <section className="model-outcomes-section">
         <h2>Accepted outcomes by model</h2>
         <p>
-          A pull request counts for a model when its author declared that model
-          on the pull request; a review counts when the reviewer declared it on
-          the review. Declarations by anyone else never count. PR share uses all
-          merged PRs in this snapshot, including those without a declared model.
-          A PR naming several models counts once for each, so shares overlap.
-          The busiest contributor column counts that person’s outcomes for this
-          model; it is not the model’s share of all work.
+          Counts use declarations by the person who authored the work. Bars
+          compare merged PR counts. Shares include all merged PRs and can
+          overlap for multi-model work.
         </p>
-        <section
-          className="plain-table-wrap"
+        <ol
+          className="model-outcome-list"
           aria-label="Accepted outcomes by model"
-          // biome-ignore lint/a11y/noNoninteractiveTabindex: Keyboard access is required to scroll this overflow region.
-          tabIndex={0}
         >
-          <table className="plain-table model-outcomes-table">
-            <thead>
-              <tr>
-                <th scope="col">Model</th>
-                <th scope="col">Merged PRs</th>
-                <th scope="col">Share of all merged PRs</th>
-                <th scope="col">Signed PRs</th>
-                <th scope="col">PR points</th>
-                <th scope="col">Accepted reviews</th>
-                <th scope="col">Declaring contributors</th>
-                <th scope="col">Outcomes from busiest contributor</th>
-              </tr>
-            </thead>
-            <tbody>
-              {modelRows.map((row) => (
-                <tr key={row.key}>
-                  <th className="model-identity" scope="row">
-                    <span>{row.provider}/</span>
-                    {row.model}
-                  </th>
-                  <td>{count.format(row.mergedPullRequests)}</td>
-                  <td>
+          {modelRows.map((row) => (
+            <li key={row.key}>
+              <h3 className="model-identity">
+                <span>{row.provider}/</span>
+                {row.model}
+              </h3>
+              <div className="model-outcome-metrics">
+                <span>
+                  <strong>{count.format(row.mergedPullRequests)}</strong> merged
+                  PRs
+                </span>
+                <span>
+                  <strong>
                     {totals.mergedPullRequests === 0
                       ? "n/a"
                       : row.mergedPullRequests > 0 &&
@@ -4354,98 +4343,144 @@ function ModelOutcomes({ summary }: { summary: ModelOutcomeSummary }) {
                             0.1
                         ? "<0.1%"
                         : `${((100 * row.mergedPullRequests) / totals.mergedPullRequests).toFixed(1)}%`}
-                  </td>
-                  <td>
-                    {row.signedPullRequests > 0 ? (
-                      <Link href={`/receipts?q=${encodeURIComponent(row.key)}`}>
-                        {count.format(row.signedPullRequests)}
-                      </Link>
-                    ) : (
-                      "none"
-                    )}
-                  </td>
-                  <td>{points(row.pullRequestPoints)}</td>
-                  <td>{count.format(row.acceptedReviews)}</td>
-                  <td>{count.format(row.contributors)}</td>
-                  <td
-                    className={
-                      (row.topContributorShare ?? 0) > 0.5
-                        ? "model-share-high"
-                        : undefined
-                    }
-                  >
-                    {row.topContributorShare === null
-                      ? "n/a"
-                      : `${count.format(row.topContributorOutcomes)} of ${count.format(row.mergedPullRequests + row.acceptedReviews)} outcomes`}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
+                  </strong>{" "}
+                  of all merged PRs
+                </span>
+                <span>
+                  <strong>{count.format(row.acceptedReviews)}</strong> accepted
+                  reviews
+                </span>
+              </div>
+              <div className="model-outcome-bar" aria-hidden="true">
+                <span
+                  style={{
+                    width: `${(100 * row.mergedPullRequests) / largestMergedCount}%`,
+                  }}
+                />
+              </div>
+              <details className="model-outcome-details">
+                <summary>Evidence and diagnostics</summary>
+                <dl>
+                  <div>
+                    <dt>Signed PRs</dt>
+                    <dd>
+                      {row.signedPullRequests > 0 ? (
+                        <Link
+                          href={`/receipts?q=${encodeURIComponent(row.key)}`}
+                        >
+                          {count.format(row.signedPullRequests)}
+                        </Link>
+                      ) : (
+                        "none"
+                      )}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>PR points</dt>
+                    <dd>{points(row.pullRequestPoints)}</dd>
+                  </div>
+                  <div>
+                    <dt>Declaring contributors</dt>
+                    <dd>{count.format(row.contributors)}</dd>
+                  </div>
+                  <div>
+                    <dt>Outcomes from busiest contributor</dt>
+                    <dd
+                      className={
+                        (row.topContributorShare ?? 0) > 0.5
+                          ? "model-share-high"
+                          : undefined
+                      }
+                    >
+                      {row.topContributorShare === null
+                        ? "n/a"
+                        : `${count.format(row.topContributorOutcomes)} of ${count.format(row.mergedPullRequests + row.acceptedReviews)} outcomes`}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Exact declarations</dt>
+                    <dd>
+                      <ul>
+                        {row.declaredAs.map((declaration) => (
+                          <li key={declaration.identifier}>
+                            <code>{declaration.identifier}</code> (
+                            {count.format(declaration.count)})
+                          </li>
+                        ))}
+                      </ul>
+                    </dd>
+                  </div>
+                </dl>
+              </details>
+            </li>
+          ))}
+        </ol>
         <p className="model-outcomes-note">
           {count.format(totals.distinctDeclaredIdentifiers)} distinct declared
           strings fold to {count.format(totals.distinctModels)} models by case
           and a short provider alias list. Some rows are still one model under
-          two names. The table shows models with at least one accepted outcome,
-          up to 30.
+          two names. Bars compare merged PR counts. The list shows models with
+          at least one accepted outcome, up to 30.
         </p>
       </section>
 
-      <section className="model-outcomes-section">
-        <h2>Harnesses, from signed receipts only</h2>
+      <details className="model-outcomes-section model-clients">
+        <summary>Clients from signed receipts</summary>
         <p>
-          The client is known only when a run receipt exists, so this table
-          covers signed runs. Output tokens come from receipts that report exact
-          usage.
+          Client counts cover signed runs only. Output tokens use receipts with
+          exact usage.
         </p>
         {summary.clients.length === 0 ? (
           <EmptyState text="No signed receipts in this snapshot." />
         ) : (
-          <section
-            className="plain-table-wrap"
-            aria-label="Harness outcomes"
-            // biome-ignore lint/a11y/noNoninteractiveTabindex: Keyboard access is required to scroll this overflow region.
-            tabIndex={0}
-          >
-            <table className="plain-table model-outcomes-table">
-              <thead>
-                <tr>
-                  <th scope="col">Harness</th>
-                  <th scope="col">Signed runs</th>
-                  <th scope="col">Contributors</th>
-                  <th scope="col">Models on those runs</th>
-                  <th scope="col">Merged PRs</th>
-                  <th scope="col">Median output tokens</th>
-                </tr>
-              </thead>
-              <tbody>
-                {summary.clients.map((row) => (
-                  <tr key={row.client}>
-                    <th className="model-identity" scope="row">
-                      {row.client}
-                    </th>
-                    <td>{count.format(row.signedRuns)}</td>
-                    <td>{count.format(row.contributors)}</td>
-                    <td className="model-identity-list">
-                      {row.models
-                        .slice(0, 3)
-                        .map((entry) => `${entry.key} (${entry.count})`)
-                        .join(", ")}
-                    </td>
-                    <td>{count.format(row.mergedPullRequests)}</td>
-                    <td>
-                      {row.medianOutputTokens === null
-                        ? "not reported"
-                        : `${count.format(row.medianOutputTokens)} (${row.runsWithExactUsage} runs)`}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </section>
+          <ul className="model-outcome-list" aria-label="Client outcomes">
+            {summary.clients.map((row) => (
+              <li key={row.client}>
+                <h3 className="model-identity">{row.client}</h3>
+                <div className="model-outcome-metrics">
+                  <span>
+                    <strong>{count.format(row.signedRuns)}</strong> signed runs
+                  </span>
+                  <span>
+                    <strong>{count.format(row.mergedPullRequests)}</strong>{" "}
+                    merged PRs
+                  </span>
+                  <span>
+                    <strong>{count.format(row.contributors)}</strong>{" "}
+                    contributors
+                  </span>
+                </div>
+                <details className="model-outcome-details">
+                  <summary>Models and usage</summary>
+                  <dl>
+                    <div>
+                      <dt>Declared models</dt>
+                      <dd>
+                        <ul>
+                          {row.models.map((model) => (
+                            <li key={model.key}>
+                              <code>{model.key}</code> (
+                              {count.format(model.count)})
+                            </li>
+                          ))}
+                        </ul>
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Median output tokens</dt>
+                      <dd>
+                        {row.medianOutputTokens === null
+                          ? "not reported"
+                          : `${count.format(row.medianOutputTokens)} (${count.format(row.runsWithExactUsage)} runs)`}
+                      </dd>
+                    </div>
+                  </dl>
+                </details>
+              </li>
+            ))}
+          </ul>
         )}
-      </section>
+      </details>
 
       <section className="model-outcomes-section">
         <h2>Read before quoting</h2>

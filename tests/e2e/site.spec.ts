@@ -1206,9 +1206,14 @@ test("finds a receipt and opens its full evidence and GitHub contribution", asyn
   const entry = snapshot.attributions.find((entry) => entry.run !== null);
   await page.goto("/models", { waitUntil: "networkidle" });
   const modelReceipts = page
-    .locator('.model-outcomes-table a[href^="/receipts?q="]')
+    .locator('.model-outcome-details a[href^="/receipts?q="]')
     .first();
   if (await modelReceipts.count()) {
+    await modelReceipts
+      .locator("xpath=ancestor::details")
+      .locator("summary")
+      .focus();
+    await page.keyboard.press("Enter");
     await modelReceipts.click();
     await expect(page).toHaveURL(/\/receipts\?q=/u);
     await expect(
@@ -1348,49 +1353,57 @@ test("opens the models page directly and through keyboard navigation", async ({
   await page.goto("/models", { waitUntil: "networkidle" });
   await expect(
     page.getByRole("heading", {
-      name: "Which models merge. By the receipts.",
+      name: "Models",
       exact: true,
     }),
   ).toBeVisible();
   await page.reload({ waitUntil: "networkidle" });
   await expect(
     page.getByRole("heading", {
-      name: "Which models merge. By the receipts.",
+      name: "Models",
       exact: true,
     }),
   ).toBeVisible();
-  const tableRegion = page.getByRole("region", {
+  const outcomes = page.getByRole("list", {
     name: "Accepted outcomes by model",
     exact: true,
   });
+  const firstModel = outcomes.locator(":scope > li").first();
+  await expect(firstModel).toBeVisible();
+  const metrics = firstModel.locator(".model-outcome-metrics");
+  await expect(metrics).toContainText("merged PRs");
+  await expect(metrics).toContainText("of all merged PRs");
+  await expect(metrics).toContainText("accepted reviews");
+  const bounds = await metrics.boundingBox();
+  expect(bounds).not.toBeNull();
+  expect(bounds?.x).toBeGreaterThanOrEqual(0);
+  expect((bounds?.x ?? 0) + (bounds?.width ?? 0)).toBeLessThanOrEqual(
+    page.viewportSize()?.width ?? 0,
+  );
+  const disclosure = firstModel.locator("summary");
+  await disclosure.focus();
+  await page.keyboard.press("Enter");
   await expect(
-    tableRegion.getByRole("columnheader", {
-      name: "Share of all merged PRs",
-      exact: true,
-    }),
+    firstModel.getByText("Exact declarations", { exact: true }),
   ).toBeVisible();
   await expect(
-    tableRegion.getByRole("columnheader", {
-      name: "Top contributor share",
-      exact: true,
-    }),
-  ).toHaveCount(0);
-  const firstModel = tableRegion.locator("tbody tr").first();
-  await expect(firstModel.locator("td").nth(6)).toHaveText(
-    /\d[\d,]* of \d[\d,]* outcomes/,
-  );
-  await tableRegion.focus();
-  await expect(tableRegion).toBeFocused();
-  if (
-    await tableRegion.evaluate(
-      (element) => element.scrollWidth > element.clientWidth,
-    )
-  ) {
-    await page.keyboard.press("ArrowRight");
-    await expect
-      .poll(() => tableRegion.evaluate((element) => element.scrollLeft))
-      .toBeGreaterThan(0);
-  }
+    firstModel
+      .locator("dd")
+      .filter({ hasText: /\d[\d,]* of \d[\d,]* outcomes/ }),
+  ).toBeVisible();
+  const clients = page.locator(".model-clients > summary");
+  await clients.focus();
+  await page.keyboard.press("Enter");
+  await expect(
+    page.getByRole("list", { name: "Client outcomes", exact: true }),
+  ).toBeVisible();
+  const client = page
+    .locator(".model-clients .model-outcome-list > li")
+    .first();
+  await client.locator("summary").press("Enter");
+  await expect(
+    client.getByText("Median output tokens", { exact: true }),
+  ).toBeVisible();
   await testInfo.attach("models-page", {
     body: await page.screenshot({ fullPage: true }),
     contentType: "image/png",
@@ -1404,7 +1417,7 @@ test("opens the models page directly and through keyboard navigation", async ({
   await page.goBack({ waitUntil: "networkidle" });
   await expect(
     page.getByRole("heading", {
-      name: "Which models merge. By the receipts.",
+      name: "Models",
       exact: true,
     }),
   ).toBeVisible();
