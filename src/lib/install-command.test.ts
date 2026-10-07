@@ -559,7 +559,7 @@ describe("authenticated skill installer lifecycle", () => {
       join(staleRoot, "install"),
     );
     expect(rejected.status).not.toBe(0);
-    expect(rejected.stderr).toContain("bytes differ from current develop");
+    expect(rejected.stderr).toContain("bytes differ from current main");
   });
 
   it("rejects changed ancestor skills even after a successful release and rejects revocation", () => {
@@ -600,7 +600,7 @@ describe("authenticated skill installer lifecycle", () => {
         expect(installed.stderr).toContain("explicitly revoked");
       } else {
         expect(installed.status).not.toBe(0);
-        expect(installed.stderr).toContain("bytes differ from current develop");
+        expect(installed.stderr).toContain("bytes differ from current main");
         expect(
           existsSync(
             join(root, "install", "codex", "skills", "contribute-to-eliza"),
@@ -695,7 +695,7 @@ describe("authenticated skill installer lifecycle", () => {
     ]) {
       const stale = invoke(args);
       expect(stale.status).not.toBe(0);
-      expect(stale.stderr).toContain("bytes differ from current develop");
+      expect(stale.stderr).toContain("bytes differ from current main");
       expect(stale.stderr).toContain(revisionA);
     }
     const historical = invoke(["finish", ...identity, "--run", runId]);
@@ -767,7 +767,7 @@ describe("authenticated skill installer lifecycle", () => {
       const rejected = run(command(artifact, authority), join(root, "install"));
       expect(rejected.status, label).not.toBe(0);
       expect(rejected.stderr, label).toContain(
-        "neither the current canonical develop skill",
+        "neither the current canonical main skill",
       );
     }
 
@@ -931,7 +931,7 @@ describe("authenticated skill installer lifecycle", () => {
     );
     expect(withdrawnRollback.status).not.toBe(0);
     expect(withdrawnRollback.stderr).toContain(
-      "neither the current canonical develop skill",
+      "neither the current canonical main skill",
     );
     expect(currentLink(installRoot)).toBe(
       `.contribute-to-eliza-versions/${revisionD}`,
@@ -1000,7 +1000,7 @@ describe("authenticated skill installer lifecycle", () => {
     });
     expect(withdrawnCurrent.status).not.toBe(0);
     expect(withdrawnCurrent.stderr).toContain(
-      "neither the current canonical develop skill",
+      "neither the current canonical main skill",
     );
     expect(currentLink(installRoot)).toBe(
       `.contribute-to-eliza-versions/${revisionC}`,
@@ -1107,7 +1107,7 @@ describe("authenticated skill installer lifecycle", () => {
       SLOP_SKILL_REVISION: revisionA,
     });
     expect(stale.status).not.toBe(0);
-    expect(stale.stderr).toContain("bytes differ from current develop");
+    expect(stale.stderr).toContain("bytes differ from current main");
     expect(currentLink(installRoot)).toBe(
       `.contribute-to-eliza-versions/${revisionB}`,
     );

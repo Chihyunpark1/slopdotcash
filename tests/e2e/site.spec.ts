@@ -8,8 +8,8 @@ import { createHash } from "node:crypto";
 import AxeBuilder from "@axe-core/playwright";
 import { type APIRequestContext, test as base, expect } from "@playwright/test";
 import { assertCycleIndex, type CycleIndex } from "../../src/lib/cycle-index";
-import { homeProjects } from "../../src/lib/home-projects";
 import { deploymentOrigins, deploymentTier } from "../../src/lib/deployment";
+import { homeProjects } from "../../src/lib/home-projects";
 import {
   assertLeaderboardSnapshot,
   type LeaderboardSnapshot,
