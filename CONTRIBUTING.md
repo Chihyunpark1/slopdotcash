@@ -35,23 +35,38 @@ of blocking defects. A merged PR, a local test pass, partial rollout, or an
 agent's statement cannot close the MVP. After that record is approved, humans
 select and approve the next PRD phase before agents implement it.
 
-## Human-written outside issues only
+## Human-responsible outside issues
 
-Contributors must personally write and submit outside issues through the
-website's issue form. This covers GitHub issues in this repository and target
-projects, the Slop site, and third-party issue trackers. Agents and bots are
-banned from authoring, drafting ready-to-submit issue text, creating, opening,
-or submitting these issues, including through a browser, CLI, API, script,
-batch import, or prefilled issue URL. A human clicking Submit on agent-written
-text does not satisfy this rule. Do not route issue creation through another
-agent or automation.
+This rule covers Slop participation issues: issues in this repository, and
+issues on a target project or any other tracker that claim Slop participation
+or carry `Made via @slopdotcash`. Slop decides eligibility for its own score,
+review and listings; it does not govern unrelated activity on third-party
+trackers.
 
-Agents may read existing issues, inspect the PRD/MVP, investigate defects, and
-explain findings privately to the contributor. The human must independently
-write the issue and submit it by hand on the site. This restriction concerns
-issue authorship and creation; it does not prohibit authorized PR work or
-review of existing issues. Future private security-report automation requires
-its separately approved phase and is not an exception for public issues.
+Banned: unattended generation of issue text, bulk or batch issue creation,
+delegated submission (an agent, bot, script, API call, CLI, browser automation
+or prefilled issue URL opening or submitting the issue), and submitting a
+report the human has not read, verified and understood. A human clicking
+Submit on text they did not review does not satisfy this rule.
+
+Allowed under human control: reading existing issues, inspecting the PRD and
+MVP plan, investigating defects, outlining, explaining findings to the
+contributor, translation, grammar and spelling correction, accessibility
+tools, and checking sources. The human chooses the claims, verifies the
+evidence, settles the final text and submits it personally on the website.
+This restriction concerns issue authorship and creation; it does not prohibit
+authorized PR work or review of existing issues. Future private
+security-report automation requires its separately approved phase and is not
+an exception for public issues.
+
+Writing style, language fluency, model attribution on other work, or the use
+of editing or translation tools is not evidence of a breach. An adverse
+decision (hold, exclusion, restriction) needs objective evidence of a banned
+act, such as automation records, bulk patterns or delegated submission,
+states that evidence, and carries the appeal path in the eligibility policy.
+
+This rule applies to issues opened on or after 2026-10-15T00:00:00Z. Issues
+accepted before that date keep their state and credit.
 
 Before writing an issue, the contributor must review the PRD and MVP plan,
 check for existing work, and state the affected requirement, evidence, and
