@@ -674,6 +674,9 @@ const MORE_FILES_QUERY = `
   query LeaderboardMoreFiles($id: ID!, $after: String!) {
     node(id: $id) {
       ... on PullRequest {
+        state
+        isDraft
+        headRefOid
         files(first: 100, after: $after) { ${FILE_FIELDS} }
       }
     }
@@ -2199,10 +2202,20 @@ async function completePullRequestConnections(
       id: pullRequest.id,
       after: filesState.pageInfo.endCursor,
     });
-    const page = parseFiles(
-      child(data, "node", "data").files,
-      "data.node.files",
-    );
+    const node = child(data, "node", "data");
+    if (
+      node.files === null &&
+      parsed.state === "OPEN" &&
+      pullRequest.isDraft &&
+      node.state === "OPEN" &&
+      node.isDraft === true &&
+      node.headRefOid === pullRequest.headRefOid
+    ) {
+      // A later page can become unavailable too. Discard the partial diff.
+      pullRequest.files = null;
+      break;
+    }
+    const page = parseFiles(node.files, "data.node.files");
     if (pullRequest.files === null) {
       throw new Error(`PR #${pullRequest.number} file detail is unavailable`);
     }
@@ -2231,7 +2244,8 @@ async function completePullRequestConnections(
 
   pullRequest.closingIssueIds = [...new Set(pullRequest.closingIssueIds)];
   if (
-    pullRequest.files?.length !== parsed.pages.files?.totalCount ||
+    (pullRequest.files !== null &&
+      pullRequest.files.length !== parsed.pages.files?.totalCount) ||
     pullRequest.closingIssueIds.length !== parsed.pages.closingIssues.totalCount
   ) {
     throw new Error(

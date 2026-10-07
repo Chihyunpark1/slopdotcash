@@ -2234,6 +2234,12 @@ describe("current-head review selection", () => {
             },
           };
         }
+        if (document.includes("query LeaderboardMoreFiles")) {
+          if (variables?.id !== "PR_DRAFT") {
+            throw new Error("unexpected paginated file owner");
+          }
+          return { node: { ...details.get("PR_DRAFT"), files: null } };
+        }
         if (document.includes("query LeaderboardReviewInlineComments")) {
           const ids = variables?.ids;
           if (!Array.isArray(ids)) {
@@ -2320,6 +2326,24 @@ describe("current-head review selection", () => {
       generateLeaderboardFromGitHub(client, { now }),
     ).rejects.toThrow("files must be an object");
     draft.state = "OPEN";
+
+    // GitHub also returns an initial oversized-diff page followed by null.
+    Object.assign(draft, {
+      files: {
+        totalCount: 2,
+        pageInfo: { hasNextPage: true, endCursor: "FILE_CURSOR" },
+        nodes: [{ path: "partial.ts", additions: 1, deletions: 0 }],
+      },
+    });
+    const paginatedDraft = await generateLeaderboardFromGitHub(client, { now });
+    expect(paginatedDraft.workQueue).toEqual(snapshot.workQueue);
+    expect(paginatedDraft.opportunities).toEqual(snapshot.opportunities);
+    expect(paginatedDraft.source.counts).toEqual(snapshot.source.counts);
+    draft.isDraft = false;
+    await expect(
+      generateLeaderboardFromGitHub(client, { now }),
+    ).rejects.toThrow("files must be an object");
+    draft.isDraft = true;
 
     paginatedHead = previousHead;
     await expect(
