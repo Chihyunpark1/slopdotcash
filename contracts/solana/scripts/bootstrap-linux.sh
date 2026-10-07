@@ -22,5 +22,7 @@ export PATH="$install_dir/anchor/bin:$PATH"
 printf '%s\n' "$install_dir/anchor/bin" >> "$GITHUB_PATH"
 [[ "$(anchor --version)" == 'anchor-cli 0.32.1' ]]
 # test-local.sh passes --tools-version v1.52; build-sbf installs its pinned SBF Rust.
+# Agave 2.1.21 enumerates this directory before installing platform-tools.
+mkdir -p "$HOME/.cache/solana"
 # Host IDL compilation uses this fixed Rust toolchain as well.
 printf '%s\n' 'RUSTUP_TOOLCHAIN=1.89.0' >> "$GITHUB_ENV"
