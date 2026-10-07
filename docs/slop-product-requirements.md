@@ -254,7 +254,7 @@ For the initial design, reserve donor-class funds for awards before refundable s
 
 If the project closes, donor funds remain restricted while existing obligations settle. The default is no discretionary operator sweep. Any future wind-down transfer to another project requires terms established before deposit and the specified approval; otherwise keep the balance restricted. This is a contract-design requirement missing from the simpler single-sponsor payout proposal.
 
-**FND-05 — Accounting.** Publish deposited USDC, free reward funding, reserved contributor principal, reserved payout fees, contributor-paid principal, platform fees, and refunded sponsor funds separately. Do not add an external commitment, a vault deposit, and its payout into one “funding” total. Record exact integers and provenance; formatted currency is presentation only.
+**FND-05 — Accounting.** Publish deposited USDC, gross awards, free reward funding, reserved net contributor principal, reserved payout fees, contributor-paid principal, platform fees, and refunded sponsor funds separately. Do not add an external commitment, a vault deposit, and its payout into one “funding” total. Record exact integers and provenance; formatted currency is presentation only.
 
 ## 12 Payouts and vault architecture
 
@@ -262,7 +262,7 @@ If the project closes, donor funds remain restricted while existing obligations 
 
 Retain legacy settlement for its existing obligations. For new protected-vault projects, use a small per-obligation contract/program on each supported chain, a shared accounting specification, human-approved allocations, contributor-signed destination binding, project-operated or permissionless execution, and a finalized-event indexer. Slop holds no key that can originate, route or redirect a payment. Reuse existing allocation and verification code rather than creating a second financial ledger.
 
-The existing Base/Solana architecture proposal recommends protected walletless awards, sponsored dispatch, 2% payout fees, and a 10% unused-fund withdrawal fee. Those are proposed policy changes, not the current 1% monthly-pool contract. Section 18 evaluates the fee choices; section 22 records the approval gates.
+The Base/Solana architecture proposal covers protected walletless awards, sponsored dispatch, the maintainer-approved 2% gross-award deduction, and a 10% unused-fund withdrawal fee. These prospective obligations are distinct from the current 1% monthly-pool contract. Section 18 records fee incidence and remaining commercial decisions; section 22 records implementation and activation gates.
 
 | Approach | Useful properties | Limit for this product |
 | --- | --- | --- |
@@ -280,7 +280,7 @@ Squads separates proposal, vote, and execution permissions; that is useful gover
 
 **PAY-02.** Retain deterministic cycle generation, full source coverage, immutable GitHub IDs, scoring-rule version, monthly principal cap, integer largest-remainder allocation, and a 14-day proposal review. No activity produces a zero-award cycle. Rollovers do not increase a subsequent cap. Amount corrections append a successor and require the applicable renewed review.
 
-**PAY-03.** Before commitment, verify current approval authority, funding, exclusions, conflicts, active policy, and all immutable source bindings. Owners authorize amounts. The vault rejects commitments exceeding eligible free funding and reserves contributor principal plus fees. Partial batch commitment is reported as partial; it cannot make the whole cycle “funded.”
+**PAY-03.** Before commitment, verify current approval authority, funding, exclusions, conflicts, active policy, and all immutable source bindings. Owners authorize amounts. The vault rejects commitments exceeding eligible free funding. For new obligations under the approved 2% policy, reserve the gross award as net contributor principal plus its deducted fee; do not add the fee a second time. Partial batch commitment is reported as partial; it cannot make the whole cycle “funded.”
 
 **PAY-04.** Automatic mode means automatic execution of already approved and funded obligations. It does not mean automatic award approval. A limited relayer pays gas and invokes a constrained payment operation; it cannot select arbitrary recipients, alter amounts, refund reserves, or approve work. The relayer key is held by the project or by a permissionless executor, never by Slop: Slop operates no key, service or scheduled job that originates a transfer of funds. Manual mode requires a human execution trigger or supported external signer, but uses the same obligation IDs, fee rules, destination binding, and verifier. Switching modes must not replay payments.
 
@@ -294,7 +294,7 @@ Squads separates proposal, vote, and execution permissions; that is useful gover
 
 ### Accounting example
 
-Under the sponsor-paid 2% fee, a 100 USDC contributor award reserves 102 USDC: 100 principal and 2 fee. With 1,000 USDC deposited, committing awards of 100 and 50 reserves 153 and leaves 847 free. Paying the first releases 100 to the contributor and 2 to Slop; 51 remains reserved for the walletless actor. A later wallet connection pays 50 plus its 1 fee once. The 847 is refundable only to the extent it is sponsor-class money. Donation-class funds remain reward-restricted.
+Under the maintainer-approved 2% deduction, a 100 USDC gross award reserves 100 USDC: 98 net contributor principal and 2 fee. With 1,000 USDC deposited, committing gross awards of 100 and 50 reserves 150 and leaves 850 free. Paying the first releases 98 to the contributor and 2 to Slop; 50 remains reserved for the walletless actor. A later wallet connection pays 49 to that contributor and its 1 fee once. The 850 is refundable only to the extent it is sponsor-class money. Donation-class funds remain reward-restricted. Show gross award, fee and net contributor amount separately; contributor earnings use the net amount. Existing obligations retain their recorded fee policy.
 
 Fee calculations use integer micro-USDC and a documented rounding rule frozen per obligation. The proposal recommends one combined principal obligation per actor, project, and cycle, with its fee rounded down once. Splitting execution into transactions cannot reduce that fee or mint a second obligation. Minimum fees or batch-level rounding must not be silently substituted. Test total conservation, tiny amounts, maximum values, and batch retries.
 
@@ -621,9 +621,9 @@ Maintain tested backup/restore procedures for account and journal metadata, dura
 
 The inspected monthly-pool code uses a 1% platform fee. External-prize policy has its own 10% allocation; that is neither a new vault withdrawal fee nor a security-bounty split. Preserve historical fee semantics.
 
-The separate payout proposal calls for a 2% fee on contributor payouts and 10% on returned unused sponsor funds. Incidence is sponsor-paid on top: a promised 100 USDC award delivers 100, while the project reserves 102 plus separate network costs. The fee is reserved beside principal and paid to Slop as its own transfer; it is never deducted from a contributor's award. Make this explicit in setup, approval, funding, and receipts.
+The maintainer confirmed that the new 2% payout fee is deducted from the amount that would otherwise go to the contributor. A 100 USDC gross award reserves 100: the contributor receives 98 and Slop receives 2. Network costs remain separate. Show the gross award, deducted fee and net earnings explicitly in setup, approval, funding and receipts. Freeze the policy per obligation. This prospective rule does not rewrite the existing 1% monthly-pool contract or its committed awards. The separate unused-sponsor-funds proposal specifies a 10% withdrawal fee.
 
-Use 2% as the proposed MVP payout-service revenue model. Treat the 10% withdrawal fee as an unresolved commercial decision. It may discourage sponsors from funding ahead and should not be the foundation of the business. If retained, apply it only to disclosed refundable unused sponsor principal, never protected awards or donation funds, and show the exact net refund before signature. Do not silently waive it after one small payout or add it to already committed legacy funds.
+Use the maintainer-approved 2% deduction as the new MVP payout-service revenue model. Treat the 10% withdrawal fee as an unresolved commercial decision. It may discourage sponsors from funding ahead and should not be the foundation of the business. If retained, apply it only to disclosed refundable unused sponsor principal, never protected awards or donation funds, and show the exact net refund before signature. Do not silently waive it after one small payout or add it to already committed legacy funds.
 
 ### Additional revenue
 
@@ -631,11 +631,11 @@ Use 2% as the proposed MVP payout-service revenue model. Treat the 10% withdrawa
 - Future organization plans for multi-repository administration, audit exports, policy support, and service commitments.
 - Future private security programs: the agreed 50% Slop share compensates intake, validation, coordination, and collection; define it clearly before researchers submit.
 
-Do not sell featured status, charge contributors to withdraw ordinary earned rewards, deduct the platform fee from a contributor's award, or monetize private traces. Donations increase project funding, not recognized platform revenue.
+Do not sell featured status, charge an additional fee to claim an already netted contributor reward, or monetize private traces. Apply the disclosed 2% deduction once when the gross obligation is fixed; do not deduct it again at claim or retry. Donations increase project funding, not recognized platform revenue.
 
 ### Illustrative economics
 
-At 2%, 100,000 USDC of paid contributor principal produces 2,000 USDC of gross fee revenue before network sponsorship, indexing, hosting, support, review, security, and other costs. At 1%, it produces 1,000. These are arithmetic scenarios, not forecasts. Monthly service margin equals collected payout fees plus subscriptions and other earned service fees minus attributable operating costs. Review cost per useful accepted outcome is a separate KPI; a low payment fee cannot subsidize unlimited expensive bot runs.
+At 2%, 100,000 USDC of gross awards produces 98,000 USDC of net contributor payments and 2,000 USDC of fee revenue before network sponsorship, indexing, hosting, support, review, security, and other costs. A hypothetical 1% deduction on the same gross basis produces 99,000 in net payments and 1,000 in fees; this comparison does not redefine the legacy additive fee. These are arithmetic scenarios, not forecasts. Monthly service margin equals collected payout fees plus subscriptions and other earned service fees minus attributable operating costs. Review cost per useful accepted outcome is a separate KPI; a low payment fee cannot subsidize unlimited expensive bot runs.
 
 ## 19 Future private security bounty programs
 
@@ -729,7 +729,7 @@ For implementation, retain all required repository checks, lockfile/toolchain pi
 | Account versus project authority | Backend for private accounts; GitHub manifests for active project policy | Product and backend owners |
 | Trace and score conflicts | Reconcile local instructions with upstream protocols; publish one effective rule | Maintainers and protocol owner |
 | Payout execution authority | No Slop-held key originates, routes or redirects a payment: project-operated or permissionless execution; actor-binding proof and recovery authority remain blocked under PAY-05; a wallet signature alone is insufficient; counsel review before any change | Security, financial-protocol and legal owners |
-| Payout fee | 2%, sponsor-paid on top, reserved beside principal, never deducted from the award; freeze per obligation | Product and finance owners |
+| Payout fee | Maintainer-approved 2% deduction from new gross awards; show net contributor earnings, reserve gross as net principal plus fee, charge once and freeze per obligation; preserve legacy policy | Product and finance owners |
 | Withdrawal fee | 10% remains a proposal; validate sponsor demand and retain clear net-refund preview | Product and finance owners |
 | Public donation rights | Nonrefundable reward-restricted class, contract-enforced | Product, protocol and legal owners |
 | Funded walletless awards | No expiry; no sponsor reclamation | Product and protocol owners |
