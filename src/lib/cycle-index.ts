@@ -802,7 +802,8 @@ function cycleEntry(value: unknown, index: number): CycleIndexEntry {
     throw new TypeError(`${field}.reward differs from project policy`);
   }
   // On a wound-up project vault cycle (RFC #500 s.10) a held row keeps its
-  // approved amount in the record with no funded backing; nothing is paid.
+  // approved amount in the record with no funded backing while the state
+  // lasts; the windup record itself does not cancel the bound proposal.
   const heldWithApprovedAmount = (contributor: { state: string }) =>
     entry.state === "wound-up" && contributor.state === "held";
   for (const contributor of contributors) {
@@ -920,10 +921,15 @@ function cycleEntry(value: unknown, index: number): CycleIndexEntry {
         (contributor) =>
           contributor.approvedMinor !== "0" && contributor.state !== "paid",
       ));
-  // A windup is terminal: the bound proposal cannot execute, nothing is paid,
-  // and every approved row is held. The record exists only in this state.
+  // A windup holds every approved row while the vault cannot cover the bound
+  // proposal; nothing is paid in that state. It is not a cancellation: the
+  // cycle leaves `wound-up` only through a verified settlement, which then
+  // sits beside the windup record without rewriting it.
   const windupStateInvalid =
-    (normalizedFiles.windup !== null) !== (state === "wound-up") ||
+    (state === "wound-up" && normalizedFiles.windup === null) ||
+    (normalizedFiles.windup !== null &&
+      state !== "wound-up" &&
+      normalizedFiles.settlement === null) ||
     (state === "wound-up" &&
       (normalizedFiles.settlement !== null ||
         settledAt !== null ||

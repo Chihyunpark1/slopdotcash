@@ -331,11 +331,13 @@ The refund itself is recorded like any vault outflow, as a verified `refund`
 commitment record. `funding:prepare-project-vault-windup` then derives
 `cycles/<project>/<month>/windup.json` from that record, the frozen allocation
 and plan, the execution binding, and a finalized quorum observation of the
-remaining balance; the cycle index validates it and publishes the cycle as
-`wound-up` with every approved row `held` under one public reason naming the
-refund transactions. Nothing is paid, carried, or reissued, and the settlement
-verifier refuses the cycle for good. See `cycles/README.md`, "Project vault
-windup".
+remaining balance; the cycle index validates it against the verified funding
+ledger and publishes the cycle as `wound-up` with every approved row `held`
+under one public reason naming the refund transactions. Nothing is paid,
+carried, or reissued in that state. The record does not cancel the bound
+proposal: if the vault is refunded and the exact bound plan later executes,
+the settlement verifier records the finalized payment beside the windup. See
+`cycles/README.md`, "Project vault windup".
 
 **The fee never enters a project vault.** On the 2-of-2 instrument the
 execution plan ends with the fee transfer, readiness requires the vault to

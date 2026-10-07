@@ -133,15 +133,24 @@ ledger observed after approval, and one finalized quorum observation of the
 vault balance. It refuses while the vault still covers the plan, while no
 verified refund followed approval, or while the proposal is not bound. The
 record names the refund transactions, holds every approved row at its approved
-amount with one deterministic public reason, and is validated byte for byte
-against those files by the cycle index. Its cycle state is `wound-up`.
+amount with one deterministic public reason, and is validated against those
+files by the cycle index, which always supplies the project's verified funding
+ledger: every named refund must be a verified record there, and the ledger's
+own verified balance as of the observation must fall short of the plan. How
+the file was produced grants nothing. Its cycle state is `wound-up`.
 
-A windup is terminal for the cycle: `transactions.json` and `settlement.json`
-can never follow it, and the settlement verifier refuses the cycle. A held row
-keeps its approved amount in the public record with no funded backing. It is
-not paid, not carried, and not reissued, because a reserved intent is never
-imported as carry. A windup is a decision by the creator about the creator's
-funds, not a decision against any contributor, and the record says so.
+A windup is not a cancellation. An approved Squads proposal stays approved on
+chain, and the program checks approval and the time lock at execution, not the
+balance at an earlier instant; if funds return to the vault, an executor can
+still execute the exact bound plan. So `wound-up` holds every approved row at
+its approved amount with no funded backing, nothing is paid in that state, and
+the cycle leaves it only through the ordinary settlement path: the settlement
+verifier accepts the cycle, reconciles finalized evidence against the same
+bound plan, and `transactions.json` and `settlement.json` are recorded beside
+`windup.json` without rewriting it. A held row is never carried or reissued,
+because a reserved intent is never imported as carry. A windup is a decision
+by the creator about the creator's funds, not a decision against any
+contributor, and the record says so.
 
 ### Unsafe destination reports
 
@@ -240,11 +249,12 @@ GitHub trust boundary, not permission granted by this report mechanism.
 - `settlement.json` — generated only after finalized on-chain balance changes
   reconcile every contributor transfer and the 1% platform fee charged when
   the approved payout is paid;
-- `windup.json` — only on a cycle funded by a 2-of-3 project vault, and only
-  instead of `transactions.json` and `settlement.json`: the creator returned
-  the vault after binding the proposal, so every approved row is held with a
-  public reason naming the finalized refund transactions (see "Project vault
-  windup" below).
+- `windup.json` — only on a cycle funded by a 2-of-3 project vault: the
+  creator returned the vault after binding the proposal, so every approved
+  row is held with a public reason naming the finalized refund transactions.
+  It does not cancel the bound proposal; if the vault is refunded and the
+  exact bound plan later executes, `transactions.json` and `settlement.json`
+  are recorded beside it (see "Project vault windup" below).
 
 Delta Star uses only `source-snapshot.json` and `proposal.json`; it publishes a
 provisional contribution percentage and never represents the external prize as

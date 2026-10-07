@@ -142,7 +142,10 @@ directory, derived from the verified refund records and a finalized balance
 observation (`cycles/README.md`, "Project vault windup"). Every approved row is
 held with one public reason naming the refund transactions. Slop's key holder
 does not write that record; anyone may prepare it from public evidence, and
-the cycle index validates it.
+the cycle index validates it against the verified funding ledger. The record
+does not cancel the bound proposal, which stays approved on chain; if the
+vault is refunded and the bound plan executes, the finalized payment is
+recorded beside the windup.
 
 ## 6. Refusals
 

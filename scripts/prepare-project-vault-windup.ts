@@ -5,28 +5,26 @@
  * balance through the fixed public authorities, and prints `windup.json`.
  * Writing the file is left to the reviewing pull request, so this command
  * holds no credentials and changes nothing on its own. It never approves,
- * releases, retires, or carries anything.
+ * releases, retires, or carries anything, and the record it prints does not
+ * cancel the bound proposal: the cycle index re-derives every field from the
+ * same public evidence, so how this file was produced grants nothing.
  */
 
 import { createHash } from "node:crypto";
-import { lstat, readdir, readFile } from "node:fs/promises";
+import { lstat, readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  assertProjectCommitmentLedger,
-  type ProjectCommitmentRecord,
-} from "../src/lib/funding-commitment";
 import { assertFundingCommitments } from "../src/lib/funding-instruments.mjs";
 import { deriveProjectVaultWindup } from "../src/lib/project-vault-windup";
 import { findProject, type ProjectId } from "../src/lib/projects.mjs";
 import { assertRewardAllocationManifest } from "../src/lib/rewards";
 import { squadsInstrumentId } from "../src/lib/settlement-plan";
 import { deriveVaultUsdcTokenAccount } from "../src/lib/squads-funding";
+import { loadProjectCommitmentRecords } from "./funding-commitment-records";
 import { verifyProjectVaultSquads } from "./verify-commitment-squads";
 
 const REPOSITORY_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const MAX_JSON_BYTES = 8 * 1024 * 1024;
-const MAX_RECORD_BYTES = 64 * 1024;
 
 export interface WindupArguments {
   cycleId: string;
@@ -103,33 +101,6 @@ function json(bytes: Buffer, path: string): unknown {
   }
 }
 
-/** Every verified funding record of the project, structurally validated
- * against the reviewed instruments. Authentication of the records is the
- * trusted funding gate's job; this reader only refuses malformed evidence. */
-async function fundingRecords(
-  projectId: string,
-  instruments: Parameters<typeof assertProjectCommitmentLedger>[1],
-): Promise<readonly ProjectCommitmentRecord[]> {
-  const root = join(REPOSITORY_ROOT, "funding", projectId, "commitments");
-  const rootStats = await lstat(root).catch((error: NodeJS.ErrnoException) => {
-    if (error.code === "ENOENT") return null;
-    throw error;
-  });
-  if (!rootStats) return [];
-  if (!rootStats.isDirectory() || rootStats.isSymbolicLink())
-    throw new TypeError("Funding records root must be a real directory");
-  const names = (await readdir(root, { recursive: true, withFileTypes: true }))
-    .filter(
-      (entry) => entry.isFile() && /^cmt_[a-z0-9_-]+\.json$/u.test(entry.name),
-    )
-    .map((entry) => join(entry.parentPath, entry.name))
-    .sort();
-  const records: unknown[] = [];
-  for (const path of names)
-    records.push(json(await boundedFile(path, MAX_RECORD_BYTES), path));
-  return assertProjectCommitmentLedger(records, instruments);
-}
-
 export async function prepareProjectVaultWindup(arguments_: WindupArguments) {
   const project = findProject(arguments_.projectId);
   if (!project) throw new TypeError("Unknown project");
@@ -172,7 +143,7 @@ export async function prepareProjectVaultWindup(arguments_: WindupArguments) {
     await boundedFile(ledgerPath, MAX_JSON_BYTES),
     ledgerPath,
   );
-  const records = await fundingRecords(arguments_.projectId, instruments);
+  const records = await loadProjectCommitmentRecords(arguments_.projectId);
   const observation = await verifyProjectVaultSquads({
     mode: "state",
     multisig: instrument.multisig,

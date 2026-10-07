@@ -2,8 +2,9 @@
  * The public record of a project vault windup against a bound proposal
  * (RFC #500 section 10). The creator may return the vault's balance to the
  * creator's own wallet at any time; Slop takes no part and cannot prevent it.
- * When that happens after the creator bound a proposal, the proposal can no
- * longer execute for lack of balance, and the approved rows cannot be paid.
+ * When that happens after the creator bound a proposal, the proposal cannot
+ * execute for lack of balance, and the approved rows cannot be paid while the
+ * balance stays short.
  *
  * The reserved `allocation.json` is permanently immutable, so the rows are not
  * rewritten. This record sits beside it as `windup.json`, names the finalized
@@ -11,12 +12,25 @@
  * `held` with one public reason. It is derived from verified public evidence
  * only: the frozen allocation and plan, the execution binding, the verified
  * refund records in the funding ledger, and one finalized vault observation.
- * It never approves, releases, retires, or carries anything. A held row keeps
- * its approved amount in the record with no funded backing; a reserved intent
- * is never reissued or imported as carry.
+ * The validator always requires the verified funding ledger: every named
+ * refund must be a verified record there, and the ledger's own verified
+ * balance as of the observation must fall short of the plan, so a record
+ * cannot hold rows on a self-reported figure alone.
+ *
+ * A windup is not a cancellation. An approved Squads proposal stays approved
+ * on chain; if funds return to the vault, an executor can still execute the
+ * exact bound plan. So this record never grants, releases, retires, or
+ * carries anything, and it does not end the cycle: finalized payment of the
+ * bound proposal is recorded beside it in `transactions.json` and
+ * `settlement.json` without rewriting this history. A held row keeps its
+ * approved amount in the record with no funded backing until then; a
+ * reserved intent is never reissued or imported as carry.
  */
 
-import type { ProjectCommitmentRecord } from "./funding-commitment";
+import {
+  currentProjectCommitmentRecords,
+  type ProjectCommitmentRecord,
+} from "./funding-commitment";
 import { projectVaultApprovalState } from "./project-vault-approval";
 import { assertRewardAllocationManifest } from "./rewards";
 import { assertSettlementExecutionPlan } from "./settlement-plan";
@@ -62,8 +76,12 @@ export interface ProjectVaultWindupContext {
   planBytes: Uint8Array;
   /** The execution binding ledger (`funding/executions/ledger.json`). */
   ledger: unknown;
-  /** When supplied, every named refund must be a verified record here. */
-  fundingRecords?: readonly ProjectCommitmentRecord[];
+  /**
+   * The project's verified funding commitment ledger. Required: every named
+   * refund must be a verified record here, and the ledger's verified balance
+   * as of the observation must fall short of the bound plan.
+   */
+  fundingRecords: readonly ProjectCommitmentRecord[];
 }
 
 const SHA256 = /^[a-f0-9]{64}$/u;
@@ -130,7 +148,7 @@ export function projectVaultWindupReason(
   vaultBalanceMinor: string,
 ): string {
   const signatures = refunds.map((refund) => refund.transactionId).join(", ");
-  return `The creator returned vault funds to the creator's wallet after binding this cycle's proposal (finalized transaction${refunds.length === 1 ? "" : "s"} ${signatures}). The vault holds ${vaultBalanceMinor} of the ${requiredMinor} USDC minor units the bound proposal needs, so it cannot execute. Every approved row is held with no funded backing. This is a windup by the creator, not a decision against any contributor; nothing is paid, carried, or reissued.`;
+  return `The creator returned vault funds to the creator's wallet after binding this cycle's proposal (finalized transaction${refunds.length === 1 ? "" : "s"} ${signatures}). The vault holds ${vaultBalanceMinor} of the ${requiredMinor} USDC minor units the bound proposal needs, so it cannot execute while the balance stays short. Every approved row is held with no funded backing. This is a windup by the creator, not a decision against any contributor and not a cancellation of the bound proposal: nothing is carried or reissued, and a held row is recorded as paid only if the vault is refunded and the exact bound proposal executes with finalized on-chain evidence.`;
 }
 
 /**
@@ -166,6 +184,38 @@ export function projectVaultWindupRefunds(
       amountMinor: row.amountMinor,
       observedAt: row.observedAt,
     }));
+}
+
+/**
+ * The verified funding ledger's own view of the vault balance as of one
+ * instant: verified deposits minus verified refunds and releases observed at
+ * or before it, for this instrument only. Later records never change it, so a
+ * committed windup stays valid when funds return afterwards.
+ */
+export function projectVaultVerifiedBalanceMinor(
+  fundingRecords: readonly ProjectCommitmentRecord[],
+  instrument: { multisig: string; vault: string; vaultIndex: number },
+  asOf: string,
+): bigint {
+  let balance = 0n;
+  for (const row of currentProjectCommitmentRecords(
+    fundingRecords.filter(
+      (row) => Date.parse(row.observedAt) <= Date.parse(asOf),
+    ),
+  )) {
+    if (
+      row.state !== "verified-on-chain" ||
+      row.network !== "solana" ||
+      !("multisig" in row.instrument) ||
+      row.instrument.multisig !== instrument.multisig ||
+      row.instrument.vault !== instrument.vault ||
+      row.instrument.vaultIndex !== instrument.vaultIndex
+    )
+      continue;
+    const amount = BigInt(row.amountMinor);
+    balance += row.event === "deposit" ? amount : -amount;
+  }
+  return balance;
 }
 
 async function boundContext(context: ProjectVaultWindupContext) {
@@ -211,7 +261,6 @@ async function boundContext(context: ProjectVaultWindupContext) {
 /** Derives the windup record from public evidence. Throws when there is no windup to record. */
 export async function deriveProjectVaultWindup(
   input: ProjectVaultWindupContext & {
-    fundingRecords: readonly ProjectCommitmentRecord[];
     vaultBalanceMinor: string;
     observedAt: string;
     recordedAt: string;
@@ -335,20 +384,16 @@ export async function assertProjectVaultWindup(
       observedAt,
     };
   });
-  if (context.fundingRecords) {
-    const verified = projectVaultWindupRefunds(
-      context.fundingRecords,
-      bound.binding,
-      bound.approvedAt,
-    );
-    for (const refund of refunds) {
-      if (
-        !verified.some((row) => JSON.stringify(row) === JSON.stringify(refund))
-      )
-        throw new TypeError(
-          "windup names a refund that the verified funding ledger does not hold",
-        );
-    }
+  const verified = projectVaultWindupRefunds(
+    context.fundingRecords,
+    bound.binding,
+    bound.approvedAt,
+  );
+  for (const refund of refunds) {
+    if (!verified.some((row) => JSON.stringify(row) === JSON.stringify(refund)))
+      throw new TypeError(
+        "windup names a refund that the verified funding ledger does not hold",
+      );
   }
   const observedAt = iso(raw.observedAt, "windup.observedAt");
   if (refunds.some((r) => Date.parse(r.observedAt) > Date.parse(observedAt)))
@@ -366,6 +411,19 @@ export async function assertProjectVaultWindup(
   if (BigInt(vaultBalanceMinor) >= BigInt(requiredMinor))
     throw new TypeError(
       "windup balance still covers the bound proposal; nothing is held",
+    );
+  // The observed balance is one quorum reading; the held state also needs
+  // the verified ledger's own arithmetic, as of that observation, to fall
+  // short of the plan. Records observed later do not enter this figure.
+  if (
+    projectVaultVerifiedBalanceMinor(
+      context.fundingRecords,
+      bound.binding,
+      observedAt,
+    ) >= BigInt(requiredMinor)
+  )
+    throw new TypeError(
+      "windup is not supported by the verified funding ledger; its verified balance as of the observation still covers the bound proposal",
     );
   if (
     raw.reason !==

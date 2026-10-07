@@ -49,6 +49,7 @@ import {
   type SettlementExecutionPlan,
 } from "../src/lib/settlement-plan";
 import { verifyRewardSettlementOnchain } from "../src/lib/solana-settlement";
+import { loadProjectCommitmentRecords } from "./funding-commitment-records";
 import { loadPriorCycleAccrual } from "./prior-cycle-accrual";
 import {
   DEFAULT_SOLANA_RPC_URL,
@@ -447,18 +448,16 @@ async function buildCycle(
 
   // RFC #500 section 10: a project vault creator returned the vault after
   // binding the proposal. The record is validated against the frozen
-  // allocation, plan, and execution binding; it holds every approved row and
-  // excludes settlement evidence for good.
+  // allocation, plan, execution binding, and the project's verified funding
+  // ledger, which is always supplied here so a submitted file cannot name a
+  // refund the ledger does not hold or hold rows on a self-reported balance.
+  // A windup holds every approved row; it does not cancel the bound proposal,
+  // so later finalized payment evidence may sit beside it (PRD PAY-01, PAY-07).
   const windupFile = loaded.get(PROJECT_VAULT_WINDUP_FILE) ?? null;
   let windup: ProjectVaultWindupRecord | null = null;
   if (windupFile) {
     if (!allocation || !allocationFile || !plan || !planFile) {
       throw new TypeError("Windup has no approved allocation and plan");
-    }
-    if (settlementFile || loaded.has("transactions.json")) {
-      throw new TypeError(
-        "A wound-up cycle cannot carry settlement or transaction evidence",
-      );
     }
     const ledger = await jsonFile(EXECUTION_LEDGER);
     windup = await assertProjectVaultWindup(windupFile.value, {
@@ -466,6 +465,7 @@ async function buildCycle(
       allocationSha256: allocationFile.digest,
       planBytes: planFile.bytes,
       ledger: ledger.value,
+      fundingRecords: await loadProjectCommitmentRecords(projectId),
     });
     if (windup.projectId !== projectId || windup.cycleId !== cycleId) {
       throw new TypeError("Windup does not match its cycle path");
@@ -475,12 +475,12 @@ async function buildCycle(
   const state =
     proposal.allocations.length === 0
       ? "closed-no-awards"
-      : windup
-        ? "wound-up"
-        : settlement
-          ? settlement.status === "paid"
-            ? "paid"
-            : "settlement-planned"
+      : settlement
+        ? settlement.status === "paid"
+          ? "paid"
+          : "settlement-planned"
+        : windup
+          ? "wound-up"
           : plan
             ? "settlement-planned"
             : allocation

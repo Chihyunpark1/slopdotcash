@@ -529,7 +529,7 @@ describe("public cycle index", () => {
     expect(() => assertCycleIndex(index([zeroApproved]))).not.toThrow();
   });
 
-  it("publishes a project vault windup as a terminal held state with nothing paid", () => {
+  it("publishes a project vault windup as a held state with nothing paid, not a cancellation", () => {
     const files = {
       ...entry().files,
       allocation: {
@@ -541,6 +541,10 @@ describe("public cycle index", () => {
         url: "/data/cycles/eliza/2026-07/execution-plan.json",
       },
       windup: { sha256: DIGEST, url: "/data/cycles/eliza/2026-07/windup.json" },
+    };
+    const settlement = {
+      sha256: DIGEST,
+      url: "/data/cycles/eliza/2026-07/settlement.json",
     };
     const woundUp = entry({
       state: "wound-up",
@@ -560,7 +564,8 @@ describe("public cycle index", () => {
       files,
     });
     expect(() => assertCycleIndex(index([woundUp]))).not.toThrow();
-    // Nothing is paid, and an approved row cannot stay approved or become paid.
+    // While wound up nothing is paid, and an approved row cannot stay
+    // approved or become paid without a settlement.
     for (const broken of [
       entry({ ...woundUp, reward: { ...woundUp.reward, paidMinor: "1" } }),
       entry({
@@ -570,13 +575,7 @@ describe("public cycle index", () => {
       entry({
         ...woundUp,
         settledAt: "2026-08-17T00:00:00.000Z",
-        files: {
-          ...files,
-          settlement: {
-            sha256: DIGEST,
-            url: "/data/cycles/eliza/2026-07/settlement.json",
-          },
-        },
+        files: { ...files, settlement },
       }),
       entry({ ...woundUp, files: { ...files, windup: null } }),
       entry({ ...woundUp, files: { ...files, executionPlan: null } }),
@@ -589,5 +588,39 @@ describe("public cycle index", () => {
       expect(() => assertCycleIndex(index([broken]))).toThrow(
         /state|reconcile/u,
       );
+    // The windup does not cancel the bound proposal. If funds return and the
+    // exact bound plan executes, the verified settlement sits beside the
+    // windup record and the cycle is paid without rewriting that history.
+    const paidAfterWindup = entry({
+      ...woundUp,
+      state: "paid",
+      settledAt: "2026-08-17T00:00:00.000Z",
+      reward: { ...woundUp.reward, paidMinor: "10000000" },
+      contributors: [
+        {
+          ...woundUp.contributors[0],
+          state: "paid",
+          paidMinor: "10000000",
+        },
+      ],
+      files: { ...files, settlement },
+    });
+    expect(() => assertCycleIndex(index([paidAfterWindup]))).not.toThrow();
+    // Leaving the held state needs that settlement; a windup file cannot sit
+    // on any other state without one.
+    expect(() =>
+      assertCycleIndex(
+        index([
+          entry({
+            ...paidAfterWindup,
+            state: "settlement-planned",
+            settledAt: null,
+            reward: { ...woundUp.reward },
+            contributors: [{ ...woundUp.contributors[0], state: "approved" }],
+            files,
+          }),
+        ]),
+      ),
+    ).toThrow(/state/u);
   });
 });
