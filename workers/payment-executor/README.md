@@ -91,9 +91,13 @@ Solana clusters and repeated isolated stacks cannot share keys or journals.
 Create a dedicated empty test D1 database using pinned Wrangler `d1 create`, then pass
 its returned ID and name to this command. Never supply a production database ID.
 Inspect the generated JSON and `apply-test-backend.sh` before running it. The apply
-script first bundles all Workers, checks the remote Worker inventory using securely
-supplied `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`, and refuses any existing
-stack. It then applies all repository D1 migrations, deploys the private signers,
+script first bundles all Workers, checks each remote Worker using pinned Wrangler `deployments list --json` and
+an explicit `CLOUDFLARE_ACCOUNT_ID`, and refuses any existing stack. Wrangler reuses
+its existing OAuth session or release authentication; no new API token is required.
+Only Worker-not-found code 10007 for the exact account/name endpoint proves absence.
+Authentication, network, permission, timeout, and other API errors stop the installer;
+raw provider output and credentials are never printed. Temporary configs cannot inherit
+source configuration or local environment files. It then applies all repository D1 migrations, deploys the private signers,
 prompts for each role's separate secrets, and creates an inactive dispatcher before
 installing its RPC secrets. The last deploy enables the cron. Failed or partial runs
 must be reconciled explicitly: rerunning will fail closed once a Worker exists.
