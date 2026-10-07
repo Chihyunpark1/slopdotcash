@@ -802,3 +802,45 @@ describe("project proposal schema", () => {
     });
   });
 });
+
+describe("escrow project onboarding", () => {
+  it.each(["base", "solana"])(
+    "accepts a single %s payout network with deducted fees and blocks the legacy payment path",
+    (chain) => {
+      const project = {
+        ...structuredClone(eliza),
+        escrow: {
+          schemaVersion: "1",
+          effectiveCycle: "2026-10",
+          chain,
+          feeBasisPoints: 200,
+          withdrawalFeeBasisPoints: 1000,
+          feeMode: "deduct-from-gross",
+          deployments: [],
+        },
+        reward: {
+          ...eliza.reward,
+          chain,
+          feeBasisPoints: 200,
+          paymentMode: "disabled",
+        },
+      };
+      expect(assertProjectDefinition(project).escrow?.chain).toBe(chain);
+      expect(() =>
+        assertProjectDefinition({
+          ...project,
+          reward: { ...project.reward, paymentMode: "enabled" },
+        }),
+      ).toThrow(/legacy payment/);
+      expect(() =>
+        assertProjectDefinition({
+          ...project,
+          reward: {
+            ...project.reward,
+            chain: chain === "base" ? "solana" : "base",
+          },
+        }),
+      ).toThrow();
+    },
+  );
+});

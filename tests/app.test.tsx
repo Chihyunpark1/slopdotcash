@@ -1704,12 +1704,9 @@ describe("project proposals", () => {
       screen.getByLabelText(/^Additive monthly review budget/u),
       { target: { value: "50" } },
     );
-    fireEvent.change(
-      screen.getByLabelText(
-        "Project-controlled Solana USDC address (optional)",
-      ),
-      { target: { value: "11111111111111111111111111111111" } },
-    );
+    fireEvent.change(screen.getByLabelText(/Payout network/), {
+      target: { value: "solana" },
+    });
 
     const handoff = screen.getByRole("link", { name: /continue on github/i });
     expect(handoff).toHaveAttribute(
@@ -1738,8 +1735,9 @@ describe("project proposals", () => {
       screen.getByText(/"mode": "direct-noncustodial"/),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/"address": "11111111111111111111111111111111"/),
+      screen.getByText(/"feeMode": "deduct-from-gross"/),
     ).toBeInTheDocument();
+    expect(screen.getByText(/"chain": "solana"/)).toBeInTheDocument();
     expect(screen.getByText(/"status": "paused"/)).toBeInTheDocument();
     expect(screen.getByText(/"paymentTransfersIp": false/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /copy json/i }));

@@ -44,6 +44,8 @@ import {
   type SettlementExecutionPlan,
 } from "../src/lib/settlement-plan";
 import { verifyRewardSettlementOnchain } from "../src/lib/solana-settlement";
+import { assertEscrowDecisions } from "./escrow-review";
+import { validateEscrowCycle } from "./prepare-escrow-cycle";
 import { loadPriorCycleAccrual } from "./prior-cycle-accrual";
 import {
   DEFAULT_SOLANA_RPC_URL,
@@ -640,6 +642,73 @@ async function collectCycles(): Promise<CycleBuild[]> {
         throw new TypeError(
           `cycles/${projectEntry.name}/${cycleEntry.name} is not a canonical cycle directory`,
         );
+      }
+      const versioned = join(projectDirectory, cycleEntry.name, "escrow-v2");
+      const versionedStat = await lstat(versioned).catch(
+        (error: NodeJS.ErrnoException) => {
+          if (error.code === "ENOENT") return null;
+          throw error;
+        },
+      );
+      if (versionedStat) {
+        if (!versionedStat.isDirectory() || versionedStat.isSymbolicLink())
+          throw new Error("Invalid escrow cycle directory");
+        const files = await readdir(versioned);
+        const required = [
+          "github-identities.json",
+          "project.json",
+          "proposal.json",
+          "source-snapshot.json",
+        ];
+        const allowed = new Set([
+          ...required,
+          "decisions.json",
+          "platform-approvals.json",
+        ]);
+        if (
+          required.some((name) => !files.includes(name)) ||
+          files.some((name) => !allowed.has(name))
+        )
+          throw new Error("Unknown or missing escrow cycle artifact");
+        const siblings = await readdir(join(projectDirectory, cycleEntry.name));
+        if (siblings.length !== 1)
+          throw new Error("Legacy and escrow cycles cannot share a cycle");
+        const verified = await validateEscrowCycle(
+          versioned,
+          projectEntry.name,
+          cycleEntry.name,
+        );
+        if (files.includes("decisions.json")) {
+          const policy = JSON.parse(
+            await readFile(join(versioned, "project.json"), "utf8"),
+          );
+          assertEscrowDecisions(
+            JSON.parse(
+              await readFile(join(versioned, "decisions.json"), "utf8"),
+            ),
+            verified.proposal,
+            verified.digest,
+            policy.steward.github.actorId,
+          );
+        }
+        if (files.includes("platform-approvals.json")) {
+          if (!files.includes("decisions.json"))
+            throw new Error("Platform approval requires exact decisions");
+          const approval = JSON.parse(
+            await readFile(join(versioned, "platform-approvals.json"), "utf8"),
+          );
+          const decisionDigest = createHash("sha256")
+            .update(await readFile(join(versioned, "decisions.json")))
+            .digest("hex");
+          if (
+            approval.schemaVersion !== "1" ||
+            approval.proposalSha256 !== verified.digest ||
+            approval.decisionsSha256 !== decisionDigest ||
+            !Array.isArray(approval.approvals)
+          )
+            throw new Error("Platform approval source mismatch");
+        }
+        continue;
       }
       builds.push(
         await buildCycle(

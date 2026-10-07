@@ -3,7 +3,6 @@ import { useMemo, useState } from "react";
 import { Link } from "./Link";
 import { CONTACT_EMAIL, CONTACT_MAILTO } from "./lib/contact";
 import { copyText } from "./lib/copy-text";
-import { isFundingAddress } from "./lib/funding";
 import {
   boundedText,
   immutableProposalTermsUrl,
@@ -14,7 +13,6 @@ import {
   slugify,
   validRepositoryPath,
 } from "./lib/project-proposal";
-import { PLATFORM_FEE_BASIS_POINTS } from "./lib/rewards";
 import { SOURCE_REPOSITORY } from "./lib/source-repository";
 
 const PROJECT_PROPOSAL_ROOT = `${SOURCE_REPOSITORY}/new/develop`;
@@ -32,8 +30,10 @@ export default function ProjectProposalPage() {
   const [goal, setGoal] = useState("");
   const [criteria, setCriteria] = useState("");
   const [monthlyPool, setMonthlyPool] = useState("0");
+  const [settlementChain, setSettlementChain] = useState<"base" | "solana">(
+    "base",
+  );
   const [monthlyReviewBudget, setMonthlyReviewBudget] = useState("");
-  const [solanaFundingAddress, setSolanaFundingAddress] = useState("");
   const [integrationBranch, setIntegrationBranch] = useState("main");
   const [copyrightModel, setCopyrightModel] = useState("unknown");
   const [legalHolder, setLegalHolder] = useState("");
@@ -168,17 +168,26 @@ export default function ProjectProposalPage() {
         id: `review-${slug}-contributions`,
         sourcePath: `skills/review-${slug}-contributions`,
       },
+      escrow: {
+        schemaVersion: "1",
+        effectiveCycle: new Date().toISOString().slice(0, 7),
+        chain: settlementChain,
+        feeBasisPoints: 200,
+        withdrawalFeeBasisPoints: 1000,
+        feeMode: "deduct-from-gross",
+        deployments: [],
+      },
       reward: {
         kind: "monthly-pool",
         currency: "USDC",
-        chain: "solana",
+        chain: settlementChain,
         rewardStartAt: new Date().toISOString(),
         cycle: "calendar-month-utc",
         monthlyCapMinor: pool.minor,
         monthlyCapDisplay: pool.display,
         committedMinor: "0",
         paymentMode: "disabled",
-        feeBasisPoints: PLATFORM_FEE_BASIS_POINTS,
+        feeBasisPoints: 200,
         unusedFunds: "rollover-without-cap-increase",
         fundingState: "pledged",
         ...(includesReviewBudget
@@ -204,19 +213,9 @@ export default function ProjectProposalPage() {
       funding: {
         mode: "direct-noncustodial",
         disclosure:
-          "Funds go directly to the project wallet. Slop does not hold or recover funds.",
+          "Escrow funding opens after deployment review. Approved awards remain reserved until paid. Direct token transfers do not create reward credit.",
         recordsPath: `funding/${slug}`,
-        addresses: solanaFundingAddress
-          ? [
-              {
-                network: "solana",
-                asset: "USDC",
-                address: solanaFundingAddress,
-                effectiveAt: new Date().toISOString(),
-                replacedAt: null,
-              },
-            ]
-          : [],
+        addresses: [],
       },
       modelPolicy: {
         mode: "open-declared",
@@ -229,6 +228,7 @@ export default function ProjectProposalPage() {
     }),
     [
       goal,
+      settlementChain,
       headline,
       integrationBranch,
       repositoryNumericId,
@@ -262,7 +262,6 @@ export default function ProjectProposalPage() {
       reviewBudget.minor,
       repository,
       slug,
-      solanaFundingAddress,
     ],
   );
   const manifestText = JSON.stringify(manifest, null, 2);
@@ -306,8 +305,6 @@ ${manifestText}`;
     pool.valid &&
     (!includesReviewBudget ||
       (reviewBudget.valid && BigInt(reviewBudget.minor) > 0n)) &&
-    (solanaFundingAddress === "" ||
-      isFundingAddress("solana", solanaFundingAddress)) &&
     repositoryNumericId.length <= 40 &&
     /^[1-9]\d*$/u.test(repositoryNumericId) &&
     repositoryNodeId.length <= 100 &&
@@ -681,6 +678,22 @@ ${manifestText}`;
             ) : null}
           </fieldset>
           <label>
+            Payout network
+            <select
+              value={settlementChain}
+              onChange={(event) => {
+                setSettlementChain(event.target.value as "base" | "solana");
+              }}
+            >
+              <option value="base">Base</option>
+              <option value="solana">Solana</option>
+            </select>
+            <small>
+              One network per project. Contributors receive their award minus a
+              2% fee. Returning unused escrow costs 10%.
+            </small>
+          </label>
+          <label>
             Maximum monthly pool, digital dollars
             <input
               inputMode="decimal"
@@ -710,24 +723,15 @@ ${manifestText}`;
               evidence is reviewed.
             </small>
           </label>
-          <label>
-            Project-controlled Solana USDC address (optional)
-            <input
-              autoComplete="off"
-              onChange={(event) => setSolanaFundingAddress(event.target.value)}
-              placeholder="Published only after GitHub review"
-              spellCheck={false}
-              value={solanaFundingAddress}
-            />
-          </label>
           <p className="proposal-disclosure">
-            Funds go directly to the project wallet. Slop does not hold or
-            recover funds. GitHub identity does not prove wallet ownership.
+            Funding opens after the project's escrow deployment is reviewed.
+            Approved awards remain reserved until paid. Public donations are not
+            enabled in this version.
           </p>
           <div className="proposal-rules">
             <p>
-              Public repository · any model · optional private traces · 1% fee
-              when payouts settle
+              Public repository · any model · optional private traces · 2% fee
+              deducted from contributor awards
             </p>
             <p>
               Draft only · Project steward: {stewardName || "not yet verified"}

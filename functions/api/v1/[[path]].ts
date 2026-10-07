@@ -1,3 +1,4 @@
+import { handlePaymentsApi } from "../../../backend/payments/handler";
 import { handlePointsApi } from "../../../backend/points/handler";
 import {
   CloudflareTracePersistence,
@@ -8,6 +9,7 @@ import { handleTraceApi } from "../../../backend/trace/handler";
 
 type Env = {
   SLOP_DB: D1Database;
+  PAYMENTS_ALLOWED_ORIGIN?: string;
   PRIVATE_TRACES: R2Bucket;
   TRACE_AUTH_SECRET: string;
   X_CLIENT_ID?: string;
@@ -126,6 +128,17 @@ async function verifyIdentityAssertion(
 }
 
 export async function onRequest(context: PagesContext): Promise<Response> {
+  if (new URL(context.request.url).pathname.startsWith("/api/v1/payments/"))
+    return handlePaymentsApi(context.request, {
+      db: context.env.SLOP_DB,
+      operatorIds: (context.env.OPERATOR_GITHUB_IDS ?? "")
+        .split(",")
+        .map((id) => id.trim())
+        .filter((id) => /^[1-9][0-9]*$/.test(id)),
+      ...(context.env.PAYMENTS_ALLOWED_ORIGIN === "https://staging.slop.cash"
+        ? { allowedOrigins: ["https://staging.slop.cash"] }
+        : {}),
+    });
   if (new URL(context.request.url).pathname.startsWith("/api/v1/points/"))
     return handlePointsApi(context.request, {
       db: context.env.SLOP_DB,

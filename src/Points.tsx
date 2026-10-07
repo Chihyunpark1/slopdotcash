@@ -327,6 +327,9 @@ export function PointsNav({ onNavigate }: { onNavigate?: () => void }) {
           >
             View profile
           </a>
+          <a href="/earnings" onClick={navigate}>
+            Earnings and wallets
+          </a>
           <a href="/points" onClick={navigate}>
             Account settings
           </a>
@@ -631,7 +634,10 @@ function JoinPoints({
         setMe(signedIn);
         if (redirectToProfile)
           window.location.assign(
-            `/contributors/${encodeURIComponent(signedIn.actor.login)}`,
+            new URLSearchParams(window.location.search).get("next") ===
+              "earnings"
+              ? "/earnings"
+              : `/contributors/${encodeURIComponent(signedIn.actor.login)}`,
           );
         setMessage("You’re signed in. Your welcome points are recorded.");
         return;
