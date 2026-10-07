@@ -9,12 +9,17 @@ import AxeBuilder from "@axe-core/playwright";
 import { type APIRequestContext, test as base, expect } from "@playwright/test";
 import { assertCycleIndex, type CycleIndex } from "../../src/lib/cycle-index";
 import { homeProjects } from "../../src/lib/home-projects";
+import { deploymentOrigins, deploymentTier } from "../../src/lib/deployment";
 import {
   assertLeaderboardSnapshot,
   type LeaderboardSnapshot,
 } from "../../src/lib/leaderboard";
 import { createProjectView } from "../../src/lib/project-view";
 import { PROJECTS } from "../../src/lib/projects.mjs";
+
+const deployment = deploymentOrigins(
+  deploymentTier(process.env.VITE_SLOP_ENVIRONMENT),
+);
 
 const test = base.extend<{ browserDiagnostics: undefined }>({
   browserDiagnostics: [
@@ -569,7 +574,7 @@ test("renders contributor and cycle records from validated public data", async (
   }
 
   await page.route(
-    "https://api.slop.cash/api/v1/wallet-claims/actors/*/current",
+    `${deployment.api}/api/v1/wallet-claims/actors/*/current`,
     async (route) => {
       const githubActorId = new URL(route.request().url()).pathname
         .split("/")
@@ -684,7 +689,7 @@ test("keeps a frozen-month contributor reachable after the rolling window moves 
   if (!frozenOnly) return;
 
   await page.route(
-    "https://api.slop.cash/api/v1/wallet-claims/actors/*/current",
+    `${deployment.api}/api/v1/wallet-claims/actors/*/current`,
     (route) =>
       route.fulfill({
         status: 404,
@@ -823,8 +828,8 @@ test("serves byte-consistent install and read-only artifacts for every project",
   expect(connectSources).toEqual([
     "connect-src",
     "'self'",
-    "https://api.slop.cash",
-    "https://identity.slop.cash",
+    deployment.api,
+    deployment.identity,
   ]);
 
   const siteOrigin = baseURL ?? "http://127.0.0.1:4466";
@@ -835,7 +840,7 @@ test("serves byte-consistent install and read-only artifacts for every project",
   // Production clients use the API authority, not a website-host alias.
   // Local Pages checks still exercise the local function's HTTPS rejection.
   const privateApiOrigin =
-    originProtocol === "https:" ? "https://api.slop.cash" : siteOrigin;
+    originProtocol === "https:" ? deployment.api : siteOrigin;
   const privateApiResponse = await request.post(
     new URL("/api/v1/runs", privateApiOrigin).href,
     { data: {} },

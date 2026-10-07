@@ -66,6 +66,7 @@ jobs:
     needs: source
     env:
       RELEASE_SHA: ${{ needs.source.outputs.sha }}
+      VITE_SLOP_ENVIRONMENT: ${{ (github.ref == 'refs/heads/development' || github.base_ref == 'development') && 'staging' || 'production' }}
     runs-on: ubuntu-24.04
     concurrency:
       # A newer trusted revision supersedes stale live-data generation, while
@@ -224,7 +225,6 @@ jobs:
 
       - name: Build production site
         env:
-          VITE_SLOP_ENVIRONMENT: ${{ github.ref == 'refs/heads/development' && 'staging' || 'production' }}
           SLOP_POINTS_ONLINE: ${{ github.event_name != 'pull_request' && '1' || '0' }}
           SLOP_POINTS_BOOTSTRAP: ${{ github.event_name != 'schedule' && '1' || '0' }}
         run: bun run build
@@ -301,10 +301,24 @@ jobs:
         with:
           name: slop-source-${{ needs.source.outputs.sha }}
           path: dist
+      - name: Require staging credentials
+        env:
+          HAS_CLOUDFLARE: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
+          HAS_CLIENT: ${{ secrets.GITHUB_APP_CLIENT_ID != '' && secrets.GITHUB_APP_CLIENT_SECRET != '' }}
+          HAS_KEYS: ${{ secrets.IDENTITY_STATE_KEY != '' && secrets.IDENTITY_ASSERTION_KEY != '' && secrets.TRACE_AUTH_SECRET != '' }}
+        run: |
+          test "$HAS_CLOUDFLARE" = true
+          test "$HAS_CLIENT" = true
+          test "$HAS_KEYS" = true
       - name: Publish and verify isolated staging
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          GITHUB_APP_CLIENT_ID: ${{ secrets.GITHUB_APP_CLIENT_ID }}
+          GITHUB_APP_CLIENT_SECRET: ${{ secrets.GITHUB_APP_CLIENT_SECRET }}
+          IDENTITY_STATE_KEY: ${{ secrets.IDENTITY_STATE_KEY }}
+          IDENTITY_ASSERTION_KEY: ${{ secrets.IDENTITY_ASSERTION_KEY }}
+          TRACE_AUTH_SECRET: ${{ secrets.TRACE_AUTH_SECRET }}
         run: |
           set -euo pipefail
           test "$GITHUB_REF" = refs/heads/development
@@ -315,12 +329,14 @@ jobs:
           started_at="$(node -e 'process.stdout.write(String(Date.now()))')"
           ./node_modules/.bin/wrangler d1 migrations apply slop-staging --remote --config wrangler.staging.toml
           ./node_modules/.bin/wrangler deploy --config workers/identity/wrangler.staging.toml
+          node scripts/configure-staging-secrets.mjs
           ./node_modules/.bin/wrangler pages deploy --config wrangler.staging.toml \
             --project-name=slop-staging \
             --branch=development \
             --commit-hash="$GITHUB_SHA" \
             --commit-dirty=false
           node scripts/verify-staging-deployment.mjs "$GITHUB_SHA" "$started_at"
+          node scripts/verify-staging-backend.mjs
 
   deploy:
     name: Deploy trusted production bundle

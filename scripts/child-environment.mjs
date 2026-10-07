@@ -5,6 +5,7 @@
  */
 const INHERITED_ENVIRONMENT_NAMES = Object.freeze([
   "CI",
+  "VITE_SLOP_ENVIRONMENT",
   "COLORTERM",
   "FORCE_COLOR",
   "HOME",

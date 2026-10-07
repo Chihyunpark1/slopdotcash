@@ -209,3 +209,10 @@ successful screenshots and results as well as failure diagnostics. Tests use
 finite per-case budgets; pure domain tests run in Node, while shared publication
 fixtures remain serial. `bun run verify` remains the complete local source gate;
 run `bun run test:e2e` separately for the full browser matrix.
+
+## Release environments
+
+`development` serves [staging](https://staging.slop.cash), including an isolated
+login and write backend. `main` serves [production](https://slop.cash). See
+[release environments](docs/release-environments.md) for setup, promotion, and
+acceptance requirements.

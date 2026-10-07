@@ -719,6 +719,17 @@ Use Base Sepolia and the approved Solana application test cluster with explicitl
 
 For implementation, retain all required repository checks, lockfile/toolchain pinning, current-base rebase, exact-head browser evidence, and protected release workflow. UI PRs require uploaded walkthrough and evidence videos. Verify production website, API migrations, contract/program deployment, DNS/TLS/headers, and actual payment independently. Documentation drafting does not establish any of those results.
 
+### Release environments (DEP-01)
+
+The release separation requested by the maintainer on 6 October 2026 is part
+of MVP-11. `development` serves `staging.slop.cash`; `main` serves `slop.cash`.
+Both branches run the required CI checks. Production changes require a reviewed
+promotion PR and the protected release workflow. Staging supports GitHub login
+and writes through its own database, private object store, identity Worker, and
+secrets. Test writes must not reach production storage. Verify both deployments
+at their exact source revisions, including login, writes, DNS, TLS, headers, and
+served files. Issue #534 tracks this approved operational change.
+
 ## 22 Decisions and policy changes before implementation
 
 | Decision | Recommended draft position | Required decision owner |
