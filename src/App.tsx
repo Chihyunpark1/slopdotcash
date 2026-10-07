@@ -551,7 +551,9 @@ function ProjectCard({
         <p className="project-summary">{project.description}</p>
         <p className="project-bounty">
           <strong>{amount}</strong>
-          {project.reward.kind === "monthly-pool" ? <span>/mo</span> : null}
+          {project.reward.kind === "monthly-pool" ? (
+            <span>/mo target</span>
+          ) : null}
         </p>
         <small className="project-money-state">
           {project.reward.kind === "monthly-pool"

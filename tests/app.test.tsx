@@ -599,7 +599,7 @@ describe("discovery", () => {
       within(elizaCard).queryByText("Not funded yet"),
     ).not.toBeInTheDocument();
     expect(within(elizaCard).getByText("$5k")).toBeInTheDocument();
-    expect(within(elizaCard).getByText("/mo")).toBeInTheDocument();
+    expect(within(elizaCard).getByText("/mo target")).toBeInTheDocument();
     expect(
       within(elizaCard).getByText("Vault: Unavailable"),
     ).toBeInTheDocument();
