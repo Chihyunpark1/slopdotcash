@@ -10,6 +10,10 @@ test("quality review groups duplicate accepted work and carries an exact source-
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto("/projects/eliza/funding");
+  await page
+    .locator(".funding-workbench")
+    .getByLabel("Contribution month")
+    .selectOption("2026-08");
   const panel = page.locator(".funding-quality-review");
   await panel.locator("summary").focus();
   await page.keyboard.press("Enter");
@@ -106,6 +110,10 @@ test("quality review groups duplicate accepted work and carries an exact source-
     ),
   ).toBe(true);
   await page.reload();
+  await page
+    .locator(".funding-workbench")
+    .getByLabel("Contribution month")
+    .selectOption("2026-08");
   await panel.locator("summary").click();
   await panel
     .getByRole("button", { name: "Load cycle evidence", exact: true })
@@ -133,6 +141,10 @@ test("quality review groups duplicate accepted work and carries an exact source-
     },
   );
   await page.reload();
+  await page
+    .locator(".funding-workbench")
+    .getByLabel("Contribution month")
+    .selectOption("2026-08");
   await panel.locator("summary").click();
   await panel
     .getByRole("button", { name: "Load cycle evidence", exact: true })

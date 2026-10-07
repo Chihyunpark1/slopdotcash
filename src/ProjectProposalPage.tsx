@@ -1,15 +1,18 @@
 import { ArrowRight, Check, Clipboard } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link } from "./Link";
+import { CONTACT_EMAIL, CONTACT_MAILTO } from "./lib/contact";
 import { copyText } from "./lib/copy-text";
 import { isFundingAddress } from "./lib/funding";
 import {
   boundedText,
   immutableProposalTermsUrl,
   monthlyPoolValue,
+  normalizeRepositoryInput,
   ROOT_PUBLISHED_TEMPLATE,
   safeProposalHttpsUrl,
   slugify,
+  validRepositoryPath,
 } from "./lib/project-proposal";
 import { PLATFORM_FEE_BASIS_POINTS } from "./lib/rewards";
 import { SOURCE_REPOSITORY } from "./lib/source-repository";
@@ -52,6 +55,8 @@ export default function ProjectProposalPage() {
     kind: "brief" | "json";
     status: "copied" | "error";
   } | null>(null);
+  const repositoryValid = validRepositoryPath(repository);
+  const repositoryNeedsFix = repository.length > 0 && !repositoryValid;
   const slug = slugify(name || repository.split("/").at(-1) || "new-project");
   const pool = monthlyPoolValue(monthlyPool);
   const reviewBudget = monthlyPoolValue(monthlyReviewBudget);
@@ -289,8 +294,7 @@ Candidate project manifest (JSON data only):
 ${manifestText}`;
   const githubUrl = `${PROJECT_PROPOSAL_ROOT}?filename=${encodeURIComponent(`projects/${slug}/project.json`)}&value=${encodeURIComponent(`${manifestText}\n`)}`;
   const valid =
-    repository.length <= 201 &&
-    /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u.test(repository) &&
+    repositoryValid &&
     integrationBranch.length <= 255 &&
     /^(?!.*(?:\.\.|\s|~|\^|:|\?|\*|\[|\\))[A-Za-z0-9._/-]+$/u.test(
       integrationBranch,
@@ -361,6 +365,10 @@ ${manifestText}`;
           contributions; unknown authority and terms stay visibly disclosed
           without blocking work.
         </p>
+        <p className="proposal-note">
+          Questions before you open the pull request? Email{" "}
+          <a href={CONTACT_MAILTO}>{CONTACT_EMAIL}</a>.
+        </p>
       </section>
       <div className="proposal-grid">
         <form>
@@ -376,12 +384,29 @@ ${manifestText}`;
           <label>
             Public GitHub repository
             <input
-              onChange={(event) => setRepository(event.target.value)}
+              aria-describedby={
+                repositoryNeedsFix ? "proposal-repository-error" : undefined
+              }
+              aria-invalid={repositoryNeedsFix || undefined}
+              onChange={(event) =>
+                setRepository(normalizeRepositoryInput(event.target.value))
+              }
               placeholder="owner/repository"
               required
               value={repository}
             />
           </label>
+          {repositoryNeedsFix ? (
+            <p
+              className="form-error"
+              id="proposal-repository-error"
+              role="alert"
+            >
+              Use the owner/name form, for example SlopDotCash/slopdotcash. A
+              pasted github.com link is converted for you; other links and bare
+              names are not accepted.
+            </p>
+          ) : null}
           <label>
             GitHub repository numeric ID
             <input

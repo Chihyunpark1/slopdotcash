@@ -24,6 +24,7 @@
     "funding:verify-evm": "bun scripts/verify-funding-evm.ts",
     "funding:verify-bitcoin": "bun scripts/verify-funding-bitcoin.ts",
     "funding:verify-commitment-squads": "bun scripts/verify-commitment-squads.ts",
+    "funding:verify-project-vault-rules": "bun scripts/verify-project-vault-rules.ts",
     "funding:verify-commitment-sablier": "bun scripts/verify-commitment-sablier.ts",
     "settlement:verify-evm": "bun scripts/verify-settlement-evm.ts",
     "cycles:sync": "bun scripts/sync-cycle-index.ts",
@@ -89,7 +90,8 @@
   },
   "overrides": {
     "nanoid": "3.3.18",
-    "sharp": "0.35.4",
+    "sharp": "0.35.5",
+    "source-map-js": "1.2.2",
     "undici": "7.29.1"
   },
   "packageManager": "bun@1.3.14",

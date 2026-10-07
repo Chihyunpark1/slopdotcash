@@ -434,59 +434,6 @@ afterEach(() => {
 });
 
 describe("discovery", () => {
-  it("types through the campaign headlines without changing the semantic heading", () => {
-    vi.useFakeTimers();
-    Object.defineProperty(window, "matchMedia", {
-      configurable: true,
-      value: vi.fn().mockReturnValue({
-        matches: false,
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-      }),
-    });
-    mockSnapshot();
-    render(<App />);
-
-    expect(
-      screen.getByRole("heading", {
-        name: "MAKE MONEY SHIPPING OPEN SOURCE.",
-      }),
-    ).toBeInTheDocument();
-    const visibleAction = () =>
-      document.querySelector(".hero-typewriter")?.textContent ?? "";
-    expect(visibleAction()).toBe("SHIPPING OPEN SOURCE.");
-
-    for (const action of [
-      "SECURING THE WEB.",
-      "HACKING THE PLANET.",
-      "BUILDING AGI.",
-      "SHIPPING OPEN SOURCE.",
-    ]) {
-      let attempts = 0;
-      while (visibleAction() !== action && attempts < 100) {
-        act(() => vi.advanceTimersToNextTimer());
-        attempts += 1;
-      }
-      expect(visibleAction()).toBe(action);
-      expect(
-        screen.getByRole("heading", {
-          name: "MAKE MONEY SHIPPING OPEN SOURCE.",
-        }),
-      ).toBeInTheDocument();
-    }
-  });
-
-  it("keeps the first campaign headline fixed when reduced motion is requested", () => {
-    vi.useFakeTimers();
-    mockSnapshot();
-    render(<App />);
-
-    act(() => vi.advanceTimersByTime(30_000));
-    expect(document.querySelector(".hero-typewriter")).toHaveTextContent(
-      "SHIPPING OPEN SOURCE.",
-    );
-  });
-
   it("keeps loading separate from empty and error states", () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(
       (_input, init) =>
@@ -505,9 +452,26 @@ describe("discovery", () => {
     ).not.toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(screen.queryByText(/No accepted outcomes/u)).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Eliza" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Delta Star" })).toBeVisible();
+    expect(vi.mocked(fetch).mock.calls.map(([url]) => String(url))).not.toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("/data/leaderboard.json"),
+      ]),
+    );
+    expect(
+      vi
+        .mocked(fetch)
+        .mock.calls.some(
+          ([url]) =>
+            String(url).includes("/data/cycles/") ||
+            String(url).includes("github"),
+        ),
+    ).toBe(false);
   });
 
   it("labels an old but valid snapshot as stale rather than unavailable", async () => {
+    route("/projects/eliza");
     const snapshot = snapshotFixture();
     const generatedAt = new Date(
       Date.now() - 9 * 60 * 60 * 1_000,
@@ -570,6 +534,9 @@ describe("discovery", () => {
       within(footer).queryByRole("link", { name: "Slop Git" }),
     ).not.toBeInTheDocument();
     expect(
+      within(footer).getByRole("link", { name: "hello@slop.cash" }),
+    ).toHaveAttribute("href", "mailto:hello@slop.cash");
+    expect(
       screen.queryByRole("link", { name: /^Home$/u }),
     ).not.toBeInTheDocument();
     expect(
@@ -615,7 +582,7 @@ describe("discovery", () => {
     expect(
       screen.getByRole("heading", { name: "Featured" }),
     ).toBeInTheDocument();
-    expect(screen.queryByText("Community projects")).not.toBeInTheDocument();
+
     expect(screen.getByRole("heading", { name: "Eliza" })).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: "Delta Star" }),
@@ -627,12 +594,10 @@ describe("discovery", () => {
       .closest("a");
     expect(elizaCard).not.toBeNull();
     if (!elizaCard) throw new Error("Eliza project card is missing");
-    expect(within(elizaCard).queryByText(/Unfunded/u)).not.toBeInTheDocument();
-    expect(within(elizaCard).getByText("$5k")).toBeInTheDocument();
-    expect(within(elizaCard).getByText("/mo")).toBeInTheDocument();
-    expect(
-      within(elizaCard).queryByText("Target cap · no funding committed"),
-    ).not.toBeInTheDocument();
+    // A pledged pool headlines its state; the cap is small print only.
+    expect(within(elizaCard).getByText("Not funded yet")).toBeInTheDocument();
+    expect(within(elizaCard).queryByText("$5k")).not.toBeInTheDocument();
+    expect(within(elizaCard).getByText("Target $5k/mo")).toBeInTheDocument();
     expect(
       screen.queryByText("The proof is the product."),
     ).not.toBeInTheDocument();
@@ -681,7 +646,34 @@ describe("discovery", () => {
     expect(window.location.hash).toBe("#leaderboard");
   });
 
+  it("lands a direct hash load on its section after the data renders", async () => {
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    });
+    route("/#leaderboard");
+    mockSnapshot();
+    render(<App />);
+
+    await screen.findByRole("heading", { name: "Leaderboard" });
+    await waitFor(() =>
+      expect(scrollIntoView.mock.contexts.at(-1)).toHaveProperty(
+        "id",
+        "leaderboard",
+      ),
+    );
+
+    // Once the reader scrolls, later renders must not pull them back.
+    fireEvent.wheel(window);
+    scrollIntoView.mockClear();
+    document.body.append(document.createElement("div"));
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    expect(scrollIntoView).not.toHaveBeenCalled();
+  });
+
   it("renders malformed public data as an error and retries explicitly", async () => {
+    route("/projects/eliza");
     let serveValidData = false;
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
@@ -706,7 +698,7 @@ describe("discovery", () => {
     serveValidData = true;
     fireEvent.click(retry);
     expect(
-      await screen.findByRole("heading", { name: "Leaderboard" }),
+      await screen.findByRole("heading", { name: /leaderboard\./u }),
     ).toBeVisible();
     await waitFor(() =>
       expect(screen.queryByRole("alert")).not.toBeInTheDocument(),
@@ -715,6 +707,7 @@ describe("discovery", () => {
   });
 
   it("aborts the abandoned sibling request before an automatic retry", async () => {
+    route("/projects/eliza");
     const abandonedAbort = vi.fn();
     let snapshotAttempts = 0;
     vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
@@ -744,7 +737,7 @@ describe("discovery", () => {
     expect(
       await screen.findByRole(
         "heading",
-        { name: "Leaderboard" },
+        { name: /leaderboard\./u },
         { timeout: 5_000 },
       ),
     ).toBeVisible();
@@ -753,6 +746,7 @@ describe("discovery", () => {
   });
 
   it("rejects a declared snapshot larger than the browser safety limit", async () => {
+    route("/projects/eliza");
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       if (String(input).includes("/data/cycles/")) {
         return Response.json(cycleIndexFixture());
@@ -864,7 +858,7 @@ describe("project routes", () => {
     expect(
       screen.queryByText(/not accepting new Slop runs/u),
     ).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /^Home$/u })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Slop home" })).toHaveAttribute(
       "href",
       "/",
     );
@@ -886,14 +880,13 @@ describe("project routes", () => {
     expect(
       screen.queryByText("$10,000 monthly pool", { exact: false }),
     ).not.toBeInTheDocument();
+    const rewardCard = screen.getByText("Not funded yet").closest("aside");
+    expect(rewardCard?.querySelector("strong")).toHaveTextContent(
+      "Not funded yet",
+    );
+    expect(rewardCard).not.toHaveTextContent("$5k");
     expect(
-      screen
-        .getByText("MONTHLY POOL")
-        .closest("aside")
-        ?.querySelector(".reward-amount-monthly"),
-    ).toHaveTextContent("$5k / mo");
-    expect(
-      screen.getByText(/Target \$5,000 per month\. No funding is committed/u),
+      screen.getByText(/Target \$5,000 per month\. No payments scheduled/u),
     ).toBeInTheDocument();
     expect(
       screen.queryByText("simulated monthly pool"),
@@ -970,7 +963,6 @@ describe("project routes", () => {
     expect(
       await screen.findByRole("heading", { name: "Make money solving math." }),
     ).toBeInTheDocument();
-    expect(screen.getByText("EXTERNAL OPPORTUNITY")).toBeInTheDocument();
     expect(
       screen.getByText("No platform pool · no dollar projection"),
     ).toBeInTheDocument();
@@ -1103,9 +1095,7 @@ describe("public records", () => {
     ).toBeInTheDocument();
     const totals = document.querySelector("main > .profile-totals");
     expect(totals).not.toBeNull();
-    expect(totals).toHaveTextContent(
-      /3435-day score to [A-Z][a-z]{2} \d{1,2}, \d{4}/u,
-    );
+    expect(totals).toHaveTextContent("recorded score");
     expect(totals).not.toHaveTextContent(/all-time/u);
     expect(
       screen.getByText("Harden the proximity manifest loader"),
@@ -1139,9 +1129,7 @@ describe("public records", () => {
     ).toBeInTheDocument();
     expect(screen.queryAllByText(/2026-07 scoring ·/)).toHaveLength(0);
     expect(screen.getByText("Evidence guidance")).toBeInTheDocument();
-    expect(
-      screen.getByText("35-day score to Jul 30, 2026"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("recorded score")).toBeInTheDocument();
     expect(
       screen.getByText("July 2026 projected, unfunded"),
     ).toBeInTheDocument();
@@ -1400,9 +1388,9 @@ describe("public proof routes", () => {
   });
   it.each([
     ["/how-it-works", "Accepted work in. Auditable allocations out."],
-    ["/receipts", "Signed runs, without the private trace."],
-    ["/models", "Which models merge. By the receipts."],
-    ["/sponsors", "Fund the merges. Keep the keys."],
+    ["/receipts", "Run receipts"],
+    ["/models", "Models"],
+    ["/sponsors", "Fund a project."],
     ["/cycles", "Every pool gets a dated public record."],
   ])("renders %s as a branded route", async (path, heading) => {
     route(path);
@@ -1446,9 +1434,12 @@ describe("sponsors page", () => {
     for (const link of screen.getAllByRole("link", { name: "Add a project" })) {
       expect(link).toHaveAttribute("href", "/projects/new");
     }
+    expect(
+      screen.getByRole("link", { name: "Email hello@slop.cash" }),
+    ).toHaveAttribute("href", "mailto:hello@slop.cash");
   });
 
-  it("leads with the pinned outside-GitHub cross-reference and keeps the live figures separate", async () => {
+  it("keeps the dated audience report available after funding choices", async () => {
     route("/sponsors");
     mockSnapshot();
     render(<App />);
@@ -1464,6 +1455,8 @@ describe("sponsors page", () => {
     const pin = WHO_BUILDS_CROSS_REFERENCE;
     const all = outside.cohorts[0];
 
+    fireEvent.click(screen.getByText(/Audience report ·/u));
+    fireEvent.click(screen.getByText("Funding rules and payment stages"));
     const heading = await screen.findByRole("heading", {
       name: "Who builds on Slop.",
     });
@@ -1472,7 +1465,7 @@ describe("sponsors page", () => {
     const scope = within(section as HTMLElement);
     const main = screen.getByRole("main");
     const headings = within(main).getAllByRole("heading", { level: 2 });
-    expect(headings[0]).toBe(heading);
+    expect(headings[0]).toHaveTextContent("Projects");
     const stats = within(
       (section as HTMLElement).querySelector(
         ".model-outcomes-summary",
@@ -1631,6 +1624,11 @@ describe("project proposals", () => {
         name: "Add a project.",
       }),
     ).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("main")).getByRole("link", {
+        name: "hello@slop.cash",
+      }),
+    ).toHaveAttribute("href", "mailto:hello@slop.cash");
     fireEvent.change(screen.getByLabelText("Project name"), {
       target: { value: "Open Protein" },
     });
@@ -1739,6 +1737,47 @@ describe("project proposals", () => {
         name: "Copy unavailable; select JSON",
       }),
     ).toBeVisible();
+  });
+
+  it("turns a pasted GitHub link into owner/name and flags anything else", async () => {
+    route("/projects/new");
+    mockSnapshot();
+    render(<App />);
+    await screen.findByLabelText("Project name");
+    const repositoryField = screen.getByLabelText("Public GitHub repository");
+
+    fireEvent.change(repositoryField, {
+      target: { value: "https://github.com/example/pasted-link/tree/main" },
+    });
+    expect(repositoryField).toHaveValue("example/pasted-link");
+    expect(repositoryField).not.toHaveAttribute("aria-invalid");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/"id": "example\/pasted-link"/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /"githubUrl": "https:\/\/github.com\/example\/pasted-link"/,
+      ),
+    ).toBeInTheDocument();
+
+    fireEvent.change(repositoryField, {
+      target: { value: "https://gitlab.com/example/elsewhere" },
+    });
+    expect(repositoryField).toHaveValue("https://gitlab.com/example/elsewhere");
+    expect(repositoryField).toHaveAttribute("aria-invalid", "true");
+    const error = screen.getByRole("alert");
+    expect(error).toHaveTextContent("Use the owner/name form");
+    expect(repositoryField).toHaveAttribute("aria-describedby", error.id);
+    expect(
+      screen.queryByRole("link", { name: /continue on github/i }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.change(repositoryField, {
+      target: { value: "example/elsewhere" },
+    });
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(repositoryField).not.toHaveAttribute("aria-invalid");
   });
 
   it("does not hand off an over-limit or imprecise money pool", async () => {

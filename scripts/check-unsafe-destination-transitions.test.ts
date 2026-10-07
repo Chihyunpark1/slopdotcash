@@ -226,6 +226,15 @@ describe("trusted unsafe destination Git transitions", () => {
       })
         .split("\0")
         .filter(Boolean);
+      // The fixture copies every tracked cycle, so the validated count grows
+      // with each monthly close.
+      const cycleCount = new Set(
+        paths.flatMap((path) => {
+          const match = /^cycles\/([^/]+\/\d{4}-\d{2})\//u.exec(path);
+          return match ? [match[1]] : [];
+        }),
+      ).size;
+      expect(cycleCount).toBeGreaterThan(0);
       for (const path of paths) {
         mkdirSync(dirname(join(repo.root, path)), { recursive: true });
         cpSync(join(packageRoot, path), join(repo.root, path));
@@ -248,6 +257,8 @@ describe("trusted unsafe destination Git transitions", () => {
         .digest("hex");
       repo.write(PATH, JSON.stringify(repo.held));
       repo.write("cycles/eliza/2026-07/source-snapshot.json", snapshotBytes);
+      // This fixture changes the canonical cycle, so refresh its bundled history.
+      execFileSync("bun", ["run", "cycles:sync"], { cwd: repo.root });
       repo.git("add", ".");
       repo.git("commit", "-qm", "complete credential-free packaging fixture");
       const bin = join(repo.root, "test-bin");
@@ -277,7 +288,9 @@ describe("trusted unsafe destination Git transitions", () => {
           maxBuffer: 4 * 1024 * 1024,
         });
         expect(output).toContain(
-          command === "build" ? "built in" : "validated 1 reward cycle",
+          command === "build"
+            ? "built in"
+            : `validated ${cycleCount} reward cycle${cycleCount === 1 ? "" : "s"}`,
         );
       }
       expect(existsSync(join(repo.root, "dist/data/cycles/index.json"))).toBe(
