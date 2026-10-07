@@ -1,3 +1,4 @@
+import { deploymentOrigins, deploymentTier } from "../../src/lib/deployment";
 import { randomToken } from "./crypto";
 import { handleIdentityRequest, identityBrowserResponse } from "./handler";
 import { type D1Database, D1IdentityPersistence } from "./persistence";
@@ -8,6 +9,7 @@ type RateLimitBinding = {
 };
 
 type Env = {
+  SLOP_ENVIRONMENT?: "production" | "staging";
   IDENTITY_DB: D1Database;
   IDENTITY_START_LIMITER: RateLimitBinding;
   IDENTITY_POLL_LIMITER: RateLimitBinding;
@@ -181,6 +183,7 @@ export async function applyIdentityRateLimit(
   request: Request,
   env: Pick<
     Env,
+    | "SLOP_ENVIRONMENT"
     | "IDENTITY_DB"
     | "IDENTITY_START_LIMITER"
     | "IDENTITY_POLL_LIMITER"
@@ -191,7 +194,8 @@ export async function applyIdentityRateLimit(
   const url = new URL(request.url);
   if (
     url.protocol !== "https:" ||
-    url.host !== "identity.slop.cash" ||
+    url.origin !==
+      deploymentOrigins(deploymentTier(env.SLOP_ENVIRONMENT)).identity ||
     request.method !== "POST"
   ) {
     return null;
@@ -259,7 +263,7 @@ async function resolveGithubIdentity(
           client_secret: env.GITHUB_APP_CLIENT_SECRET,
           code,
           code_verifier: pkceVerifier,
-          redirect_uri: "https://identity.slop.cash/v1/oauth/callback",
+          redirect_uri: `${deploymentOrigins(deploymentTier(env.SLOP_ENVIRONMENT)).identity}/v1/oauth/callback`,
         }),
         signal: AbortSignal.timeout(10_000),
       },
@@ -409,7 +413,10 @@ async function deleteExpiredIdentityState(
 }
 
 export async function runScheduledMaintenance(
-  env: Pick<Env, "IDENTITY_DB" | "GITHUB_INTAKE_STATUS_TOKEN">,
+  env: Pick<
+    Env,
+    "SLOP_ENVIRONMENT" | "IDENTITY_DB" | "GITHUB_INTAKE_STATUS_TOKEN"
+  >,
   now: Date,
   fetchImpl: FetchLike = fetch,
 ): Promise<void> {
@@ -452,6 +459,7 @@ export async function runScheduledMaintenance(
 
 function dependencies(env: Env) {
   return {
+    tier: deploymentTier(env.SLOP_ENVIRONMENT),
     persistence: new D1IdentityPersistence(env.IDENTITY_DB),
     stateEncryptionSecret: env.IDENTITY_STATE_KEY,
     assertionSecret: env.IDENTITY_ASSERTION_KEY,
@@ -466,7 +474,8 @@ function dependencies(env: Env) {
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const limited = await applyIdentityRateLimit(request, env);
-    if (limited !== null) return identityBrowserResponse(request, limited);
+    if (limited !== null)
+      return identityBrowserResponse(request, limited, dependencies(env));
     return handleIdentityRequest(request, dependencies(env));
   },
   async scheduled(_controller: unknown, env: Env): Promise<void> {

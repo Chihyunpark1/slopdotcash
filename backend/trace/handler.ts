@@ -1,4 +1,8 @@
 import {
+  type DeploymentTier,
+  deploymentOrigins,
+} from "../../src/lib/deployment";
+import {
   assertWalletPossessionChallenge,
   isSignableSolanaAddress,
   verifyWalletPossession,
@@ -50,6 +54,7 @@ import {
 import { applyVerificationAdmission } from "./verification-admission";
 
 export type TraceApiDependencies = {
+  tier?: DeploymentTier;
   persistence: TracePersistence;
   authSecret: string;
   operatorGithubIds: ReadonlySet<string>;
@@ -210,17 +215,16 @@ function pathParts(request: Request): string[] {
   return path.slice("/api/v1/".length).split("/").filter(Boolean);
 }
 
-const PUBLIC_BROWSER_ORIGINS = new Set([
-  "https://slop.cash",
-  "https://www.slop.cash",
-  "https://slop.tech",
-  "https://www.slop.tech",
-  "https://eliza.army",
-]);
-
-function publicBrowserResponse(request: Request, response: Response): Response {
+function publicBrowserResponse(
+  deps: TraceApiDependencies,
+  request: Request,
+  response: Response,
+): Response {
   const origin = request.headers.get("origin");
-  if (origin === null || !PUBLIC_BROWSER_ORIGINS.has(origin)) {
+  if (
+    origin === null ||
+    !deploymentOrigins(deps.tier).browserOrigins.has(origin)
+  ) {
     return response;
   }
   response.headers.set("access-control-allow-origin", origin);
@@ -946,7 +950,7 @@ async function createTraceIntent(
   }
   return json(result.status === "created" ? 201 : 200, {
     serverRunId: runId,
-    uploadUrl: `https://api.slop.cash/api/v1/trace-uploads/${capability}`,
+    uploadUrl: `${deploymentOrigins(deps.tier).api}/api/v1/trace-uploads/${capability}`,
     expiresAt: result.value.expiresAt,
     sha256: result.value.sha256,
     sizeBytes: result.value.sizeBytes,
@@ -1381,12 +1385,16 @@ export async function handleTraceApi(
   const allowedHeaders = browserRouteHeaders(pathParts(request), method);
   if (
     allowedHeaders === null ||
-    (url.host !== "api.slop.cash" && url.hostname !== "localhost") ||
+    (url.origin !== deploymentOrigins(deps.tier).api &&
+      url.hostname !== "localhost") ||
     (url.protocol !== "https:" && url.hostname !== "localhost")
   ) {
     return handleTraceApiInternal(request, deps);
   }
-  if (origin !== null && !PUBLIC_BROWSER_ORIGINS.has(origin))
+  if (
+    origin !== null &&
+    !deploymentOrigins(deps.tier).browserOrigins.has(origin)
+  )
     return json(403, { error: "origin_not_allowed" });
   if (preflight) {
     if (origin === null) return json(403, { error: "origin_not_allowed" });
@@ -1410,6 +1418,7 @@ export async function handleTraceApi(
     });
   }
   return publicBrowserResponse(
+    deps,
     request,
     await handleTraceApiInternal(request, deps),
   );
@@ -1426,7 +1435,7 @@ async function handleTraceApiInternal(
   if (requestUrl.protocol !== "https:" && !isLocal) {
     return json(400, { error: "https_required" });
   }
-  if (requestUrl.host !== "api.slop.cash" && !isLocal) {
+  if (requestUrl.origin !== deploymentOrigins(deps.tier).api && !isLocal) {
     return json(404, { error: "not_found" });
   }
   const publicWalletRead = isPublicWalletRead(request, parts);
@@ -1447,6 +1456,7 @@ async function handleTraceApiInternal(
       );
     if (publicFundingRead) {
       return publicBrowserResponse(
+        deps,
         request,
         await readFundingVerification(request, parts[1], parts[3], () =>
           applyVerificationAdmission(request, deps),
@@ -1468,6 +1478,7 @@ async function handleTraceApiInternal(
       parts[3] === "current"
     ) {
       return publicBrowserResponse(
+        deps,
         request,
         await readCurrentWalletClaim(request, deps, parts[2]),
       );
@@ -1479,6 +1490,7 @@ async function handleTraceApiInternal(
       parts[2] === "possession"
     ) {
       return publicBrowserResponse(
+        deps,
         request,
         await readPublicWalletPossession(deps, parts[1]),
       );
@@ -1490,6 +1502,7 @@ async function handleTraceApiInternal(
       parts[1] !== "current"
     ) {
       return publicBrowserResponse(
+        deps,
         request,
         await readPublicWalletClaim(deps, parts[1]),
       );
@@ -1549,7 +1562,7 @@ async function handleTraceApiInternal(
           : error.message,
     });
     return publicWalletRead || publicFundingRead
-      ? publicBrowserResponse(request, response)
+      ? publicBrowserResponse(deps, request, response)
       : response;
   }
 }

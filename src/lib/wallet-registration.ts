@@ -1,8 +1,9 @@
+import { browserDeployment } from "./browser-deployment";
 /** Browser adapter for the canonical wallet-claim/run-receipt OAuth protocol. */
 import { isSolanaAddress } from "./wallets";
 
-const IDENTITY = "https://identity.slop.cash";
-const API = "https://api.slop.cash";
+const IDENTITY = browserDeployment.identity;
+const API = browserDeployment.api;
 const AUDIENCE = "private-trace-api";
 // The service issues a flow that expires exactly five minutes after its own
 // clock. Allow a visitor's clock to run this far behind before refusing it.

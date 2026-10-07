@@ -202,7 +202,7 @@ export async function verifyHistoricalPaymentAdmission(
       (p) =>
         p.merge_commit_sha === sha &&
         p.merged_at &&
-        p.base?.ref === "develop" &&
+        p.base?.ref === "main" &&
         p.base.repo?.full_name === PAYMENT_REPOSITORY &&
         p.head?.sha === parents[1],
     );

@@ -69,7 +69,7 @@ export function signerReportPath(report: SignerAccessReport): string {
 
 /**
  * Reads every report from head, preserving every base blob. The caller must
- * resolve base to current trusted develop; a proposed manifest is not authority.
+ * resolve base to current trusted main; a proposed manifest is not authority.
  * All reports, including historical loss, are authenticated before returning.
  */
 export async function readSignerAccessLedger(input: {
@@ -195,9 +195,9 @@ export async function readCurrentSignerAccessLedger(
     "fetch",
     "--no-tags",
     "origin",
-    "+refs/heads/develop:refs/remotes/origin/develop",
+    "+refs/heads/main:refs/remotes/origin/main",
   ]);
-  const current = git(root, ["rev-parse", "refs/remotes/origin/develop"])
+  const current = git(root, ["rev-parse", "refs/remotes/origin/main"])
     .toString()
     .trim();
   return readSignerAccessLedger({

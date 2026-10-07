@@ -5,8 +5,10 @@ import {
   type R2Bucket,
 } from "../../../backend/trace/cloudflare-persistence";
 import { handleTraceApi } from "../../../backend/trace/handler";
+import { deploymentTier } from "../../../src/lib/deployment";
 
 type Env = {
+  SLOP_ENVIRONMENT?: "production" | "staging";
   SLOP_DB: D1Database;
   PRIVATE_TRACES: R2Bucket;
   TRACE_AUTH_SECRET: string;
@@ -128,6 +130,7 @@ async function verifyIdentityAssertion(
 export async function onRequest(context: PagesContext): Promise<Response> {
   if (new URL(context.request.url).pathname.startsWith("/api/v1/points/"))
     return handlePointsApi(context.request, {
+      tier: deploymentTier(context.env.SLOP_ENVIRONMENT),
       db: context.env.SLOP_DB,
       rateLimitSecret: context.env.TRACE_AUTH_SECRET,
       identity: context.env.SLOP_IDENTITY,
@@ -140,6 +143,7 @@ export async function onRequest(context: PagesContext): Promise<Response> {
           : undefined,
     });
   return handleTraceApi(context.request, {
+    tier: deploymentTier(context.env.SLOP_ENVIRONMENT),
     persistence: new CloudflareTracePersistence(
       context.env.SLOP_DB,
       context.env.PRIVATE_TRACES,

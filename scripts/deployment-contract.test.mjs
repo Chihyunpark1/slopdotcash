@@ -74,7 +74,7 @@ const evidenceRecorder = readFileSync(
 );
 const qualityJob = workflow.slice(
   workflow.indexOf("\n  quality:"),
-  workflow.indexOf("\n  deploy:"),
+  workflow.indexOf("\n  staging:"),
 );
 const deployJob = workflow.slice(workflow.indexOf("\n  deploy:"));
 
@@ -220,14 +220,14 @@ describe("slop.cash deployment contract", () => {
     ).toHaveLength(3);
     expect(
       deployJob.match(
-        /git -C "\$GITHUB_WORKSPACE" diff --quiet "\$GITHUB_SHA" "\$live_develop"/g,
+        /git -C "\$GITHUB_WORKSPACE" diff --quiet "\$GITHUB_SHA" "\$live_main"/g,
       ),
     ).toHaveLength(3);
     expect(deployJob).toContain(
       "changed a slop.cash release input immediately before deployment",
     );
     expect(
-      deployJob.match(/diff --quiet "\$GITHUB_SHA" "\$live_develop" -- \./g),
+      deployJob.match(/diff --quiet "\$GITHUB_SHA" "\$live_main" -- \./g),
     ).toHaveLength(3);
     expect(deployJob).toContain(
       "https://github.com/SlopDotCash/slopdotcash.git",
@@ -315,7 +315,7 @@ describe("slop.cash deployment contract", () => {
     );
   });
 
-  it("keeps every release path restricted to develop", () => {
+  it("keeps every release path restricted to main", () => {
     expect(workflow).toContain(
       `cancel-in-progress: ${"$"}{{ github.event_name == 'pull_request' }}`,
     );
@@ -323,21 +323,21 @@ describe("slop.cash deployment contract", () => {
       `group: slop-${"$"}{{ github.event.pull_request.number || github.run_id }}`,
     );
     expect(qualityJob).toContain(
-      `group: slop-quality-${"$"}{{ github.event.pull_request.number || github.event_name }}`,
+      `group: slop-quality-${"$"}{{ github.event.pull_request.number || github.ref }}-${"$"}{{ github.event_name }}`,
     );
     expect(qualityJob).toContain("cancel-in-progress: true");
     expect(deployJob).toContain(
-      "github.event_name == 'push' && github.ref == 'refs/heads/develop'",
+      "github.event_name == 'push' && github.ref == 'refs/heads/main'",
     );
     expect(deployJob).toContain(
-      "github.event_name == 'schedule' && github.ref == 'refs/heads/develop'",
+      "github.event_name == 'schedule' && github.ref == 'refs/heads/main'",
     );
     expect(deployJob).not.toContain("github.event_name == 'pull_request'");
     expect(deployJob).toContain(
-      "github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/develop'",
+      "github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'",
     );
     expect(deployJob).toContain(
-      'if [ "$GITHUB_REF" != "refs/heads/develop" ]; then',
+      'if [ "$GITHUB_REF" != "refs/heads/main" ]; then',
     );
     expect(deployJob).toContain("group: slop-production");
     expect(deployJob).toContain("cancel-in-progress: false");
@@ -399,22 +399,22 @@ describe("slop.cash deployment contract", () => {
 
   it("runs monthly rewards from the immutable trusted event SHA", () => {
     expect(monthlyRewardsWorkflow).toContain(
-      "if: github.ref == 'refs/heads/develop'",
+      "if: github.ref == 'refs/heads/main'",
     );
     expect(monthlyRewardsWorkflow).toContain(`ref: ${"$"}{{ github.sha }}`);
     expect(monthlyRewardsWorkflow).toContain(
-      'if [ "$GITHUB_REF" != "refs/heads/develop" ]; then',
+      'if [ "$GITHUB_REF" != "refs/heads/main" ]; then',
     );
     expect(monthlyRewardsWorkflow).toContain(
       'if [ "$checked_out_sha" != "$GITHUB_SHA" ]; then',
     );
-    expect(monthlyRewardsWorkflow).not.toContain("ref: develop");
+    expect(monthlyRewardsWorkflow).not.toContain("ref: main");
     expect(monthlyRewardsWorkflow).toContain(
       `bun run leaderboard:generate -- --cutoff "${"$"}{{ steps.cycle.outputs.cutoff }}"`,
     );
   });
 
-  it("preserves an immutable-sha transition gate on trusted develop pushes", () => {
+  it("preserves an immutable-sha transition gate on trusted main pushes", () => {
     const transitionGate = qualityJob.indexOf(
       'node scripts/check-project-transitions.mjs "$PROJECT_POLICY_BASE_SHA" "$PROJECT_POLICY_HEAD_SHA"',
     );

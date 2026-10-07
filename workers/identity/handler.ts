@@ -1,7 +1,10 @@
 import {
+  type DeploymentTier,
+  deploymentOrigins,
+} from "../../src/lib/deployment";
+import {
   ASSERTION_TTL_SECONDS,
   IDENTITY_INTERNAL_HOST,
-  IDENTITY_PUBLIC_ORIGIN,
   type IdentityPersistence,
   isIdentityAudience,
   OAUTH_FLOW_TTL_SECONDS,
@@ -18,6 +21,7 @@ import {
 } from "./crypto";
 
 export type IdentityWorkerDependencies = {
+  tier?: DeploymentTier;
   persistence: IdentityPersistence;
   stateEncryptionSecret: string;
   assertionSecret: string;
@@ -181,10 +185,7 @@ async function startFlow(
   });
   if (!created) fail(503, "flow_unavailable", "Could not create identity flow");
 
-  const authorizationUrl = new URL(
-    "/v1/oauth/authorize",
-    IDENTITY_PUBLIC_ORIGIN,
-  );
+  const authorizationUrl = new URL("/v1/oauth/authorize");
   authorizationUrl.searchParams.set("flow_id", flowId);
   authorizationUrl.searchParams.set("state", state);
   return json(201, {
@@ -228,7 +229,7 @@ async function authorizeBrowser(
   githubUrl.searchParams.set("client_id", deps.githubClientId);
   githubUrl.searchParams.set(
     "redirect_uri",
-    `${IDENTITY_PUBLIC_ORIGIN}/v1/oauth/callback`,
+    `${deploymentOrigins(deps.tier).identity}/v1/oauth/callback`,
   );
   githubUrl.searchParams.set("state", state);
   githubUrl.searchParams.set("code_challenge", await pkceChallenge(verifier));
@@ -456,7 +457,7 @@ async function handleIdentityRequestCore(
     ) {
       return await consumeAssertion(request, deps);
     }
-    if (url.host !== new URL(IDENTITY_PUBLIC_ORIGIN).host) {
+    if (url.host !== new URL(deploymentOrigins(deps.tier).identity).host) {
       return json(404, { error: "not_found" });
     }
     if (request.method === "POST" && url.pathname === "/v1/oauth/start") {
@@ -500,15 +501,13 @@ async function handleIdentityRequestCore(
 }
 
 // Public product origins only. CLI requests without Origin retain their protocol.
-const WALLET_APP_ORIGINS = new Set([
-  "https://slop.cash",
-  "https://slop.tech",
-  "https://eliza.army",
-]);
-function browserIdentityEndpoint(request: Request): boolean {
+function browserIdentityEndpoint(
+  request: Request,
+  deps: { tier?: DeploymentTier },
+): boolean {
   const url = new URL(request.url);
   return (
-    url.origin === IDENTITY_PUBLIC_ORIGIN &&
+    url.origin === deploymentOrigins(deps.tier).identity &&
     ["/v1/oauth/start", "/v1/oauth/poll"].includes(url.pathname)
   );
 }
@@ -516,12 +515,13 @@ function browserIdentityEndpoint(request: Request): boolean {
 export function identityBrowserResponse(
   request: Request,
   response: Response,
+  deps: { tier?: DeploymentTier } = {},
 ): Response {
   const origin = request.headers.get("origin");
   if (
-    !browserIdentityEndpoint(request) ||
+    !browserIdentityEndpoint(request, deps) ||
     !origin ||
-    !WALLET_APP_ORIGINS.has(origin)
+    !deploymentOrigins(deps.tier).browserOrigins.has(origin)
   )
     return response;
   const headers = new Headers(response.headers);
@@ -538,8 +538,8 @@ export async function handleIdentityRequest(
   deps: IdentityWorkerDependencies,
 ): Promise<Response> {
   const origin = request.headers.get("origin");
-  if (browserIdentityEndpoint(request) && origin) {
-    if (!WALLET_APP_ORIGINS.has(origin))
+  if (browserIdentityEndpoint(request, deps) && origin) {
+    if (!deploymentOrigins(deps.tier).browserOrigins.has(origin))
       return json(403, { error: "origin_forbidden" });
     if (request.method === "OPTIONS") {
       const requestedHeaders = (
@@ -555,6 +555,7 @@ export async function handleIdentityRequest(
         return identityBrowserResponse(
           request,
           json(403, { error: "preflight_forbidden" }),
+          deps,
         );
       const headers = securityHeaders("text/plain; charset=utf-8");
       headers.set("access-control-allow-methods", "POST");
@@ -566,11 +567,13 @@ export async function handleIdentityRequest(
       return identityBrowserResponse(
         request,
         new Response(null, { status: 204, headers }),
+        deps,
       );
     }
   }
   return identityBrowserResponse(
     request,
     await handleIdentityRequestCore(request, deps),
+    deps,
   );
 }

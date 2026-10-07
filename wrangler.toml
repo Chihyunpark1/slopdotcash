@@ -28,4 +28,4 @@ r2_buckets = []
 services = []
 
 [env.preview.vars]
-PUBLIC_SITE_URL = "https://slop.cash"
+PUBLIC_SITE_URL = "https://staging.slop.cash"

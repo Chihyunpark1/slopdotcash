@@ -1,4 +1,5 @@
 import { Link, useInitialHashScroll } from "./Link";
+import { browserDeployment } from "./lib/browser-deployment";
 import { CONTACT_EMAIL, CONTACT_MAILTO } from "./lib/contact";
 import { copyText } from "./lib/copy-text";
 import { homeProjects } from "./lib/home-projects";
@@ -1469,7 +1470,7 @@ function useCurrentWallet(state: DataState, login: string): CurrentWalletState {
       WALLET_CLAIM_TIMEOUT_MS,
     );
     void fetch(
-      `https://api.slop.cash/api/v1/wallet-claims/actors/${githubActorId}/current`,
+      `${browserDeployment.api}/api/v1/wallet-claims/actors/${githubActorId}/current`,
       {
         cache: "no-store",
         headers: { Accept: "application/json" },
@@ -1512,7 +1513,7 @@ function useCurrentWallet(state: DataState, login: string): CurrentWalletState {
           status: "ready",
           address: claim.address,
           login: normalizedLogin,
-          sourceUrl: `https://api.slop.cash/api/v1/wallet-claims/${claim.claimId}`,
+          sourceUrl: `${browserDeployment.api}/api/v1/wallet-claims/${claim.claimId}`,
         });
       })
       .catch(() => {

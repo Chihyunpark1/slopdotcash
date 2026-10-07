@@ -39,7 +39,7 @@ function setup() {
     mergeable_state: "clean",
     merge_commit_sha: fixture.merge,
     base: {
-      ref: "develop",
+      ref: "main",
       sha: fixture.base,
       repo: { full_name: "example/site" },
     },
@@ -110,7 +110,7 @@ function setup() {
           data: {
             repository: {
               defaultBranchRef: {
-                name: "develop",
+                name: "main",
                 branchProtectionRule: state.protection,
               },
               pullRequest: {
@@ -124,7 +124,7 @@ function setup() {
         };
       else if (path.includes("pulls?")) value = [pr];
       else if (path.endsWith("pulls/7")) value = pr;
-      else if (path.endsWith("git/ref/heads/develop"))
+      else if (path.endsWith("git/ref/heads/main"))
         value = { object: { sha: state.base } };
       else if (path.includes("/reviews?")) value = state.reviews;
       else if (path.includes("/runs?"))
@@ -165,7 +165,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.stubEnv("GITHUB_REPOSITORY", "example/site");
   vi.stubEnv("GITHUB_TOKEN", "test-only-token");
-  vi.stubEnv("GITHUB_REF", "refs/heads/develop");
+  vi.stubEnv("GITHUB_REF", "refs/heads/main");
   vi.stubEnv("FUNDING_MERGE_LOG", "/unused-test-log");
   vi.stubEnv("SLOP_FUNDING_AUTOMERGE_ENABLED", "true");
   fixture.verifier.mockImplementation(async () => ({
@@ -209,7 +209,7 @@ describe("trusted funding merge orchestration", () => {
       sha: fixture.head,
       merge_method: "merge",
     });
-    expect(state.calls.at(-1)?.body).toEqual({ ref: "develop" });
+    expect(state.calls.at(-1)?.body).toEqual({ ref: "main" });
     expect(state.calls.filter((c) => c.path === "graphql")).toHaveLength(2);
   });
   it.each([

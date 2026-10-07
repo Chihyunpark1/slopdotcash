@@ -188,7 +188,7 @@ describe("complete authenticated signer history", () => {
     const f = await fixture();
     f.git("branch", "-M", "develop");
     f.git("remote", "add", "origin", f.root);
-    f.git("update-ref", "refs/remotes/origin/develop", f.input().baseSha);
+    f.git("update-ref", "refs/remotes/origin/main", f.input().baseSha);
     await f.add();
     const acceptedLoss = f.commit();
     const ledger = await readCurrentSignerAccessLedger(

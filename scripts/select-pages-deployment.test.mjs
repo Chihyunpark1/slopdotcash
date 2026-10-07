@@ -20,7 +20,7 @@ function deployment(overrides = {}) {
     latest_stage: { name: "deploy", status: "success" },
     deployment_trigger: {
       metadata: {
-        branch: "develop",
+        branch: "main",
         commit_dirty: false,
         commit_hash: commitHash,
       },
@@ -64,7 +64,7 @@ describe("Cloudflare Pages deployment metadata selection", () => {
       deployment({
         deployment_trigger: {
           metadata: {
-            branch: "develop",
+            branch: "main",
             commit_dirty: true,
             commit_hash: commitHash,
           },
@@ -88,7 +88,7 @@ describe("Cloudflare Pages deployment metadata selection", () => {
       deployment({
         deployment_trigger: {
           metadata: {
-            branch: "develop",
+            branch: "main",
             commit_dirty: false,
             commit_hash: "b".repeat(40),
           },

@@ -208,7 +208,7 @@ function liveEvidence(f: ReturnType<typeof fixture>, expired = false) {
           merge_commit_sha: f.accepted,
           merged_at: "2026-09-10T10:00:00Z",
           base: {
-            ref: "develop",
+            ref: "main",
             repo: { full_name: github.PAYMENT_REPOSITORY },
           },
           head: { sha: f.head },

@@ -231,7 +231,7 @@ function candidatePull(
   overrides: Record<string, unknown> = {},
 ): Record<string, unknown> {
   return {
-    base: { ref: "develop", repo: { full_name: "SlopDotCash/slopdotcash" } },
+    base: { ref: "main", repo: { full_name: "SlopDotCash/slopdotcash" } },
     draft: false,
     head: { repo: { full_name: "SlopDotCash/slopdotcash" }, sha: revision },
     labels: [{ name: "slop-release-candidate" }],
@@ -1031,7 +1031,7 @@ describe("authenticated skill installer lifecycle", () => {
       },
       developHead: revisionA,
       responseOverrides: {
-        "/repos/SlopDotCash/slopdotcash/git/ref/heads/develop": {
+        "/repos/SlopDotCash/slopdotcash/git/ref/heads/main": {
           object: { sha: revisionA, type: "commit" },
           ref: "refs/heads/not-develop",
         },
@@ -1915,7 +1915,7 @@ time.sleep(60)
       kind: "json",
       source: apiResponses,
       requestLog: join(root, "api.log"),
-      forbidPattern: "/git/ref/heads/develop",
+      forbidPattern: "/git/ref/heads/main",
     });
     try {
       const anonymous = run(
@@ -1937,7 +1937,7 @@ time.sleep(60)
       ).toBe(false);
       expect(
         loggedRequests(join(root, "api.log")).filter(([url]) =>
-          url.includes("/git/ref/heads/develop"),
+          url.includes("/git/ref/heads/main"),
         ),
       ).toHaveLength(1);
 

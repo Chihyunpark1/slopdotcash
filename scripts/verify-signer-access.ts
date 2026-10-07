@@ -297,7 +297,7 @@ if (import.meta.main) {
       "merge-base",
       "--is-ancestor",
       revision,
-      "origin/develop",
+      "origin/main",
     ],
     { stdio: "ignore" },
   );

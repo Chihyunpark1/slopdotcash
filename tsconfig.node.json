@@ -64,6 +64,7 @@
     "tests/squads-execution-context.ts",
     "tests/install-authority-fixture.ts",
     "src/lib/leaderboard-types.ts",
-    "src/lib/profiles.ts"
+    "src/lib/profiles.ts",
+    "src/lib/deployment.ts"
   ]
 }

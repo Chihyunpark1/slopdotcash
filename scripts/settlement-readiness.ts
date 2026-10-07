@@ -54,14 +54,14 @@ function acceptedAt(sha: string): string {
     ? prs.filter(
         (p) =>
           p.merge_commit_sha === sha &&
-          p.base?.ref === "develop" &&
+          p.base?.ref === "main" &&
           p.base.repo?.full_name === PAYMENT_REPOSITORY &&
           p.merged_at,
       )
     : [];
   if (matches.length !== 1)
     throw new TypeError(
-      "Cannot prove canonical policy/proposal acceptance through a merged develop PR",
+      "Cannot prove canonical policy/proposal acceptance through a merged main PR",
     );
   const time = new Date(matches[0].merged_at as string);
   if (!Number.isFinite(time.getTime()))

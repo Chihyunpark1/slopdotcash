@@ -38,7 +38,7 @@ it("refreshes the published approved ancestor, renews its artifact, and rejects 
       "awaiting approval",
     );
     const newer = git("rev-parse", "HEAD");
-    git("update-ref", "refs/remotes/origin/develop", newer);
+    git("update-ref", "refs/remotes/origin/main", newer);
     const fixture = join(root, "fetch.mjs");
     writeFileSync(
       fixture,
@@ -50,8 +50,8 @@ it("refreshes the published approved ancestor, renews its artifact, and rejects 
       join(bin, "gh"),
       `#!/usr/bin/env node
 const endpoint = process.argv.at(-1);
-const run = { id: 90, workflow_id: 7, head_sha: ${JSON.stringify(sha)}, head_branch: "develop", event: "push", conclusion: "success", head_repository: { full_name: "SlopDotCash/slopdotcash" } };
-const result = endpoint.includes("/workflows/") ? { workflow_runs: process.env.NO_APPROVAL ? [] : [run] } : endpoint.includes("/artifacts?") ? { artifacts: [{ name: "slop-source-${sha}", expired: false, workflow_run: {id: 91, head_branch: "develop"} }] } : {...run, id:91, head_sha:${JSON.stringify(newer)}, event:"schedule"};
+const run = { id: 90, workflow_id: 7, head_sha: ${JSON.stringify(sha)}, head_branch: "main", event: "push", conclusion: "success", head_repository: { full_name: "SlopDotCash/slopdotcash" } };
+const result = endpoint.includes("/workflows/") ? { workflow_runs: process.env.NO_APPROVAL ? [] : [run] } : endpoint.includes("/artifacts?") ? { artifacts: [{ name: "slop-source-${sha}", expired: false, workflow_run: {id: 91, head_branch: "main"} }] } : {...run, id:91, head_sha:${JSON.stringify(newer)}, event:"schedule"};
 process.stdout.write(JSON.stringify(result));
 `,
       { mode: 0o755 },
