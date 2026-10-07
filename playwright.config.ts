@@ -15,10 +15,15 @@ if (!new Set(["pages", "preview"]).has(localServer)) {
   throw new TypeError(`Unsupported SLOP_E2E_SERVER: ${localServer}`);
 }
 
+const localPort = Number(process.env.SLOP_E2E_PORT ?? 4466);
+if (!Number.isInteger(localPort) || localPort < 1024 || localPort > 65535)
+  throw new Error("SLOP_E2E_PORT must be an unprivileged TCP port");
+const localOrigin = `http://127.0.0.1:${localPort}`;
+
 const localServerCommand =
   localServer === "preview"
-    ? "node node_modules/vite/bin/vite.js preview --host 127.0.0.1 --port 4466 --strictPort"
-    : "node node_modules/wrangler/bin/wrangler.js pages dev dist --ip 127.0.0.1 --port 4466 --log-level warn --show-interactive-dev-session=false";
+    ? `node node_modules/vite/bin/vite.js preview --host 127.0.0.1 --port ${localPort} --strictPort`
+    : `node node_modules/wrangler/bin/wrangler.js pages dev dist --ip 127.0.0.1 --port ${localPort} --log-level warn --show-interactive-dev-session=false`;
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -53,7 +58,7 @@ export default defineConfig({
     ["list"],
   ],
   use: {
-    baseURL: externalBaseUrl ?? "http://127.0.0.1:4466",
+    baseURL: externalBaseUrl ?? localOrigin,
     contextOptions: { reducedMotion: "reduce" },
     trace: "retain-on-failure",
     screenshot: "on",
@@ -63,7 +68,7 @@ export default defineConfig({
     ? undefined
     : {
         command: `${prebuiltSite ? "" : "bun run build && "}${localServerCommand}`,
-        url: "http://127.0.0.1:4466",
+        url: localOrigin,
         // Evidence runs force a fresh server so a process already bound to the
         // port cannot substitute stale bytes. Direct local Playwright use may
         // still opt into its normal development convenience.

@@ -185,7 +185,10 @@ async function startFlow(
   });
   if (!created) fail(503, "flow_unavailable", "Could not create identity flow");
 
-  const authorizationUrl = new URL("/v1/oauth/authorize");
+  const authorizationUrl = new URL(
+    "/v1/oauth/authorize",
+    deploymentOrigins(deps.tier).identity,
+  );
   authorizationUrl.searchParams.set("flow_id", flowId);
   authorizationUrl.searchParams.set("state", state);
   return json(201, {

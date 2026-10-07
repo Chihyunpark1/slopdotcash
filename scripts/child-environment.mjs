@@ -16,6 +16,7 @@ const INHERITED_ENVIRONMENT_NAMES = Object.freeze([
   "PLAYWRIGHT_BROWSERS_PATH",
   "SHELL",
   "SLOP_PYTHON",
+  "SLOP_E2E_PORT",
   "TEMP",
   "TERM",
   "TMP",

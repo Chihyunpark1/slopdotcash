@@ -1,3 +1,4 @@
+import { hasCanonicalMergeBase } from "./canonical-merge-base";
 /** Production evidence assembly. All history comes from a verified canonical SHA;
  * no caller-supplied ledger, RPC endpoint, or positive readiness flag is accepted. */
 
@@ -42,7 +43,7 @@ function paths(root: string, sha: string, directory: string): string[] {
     throw new TypeError("Canonical inventory exceeds bound");
   return rows;
 }
-function acceptedAt(sha: string): string {
+function acceptedAt(root: string, sha: string): string {
   const prs = reservationGithub(
     `repos/${PAYMENT_REPOSITORY}/commits/${sha}/pulls?per_page=100`,
   ) as {
@@ -54,8 +55,8 @@ function acceptedAt(sha: string): string {
     ? prs.filter(
         (p) =>
           p.merge_commit_sha === sha &&
-          p.base?.ref === "main" &&
-          p.base.repo?.full_name === PAYMENT_REPOSITORY &&
+          hasCanonicalMergeBase(root, sha, p.base?.ref) &&
+          p.base?.repo?.full_name === PAYMENT_REPOSITORY &&
           p.merged_at,
       )
     : [];
@@ -156,13 +157,13 @@ function history(root: string, loaded: Loaded) {
         instrumentId: r.fundingBasis?.instrumentId ?? "legacy",
         generatedAt: r.generatedAt,
         sourceSnapshotSha256: r.sourceSnapshotSha256,
-        firstPublishedAt: acceptedAt(sha),
+        firstPublishedAt: acceptedAt(root, sha),
       });
     }
   }
   return {
     reviewedCommit: policyCommit,
-    reviewedAt: acceptedAt(policyCommit),
+    reviewedAt: acceptedAt(root, policyCommit),
     fundedProposalHistory: freezes,
   };
 }
