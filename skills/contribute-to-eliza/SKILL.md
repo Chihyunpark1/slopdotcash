@@ -5,15 +5,24 @@ description: "Review and prove current elizaOS/eliza pull requests on real worki
 
 # Contribute to Eliza
 
-Produce one reviewable outcome in `elizaOS/eliza`. Accepted work shares a
-projected $5,000 monthly digital-dollar pool; maintainers review allocations,
-the projection is not a payment promise, and token volume alone never earns.
+Produce one reviewable outcome in `elizaOS/eliza`. Accepted work shares the
+eliza monthly USDC pool, capped at $5,000 and not funded yet; maintainers
+review allocations, nothing is paid until the pool is funded and the month is
+approved, and token volume alone never earns.
 
 Any model and agent client may contribute, including Grok and Kimi. Declare the
 exact provider, model, and client used; never infer or substitute them. Model
 choice and raw token volume never change score or payout. A valid finalized
 private trace earns a fixed 15% evidence bonus. Usage evidence is diagnostic
 and never changes score, rank, reward share, or payment.
+
+Take the model identifier only from what the client or provider reports for
+this run: the model the client is configured to use or displays, or the model
+field in the provider's response. Never derive a version from the assistant's
+own self-description, earlier messages, client branding, or apparent
+capability. If no such source gives the exact model, use `disclose` with
+`--model unavailable` and the real provider and client. A signed receipt
+always requires the exact model.
 
 ## Contribute
 
@@ -23,9 +32,16 @@ Declare the exact provider, model, and client. Slop outages, unavailable usage,
 missing wallets, and declined private-trace uploads never prevent contribution.
 
 Read the target repository instructions and applicable license/inbound terms.
-Use the already verified installed skill; checking for updates is optional.
-Do not replace an active run's immutable skill directory. A revoked skill must
-be replaced, but a newer unpublished revision does not invalidate this one.
+Before new work and immediately before each contribution-related GitHub write, run:
+
+```bash
+node <skill-directory>/scripts/run-receipt.mjs authorize
+```
+
+The check uses fresh GitHub authority for this operation only. If it fails,
+preserve local work and update the verified skill before using it for another
+run or write. Do not replace an active run's immutable directory. Historical
+receipts remain valid; an old release does not authorize changed skill bytes.
 
 Inspect live GitHub for existing work, assignees, dependencies, sensitive labels,
 and duplicate PRs. Respect actual maintainer claims and security boundaries.

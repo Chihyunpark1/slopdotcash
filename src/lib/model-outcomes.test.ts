@@ -338,4 +338,39 @@ describe("summarizeModelOutcomes", () => {
       pullRequestPoints: 3.5,
     });
   });
+
+  it("counts an unavailable exact model apart from every model", () => {
+    const summary = summarizeModelOutcomes({
+      ledger: [
+        mergedPullRequest("PR_1", author, 3),
+        mergedPullRequest("PR_2", author, 2),
+      ],
+      attributions: [
+        declaration({
+          sourceId: "PR_1:body",
+          artifactId: "PR_1",
+          actor: author,
+          provider: "openai",
+          model: "gpt-5.6",
+        }),
+        declaration({
+          sourceId: "PR_2:body",
+          artifactId: "PR_2",
+          actor: author,
+          provider: "openai",
+          model: "unavailable",
+        }),
+      ],
+    });
+
+    expect(summary.models.map((row) => row.key)).toEqual(["openai/gpt-5.6"]);
+    expect(summary.totals).toMatchObject({
+      declarations: 1,
+      declarationsWithoutExactModel: 1,
+      distinctModels: 1,
+      distinctDeclaredIdentifiers: 1,
+      mergedPullRequests: 2,
+      mergedPullRequestsWithModel: 1,
+    });
+  });
 });

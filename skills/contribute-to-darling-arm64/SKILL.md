@@ -20,6 +20,14 @@ token volume never change score or payout. A valid finalized private trace earns
 15% evidence bonus. Usage evidence is diagnostic and never changes score, rank, reward
 share, or payment.
 
+Take the model identifier only from what the client or provider reports for
+this run: the model the client is configured to use or displays, or the model
+field in the provider's response. Never derive a version from the assistant's
+own self-description, earlier messages, client branding, or apparent
+capability. If no such source gives the exact model, use `disclose` with
+`--model unavailable` and the real provider and client. A signed receipt
+always requires the exact model.
+
 ## Check the hardware gate first
 
 **This is the one precondition you cannot work around.** Before anything else, confirm
@@ -42,6 +50,11 @@ Read `README.md`, `SUMMARY.md`, `CONTRIBUTING.md`, `AGENTS.md`,
 [repository-contract.md](references/repository-contract.md), then **`STATE.md` §Traps** —
 each trap cost real time, and several will cost you the same hours if you skip them.
 `REPRODUCE.md` maps every headline claim to the harness that regenerates it.
+
+Before new work and immediately before each contribution-related GitHub write, run
+`node <skill-directory>/scripts/run-receipt.mjs authorize`. A failed check blocks
+use of this installed skill for a new run or write. Preserve local work and install
+the current verified skill; historical receipts remain valid.
 
 Inspect live GitHub for existing work, open pull requests, and duplicate issues before
 choosing. Respect actual maintainer claims. In order, and stop at the first that yields a

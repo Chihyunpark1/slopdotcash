@@ -14,6 +14,7 @@ import type {
   ModelAttribution,
   ScoreEvent,
 } from "./leaderboard-types";
+import { isUnavailableModelIdentifier } from "./model-identity";
 
 /** Provider spellings that name the same organization. */
 const PROVIDER_ALIASES: Readonly<Record<string, string>> = {
@@ -91,7 +92,10 @@ export interface ClientOutcomeRow {
 }
 
 export interface ModelOutcomeTotals {
+  /** Declarations that name an exact model. */
   declarations: number;
+  /** Declarations that state the exact model could not be established. */
+  declarationsWithoutExactModel: number;
   signedDeclarations: number;
   declaringContributors: number;
   signedContributors: number;
@@ -216,7 +220,13 @@ export function summarizeModelOutcomes(
   const signedContributors = new Set<string>();
   const declaredIdentifiers = new Set<string>();
 
+  let declarationsWithoutExactModel = 0;
   for (const attribution of snapshot.attributions) {
+    // Naming no model is an honest answer, never a model of its own.
+    if (isUnavailableModelIdentifier(attribution.model)) {
+      declarationsWithoutExactModel += 1;
+      continue;
+    }
     const identity = modelIdentityKey(attribution.provider, attribution.model);
     identities.set(attribution, identity);
     getOrCreate(bySource, attribution.sourceId, () => []).push(attribution);
@@ -254,7 +264,8 @@ export function summarizeModelOutcomes(
   }
 
   const totals: ModelOutcomeTotals = {
-    declarations: snapshot.attributions.length,
+    declarations: snapshot.attributions.length - declarationsWithoutExactModel,
+    declarationsWithoutExactModel,
     signedDeclarations: snapshot.attributions.filter((entry) => entry.run)
       .length,
     declaringContributors: declaringContributors.size,
