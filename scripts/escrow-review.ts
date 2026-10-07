@@ -39,8 +39,11 @@ export function assertEscrowDecisions(
   value: unknown,
   proposal: EscrowReviewProposal,
   proposalSha256: string,
-  stewardActorId: string,
+  stewardActorId: string | readonly string[],
 ): EscrowDecisions {
+  const stewards = new Set(
+    typeof stewardActorId === "string" ? [stewardActorId] : stewardActorId,
+  );
   const record = exact(value, ["schemaVersion", "proposalSha256", "rows"]);
   if (
     record.schemaVersion !== "1" ||
@@ -86,7 +89,7 @@ export function assertEscrowDecisions(
       throw new Error("Invalid adjustment reason");
     if (row.approvedGrossMicro !== award.grossMicro && !row.adjustmentReason)
       throw new Error("Award changes require a public reason");
-    if (row.githubUserId === stewardActorId && row.relatedParty !== true)
+    if (stewards.has(row.githubUserId) && row.relatedParty !== true)
       throw new Error("Project steward is a related party");
     approved += amount;
   }
@@ -234,11 +237,22 @@ export async function verifyEscrowReview(input: {
   const decisionsBytes = await readFile(
     resolve(input.directory, "decisions.json"),
   );
+  const archivedProject = assertProjectDefinition(
+    JSON.parse(
+      await readFile(resolve(input.directory, "project.json"), "utf8"),
+    ),
+  );
+  if (archivedProject.id !== input.proposal.projectId)
+    throw new Error("Archived project identity mismatch");
+  const stewardActorIds = [
+    input.stewardActorId,
+    archivedProject.steward.github.actorId,
+  ];
   const decisions = assertEscrowDecisions(
     JSON.parse(decisionsBytes.toString("utf8")),
     input.proposal,
     input.proposalSha256,
-    input.stewardActorId,
+    stewardActorIds,
   );
   const publications: Publication[] = [];
   for (const name of [
@@ -322,7 +336,7 @@ export async function verifyEscrowReview(input: {
         throw new Error("Invalid separate platform approval");
       if (
         approval.reviewerId === approval.githubUserId ||
-        approval.reviewerId === input.stewardActorId
+        stewardActorIds.includes(approval.reviewerId)
       )
         throw new Error(
           "Related-party approval requires an independent platform reviewer",

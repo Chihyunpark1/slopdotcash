@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -17,7 +17,7 @@ async function fixture(mergedAt: string) {
   const directory = await mkdtemp(join(tmpdir(), "slop-escrow-review-"));
   directories.push(directory);
   const proposal = {
-    projectId: "fixture",
+    projectId: "eliza",
     cycleId: "2026-08",
     grossCapMicro: "100000000",
     awards: [
@@ -51,7 +51,7 @@ async function fixture(mergedAt: string) {
     ["decisions.json", Buffer.from(JSON.stringify(decisions))],
     ["source-snapshot.json", Buffer.from('{"fixture":true}')],
     ["github-identities.json", Buffer.from("[]")],
-    ["project.json", Buffer.from("{}")],
+    ["project.json", await readFile("projects/eliza/project.json")],
   ]);
   for (const [name, bytes] of files)
     await writeFile(join(directory, name), bytes);
@@ -152,6 +152,23 @@ describe("source-bound financial review gate", () => {
         "999",
       ),
     ).toThrow("exact proposal");
+  });
+  it("keeps the frozen steward related after stewardship changes", async () => {
+    const input = await fixture("2026-09-20T12:00:00Z");
+    const archived = JSON.parse(input.files.get("project.json")!.toString());
+    archived.steward.github.actorId = "123";
+    const bytes = Buffer.from(JSON.stringify(archived));
+    input.files.set("project.json", bytes);
+    await writeFile(join(input.directory, "project.json"), bytes);
+    // The current steward is 999; the archived steward 123 still requires separate approval.
+    await expect(verifyEscrowReview(input)).rejects.toThrow("related party");
+    input.decisions.rows[0].relatedParty = true;
+    const decisionsBytes = Buffer.from(JSON.stringify(input.decisions));
+    input.files.set("decisions.json", decisionsBytes);
+    await writeFile(join(input.directory, "decisions.json"), decisionsBytes);
+    await expect(verifyEscrowReview(input)).rejects.toThrow(
+      "platform-approvals.json",
+    );
   });
   it("fails closed when public evidence is unavailable", async () => {
     const input = await fixture("2026-09-20T12:00:00Z");

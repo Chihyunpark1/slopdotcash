@@ -128,6 +128,16 @@ try {
     .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
     .analyze();
   await page.setViewportSize({ width: 390, height: 844 });
+  const history = page.getByRole("region", {
+    name: "Payment history details; scroll horizontally for all columns",
+  });
+  await history.focus();
+  await page.keyboard.press("End");
+  await page.waitForTimeout(200);
+  if (!(await history.evaluate((element) => element.scrollLeft > 0)))
+    throw new Error(
+      "Mobile payment table cannot be scrolled with the keyboard",
+    );
   await page.screenshot({
     path: "evidence/payout-mobile-paid.png",
     fullPage: true,

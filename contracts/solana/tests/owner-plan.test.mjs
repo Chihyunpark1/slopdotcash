@@ -78,7 +78,7 @@ test("unsigned owner plans initialize, fund, reserve and withdraw on actual SPL 
     identityAuthority: identity.publicKey.toBase58(),
     feeRecipient: fees.publicKey.toBase58(),
     codeSha256: hash(readFileSync("target/deploy/slop_escrow.so")),
-    upgradeAuthority: null,
+    upgradeAuthority: "11111111111111111111111111111111",
   };
   const expectedGenesis = await provider.connection.getGenesisHash();
   async function execute(operation, extra) {

@@ -342,7 +342,12 @@ export function EarningsPage() {
                 until they are approved and funded.
               </p>
             ) : (
-              <div className="points-table">
+              <section
+                className="points-table"
+                aria-label="Payment history details; scroll horizontally for all columns"
+                // biome-ignore lint/a11y/noNoninteractiveTabindex: Keyboard users must be able to scroll the payment history on narrow screens.
+                tabIndex={0}
+              >
                 <table>
                   <caption>
                     Approved, funded awards and verified payments
@@ -408,7 +413,7 @@ export function EarningsPage() {
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </section>
             )}
           </section>
         </>

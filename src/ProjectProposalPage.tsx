@@ -213,7 +213,7 @@ export default function ProjectProposalPage() {
       funding: {
         mode: "direct-noncustodial",
         disclosure:
-          "Escrow funding opens after deployment review. Approved awards remain reserved until paid. Direct token transfers do not create reward credit.",
+          "Funds go directly to the project wallet. Slop does not hold or recover funds.",
         recordsPath: `funding/${slug}`,
         addresses: [],
       },

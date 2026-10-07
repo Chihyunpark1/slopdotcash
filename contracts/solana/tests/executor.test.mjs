@@ -286,7 +286,7 @@ test("durable executor verifies SQLite consent, binds, creates ATAs, pays and re
     codeSha256: hash(readFileSync("target/deploy/slop_escrow.so")).toString(
       "hex",
     ),
-    upgradeAuthority: null,
+    upgradeAuthority: "11111111111111111111111111111111",
   };
   const common = {
     PAYMENTS_DB: db,

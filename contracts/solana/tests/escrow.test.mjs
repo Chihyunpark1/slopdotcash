@@ -319,7 +319,7 @@ test("actual SPL escrow lifecycle, late wallet claim, reserve and authority atta
     codeSha256: createHash("sha256")
       .update(readFileSync("target/deploy/slop_escrow.so"))
       .digest("hex"),
-    upgradeAuthority: null,
+    upgradeAuthority: "11111111111111111111111111111111",
   });
   for (const [signature, kind, disc] of [
     [firstCommit, "reserved", [20, 15, 203, 164, 118, 172, 208, 203]],
