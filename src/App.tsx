@@ -1,33 +1,3 @@
-import { Link, useInitialHashScroll } from "./Link";
-import { CONTACT_EMAIL, CONTACT_MAILTO } from "./lib/contact";
-import { copyText } from "./lib/copy-text";
-import { homeProjects } from "./lib/home-projects";
-import { SOURCE_REPOSITORY } from "./lib/source-repository";
-import {
-  LoginPage,
-  PointsLabel,
-  PointsNav,
-  PointsPage,
-  PointsProvider,
-  PointsStandings,
-  ProfilePoints,
-  PublicXLink,
-} from "./Points";
-
-export {
-  rootPublishedTemplateProject,
-  safeProposalHttpsUrl,
-} from "./lib/project-proposal";
-
-import { type CycleIndexState, useCycleIndex } from "./lib/use-cycle-index";
-import { useFundingReviews } from "./lib/use-funding-reviews";
-import { type DataState, useSnapshot } from "./lib/use-snapshot";
-/**
- * Renders the GitHub-native Slop network across discovery, project,
- * contributor, cycle, and project-proposal routes. Every fetched snapshot is
- * validated before money, score, work, or usage is presented as healthy data.
- */
-
 import {
   ArrowRight,
   Check,
@@ -36,15 +6,8 @@ import {
   Clipboard,
   ExternalLink,
   Menu,
-  RotateCcw,
   X,
 } from "lucide-react";
-import { readBoundedJson } from "./lib/browser-json";
-import { SettlementVerification } from "./SettlementVerification";
-import { WalletRegistration } from "./WalletRegistration";
-
-export { readBoundedJson } from "./lib/browser-json";
-
 import {
   lazy,
   type ReactNode,
@@ -54,13 +17,17 @@ import {
   useRef,
   useState,
 } from "react";
+import { CycleArchivePage, CyclePage } from "./CyclePages";
+import { Link, useInitialHashScroll } from "./Link";
 import {
   allocationFundingMinor,
   deriveAllocationFundingBasis,
   type PromotionCycle,
   projectPromotionEligible,
 } from "./lib/allocation-funding";
-import type { CycleIndexEntry } from "./lib/cycle-index";
+import { readBoundedJson } from "./lib/browser-json";
+import { CONTACT_EMAIL, CONTACT_MAILTO } from "./lib/contact";
+import { copyText } from "./lib/copy-text";
 import {
   assertProjectFundingIndex,
   currentProjectFundingRecords,
@@ -70,12 +37,11 @@ import {
   projectFundingTotals,
   publicFundingRecordsForDonor,
 } from "./lib/funding";
-import { cycleSettlementReminder } from "./lib/funding-reminders";
 import { createGlobalLeaders } from "./lib/global-leaderboard";
+import { homeProjects } from "./lib/home-projects";
 import { createInstallCommand } from "./lib/install-command";
 import {
   type GitHubActor,
-  type LeaderboardSnapshot,
   PROFILE_OPPORTUNITY_LIMIT,
   type ScoreEvent,
   type ScoreOpportunity,
@@ -86,32 +52,71 @@ import {
   summarizeModelOutcomes,
 } from "./lib/model-outcomes";
 import {
-  createProjectView,
-  type ProjectContributor,
-  type ProjectView,
-} from "./lib/project-view";
-import {
   findProject,
   findProjectByRepositoryId,
   PROJECTS,
   type ProjectDefinition,
 } from "./lib/projects.mjs";
-import {
-  formatThirds,
-  type ReviewerLeader,
-  selectReviewerLeaders,
-} from "./lib/reviewer-leaders";
+import { formatThirds } from "./lib/reviewer-leaders";
 import { feeForPrincipal, PLATFORM_FEE_BASIS_POINTS } from "./lib/rewards";
 import {
   type PublicSignerReport,
   publicSignerStatus,
 } from "./lib/signer-capability";
+import { SOURCE_REPOSITORY } from "./lib/source-repository";
+import { useCycleIndex } from "./lib/use-cycle-index";
+import { useFundingReviews } from "./lib/use-funding-reviews";
+import { type DataState, useSnapshot } from "./lib/use-snapshot";
 import {
   summarizeWhoBuilds,
   WHO_BUILDS_CROSS_REFERENCE,
   WHO_BUILDS_SNAPSHOT,
   whoBuildsDateLabel,
 } from "./lib/who-builds";
+import {
+  LoginPage,
+  PointsNav,
+  PointsPage,
+  PointsProvider,
+  PointsStandings,
+  ProfilePoints,
+  PublicXLink,
+} from "./Points";
+import {
+  Avatar,
+  DataNotice,
+  EmptyState,
+  ExternalLinkAnchor,
+  formatCycleMonth,
+  formatDate,
+  formatMicroUsdc,
+  monthlyPoolLabel,
+  monthlyPoolUnfunded,
+  NotFound,
+  reviewBudgetLabel,
+  UNFUNDED_POOL_HEADLINE,
+} from "./Presentation";
+import { ProjectLeaderboard, RewardValue } from "./ProjectLeaderboard";
+import { SettlementVerification } from "./SettlementVerification";
+import { WalletRegistration } from "./WalletRegistration";
+
+export {
+  rootPublishedTemplateProject,
+  safeProposalHttpsUrl,
+} from "./lib/project-proposal";
+export {
+  monthlyPoolLabel,
+  monthlyPoolUnfunded,
+  reviewBudgetLabel,
+} from "./Presentation";
+
+/**
+ * Renders the GitHub-native Slop network across discovery, project,
+ * contributor, cycle, and project-proposal routes. Every fetched snapshot is
+ * validated before money, score, work, or usage is presented as healthy data.
+ */
+
+export { readBoundedJson } from "./lib/browser-json";
 
 const ProjectProposalPage = lazy(() => import("./ProjectProposalPage"));
 
@@ -234,22 +239,6 @@ function useRoute(): Route {
   return useMemo(() => internalRoute(path), [path]);
 }
 
-function ExternalLinkAnchor({
-  children,
-  className,
-  href,
-}: {
-  children: ReactNode;
-  className?: string;
-  href: string;
-}) {
-  return (
-    <a className={className} href={href} rel="noreferrer" target="_blank">
-      {children}
-    </a>
-  );
-}
-
 function formatCompact(value: number): string {
   return new Intl.NumberFormat("en-US", {
     maximumFractionDigits: 1,
@@ -265,83 +254,12 @@ function formatScore(value: number): string {
   }).format(value);
 }
 
-function formatMicroUsdc(value: string): string {
-  const amount = BigInt(value);
-  const fraction = amount % 1_000_000n;
-  if (fraction === 0n) {
-    return `$${new Intl.NumberFormat("en-US").format(amount / 1_000_000n)}`;
-  }
-  const roundedCents = (amount + 5_000n) / 10_000n;
-  const whole = roundedCents / 100n;
-  const cents = (roundedCents % 100n).toString().padStart(2, "0");
-  return `$${new Intl.NumberFormat("en-US").format(whole)}.${cents}`;
-}
-
-export function reviewBudgetLabel(
-  reviewBudget: NonNullable<ProjectDefinition["reward"]["reviewBudget"]>,
-): string {
-  return reviewBudget.fundingState === "committed"
-    ? `${formatMicroUsdc(reviewBudget.committedMinor)} committed of ${reviewBudget.monthlyCapDisplay} cap · accessibility unknown · additive review line`
-    : `${reviewBudget.monthlyCapDisplay} cap · additive review line · uncommitted pledge`;
-}
-
 /**
  * Commitment is a balance claim, never proof that signers can act. This
  * protocol has no authenticated accessibility evidence type yet.
  */
-export function monthlyPoolUnfunded(
-  reward: Pick<ProjectDefinition["reward"], "committedMinor" | "fundingState">,
-): boolean {
-  return (
-    reward.fundingState !== "committed" || BigInt(reward.committedMinor) === 0n
-  );
-}
-
-export function monthlyPoolLabel(
-  reward: Pick<
-    ProjectDefinition["reward"],
-    "committedMinor" | "fundingState" | "monthlyCapDisplay"
-  >,
-): string {
-  return monthlyPoolUnfunded(reward)
-    ? `unfunded, target ${reward.monthlyCapDisplay}`
-    : `${formatMicroUsdc(reward.committedMinor)} committed · accessibility unknown · target ${reward.monthlyCapDisplay}`;
-}
 
 /** A pledged pool never headlines its cap; the cap is small print only. */
-const UNFUNDED_POOL_HEADLINE = "Not funded yet";
-
-function formatPercent(partsPerMillion: number): string {
-  return `${(partsPerMillion / 10_000).toFixed(2)}%`;
-}
-
-function formatDate(value: string): string {
-  return new Intl.DateTimeFormat("en-US", {
-    day: "numeric",
-    month: "short",
-    timeZone: "UTC",
-    year: "numeric",
-  }).format(new Date(value));
-}
-
-function formatCycleMonth(value: string): string {
-  return new Intl.DateTimeFormat("en-US", {
-    month: "long",
-    timeZone: "UTC",
-    year: "numeric",
-  }).format(new Date(`${value}-01T00:00:00.000Z`));
-}
-
-function cycleStateLabel(state: CycleIndexEntry["state"]): string {
-  return state
-    .split("-")
-    .map((part) => part[0]?.toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
-function stale(snapshot: Pick<LeaderboardSnapshot, "generatedAt">): boolean {
-  return Date.now() - Date.parse(snapshot.generatedAt) > 8 * 60 * 60 * 1_000;
-}
 
 function Header() {
   const [open, setOpen] = useState(false);
@@ -455,34 +373,6 @@ function Footer() {
   );
 }
 
-function DataNotice({ state, retry }: { state: DataState; retry: () => void }) {
-  if (state.status === "loading") {
-    return (
-      <p className="data-notice" role="status">
-        Loading records…
-      </p>
-    );
-  }
-  if (state.status === "error") {
-    return (
-      <div className="data-notice data-error" role="alert">
-        <CircleAlert aria-hidden="true" size={18} />
-        <span>Live totals unavailable: {state.message}</span>
-        <button onClick={retry} type="button">
-          <RotateCcw aria-hidden="true" size={15} /> Retry
-        </button>
-      </div>
-    );
-  }
-  if (!stale(state.snapshot)) return null;
-  return (
-    <div className="data-notice data-stale" role="status">
-      <span className="status-dot stale-dot" />
-      Data may be outdated · updated {formatDate(state.snapshot.generatedAt)}
-    </div>
-  );
-}
-
 function monthlyPoolCapLabel(reward: ProjectDefinition["reward"]): string {
   const minor = BigInt(reward.monthlyCapMinor);
   if (minor % 1_000_000n !== 0n) return reward.monthlyCapDisplay;
@@ -541,45 +431,6 @@ function ProjectCard({ project }: { project: ProjectDefinition }) {
         ) : null}
       </div>
     </Link>
-  );
-}
-
-function Avatar({
-  actor,
-  size = "medium",
-}: {
-  actor: GitHubActor;
-  size?: "large" | "medium" | "small";
-}) {
-  const label = actor.login.slice(0, 2).toUpperCase();
-  const [failedUrl, setFailedUrl] = useState<string | null>(null);
-  if (failedUrl !== actor.avatarUrl) {
-    return (
-      <img
-        alt=""
-        aria-hidden="true"
-        className={`avatar avatar-${size}`}
-        onError={() => setFailedUrl(actor.avatarUrl)}
-        src={actor.avatarUrl}
-      />
-    );
-  }
-  return (
-    <span aria-hidden="true" className={`avatar avatar-${size}`}>
-      {label}
-    </span>
-  );
-}
-
-function ReviewContribution({ reviewer }: { reviewer?: ReviewerLeader }) {
-  if (!reviewer) return null;
-  return (
-    <small className="review-score-detail">
-      Includes {formatThirds(reviewer.reviewThirds)} review point
-      {reviewer.reviewThirds === 3 ? "" : "s"} · {reviewer.reviewEventCount}{" "}
-      scored review
-      {reviewer.reviewEventCount === 1 ? "" : "s"}
-    </small>
   );
 }
 
@@ -888,147 +739,6 @@ function InstallPanel({ project }: { project: ProjectDefinition }) {
 }
 
 /** Dollars are simulated only against committed funds; otherwise a share. */
-function RewardValue({
-  leader,
-  view,
-}: {
-  leader: ProjectContributor;
-  view: ProjectView;
-}) {
-  if (leader.simulatedMinor === null) {
-    return (
-      <>{formatPercent(leader.projectedSharePartsPerMillion ?? 0)} share</>
-    );
-  }
-  if (!monthlyPoolUnfunded(view.project.reward)) {
-    return formatMicroUsdc(
-      leader.simulatedDisplayMinor ?? leader.simulatedMinor,
-    );
-  }
-  const totalWeight = view.leaders.reduce(
-    (total, entry) => total + entry.adjustedWeight,
-    0,
-  );
-  return (
-    <>
-      {formatPercent(
-        totalWeight > 0
-          ? Math.round((leader.adjustedWeight * 1_000_000) / totalWeight)
-          : 0,
-      )}{" "}
-      of score
-    </>
-  );
-}
-
-function ProjectLeaderboard({
-  updatedAt,
-  view,
-}: {
-  updatedAt: string;
-  view: ProjectView;
-}) {
-  const reviewers = new Map(
-    selectReviewerLeaders(view.ledger).map((reviewer) => [
-      reviewer.actor.id,
-      reviewer,
-    ]),
-  );
-  return (
-    <>
-      <PointsStandings projectId={view.project.id} compact />
-      <section className="section project-leader-section">
-        <div className="section-heading">
-          <h2>{formatCycleMonth(view.cycle.id)} leaderboard.</h2>
-          <p className="data-freshness">Updated {formatDate(updatedAt)}</p>
-          {view.project.reward.reviewBudget ? (
-            <p>{reviewBudgetLabel(view.project.reward.reviewBudget)}</p>
-          ) : null}
-          {view.reward.kind === "monthly-pool" ? (
-            <p>
-              {monthlyPoolUnfunded(view.project.reward)
-                ? `${UNFUNDED_POOL_HEADLINE}.`
-                : `Shares simulate the ${monthlyPoolLabel(view.project.reward)} cap.`}{" "}
-              Not approved payouts.
-            </p>
-          ) : null}
-        </div>
-        {view.leaders.length === 0 ? (
-          <EmptyState text="No accepted outcomes in this cycle yet." />
-        ) : (
-          <div className="leader-table">
-            <table className="leader-grid">
-              <caption className="visually-hidden">
-                {view.project.name} leaderboard
-              </caption>
-              <thead>
-                <tr className="leader-row project-leader-head">
-                  <th scope="col">Rank</th>
-                  <th scope="col">Contributor</th>
-                  <th scope="col">Score</th>
-                  <th scope="col">
-                    {view.reward.kind === "monthly-pool" &&
-                    monthlyPoolUnfunded(view.project.reward)
-                      ? "Share of score"
-                      : "Simulated share"}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {view.leaders.map((leader) => (
-                  <tr
-                    className="leader-row project-leader-row"
-                    key={leader.actor.id}
-                  >
-                    <td className="rank-cell">#{leader.rank}</td>
-                    <td className="person-cell">
-                      <Link
-                        className="person-link"
-                        href={`/contributors/${encodeURIComponent(leader.actor.login)}`}
-                      >
-                        <Avatar actor={leader.actor} />
-                        <span>
-                          <strong>{leader.actor.login}</strong>
-                          <PointsLabel actorId={leader.actor.id} />
-                          <small>
-                            {leader.acceptedOutcomeCount} accepted events
-                          </small>
-                        </span>
-                      </Link>
-                    </td>
-                    <td>
-                      <strong title={`Exact score ${leader.scoreThirds}/3`}>
-                        {formatThirds(leader.scoreThirds)}
-                      </strong>
-                      <ReviewContribution
-                        reviewer={reviewers.get(leader.actor.id)}
-                      />
-                      {leader.computeBonusBasisPoints > 0 ? (
-                        <small>
-                          +{leader.computeBonusBasisPoints / 100}% receipt
-                          evidence
-                        </small>
-                      ) : null}
-                    </td>
-                    <td>
-                      <strong>
-                        <RewardValue leader={leader} view={view} />
-                      </strong>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
-    </>
-  );
-}
-
-function EmptyState({ text }: { text: string }) {
-  return <div className="empty-state">{text}</div>;
-}
 
 function ProjectPaymentHistory({
   project,
@@ -2341,285 +2051,6 @@ function EventList({
         </ExternalLinkAnchor>
       ))}
     </div>
-  );
-}
-
-function ArchivedCycleLeaderboard({ cycle }: { cycle: CycleIndexEntry }) {
-  return (
-    <section className="section project-leader-section">
-      <div className="section-heading">
-        <h2>Contributors</h2>
-      </div>
-      {cycle.contributors.length === 0 ? (
-        <EmptyState text="This cycle closed with no accepted awards." />
-      ) : (
-        <div className="leader-table">
-          <table className="leader-grid">
-            <caption className="visually-hidden">
-              Archived cycle contributors
-            </caption>
-            <thead>
-              <tr className="leader-row archived-leader-head">
-                <th scope="col">Contributor</th>
-                <th scope="col">Score</th>
-                <th scope="col">Suggested</th>
-                <th scope="col">Approved</th>
-                <th scope="col">Paid</th>
-              </tr>
-            </thead>
-            <tbody>
-              {cycle.contributors.map((contributor) => (
-                <tr
-                  className="leader-row archived-leader-row"
-                  key={contributor.actor.id}
-                >
-                  <th scope="row">
-                    <Link
-                      href={`/contributors/${encodeURIComponent(contributor.actor.login)}`}
-                    >
-                      {contributor.actor.login}
-                    </Link>
-                  </th>
-                  <td>
-                    {formatThirds(
-                      contributor.scoreThirds ?? contributor.score * 3,
-                    )}
-                  </td>
-                  <td>
-                    {formatMicroUsdc(contributor.suggestedMinor)}
-                    {contributor.lines ? (
-                      <small>
-                        Pool{" "}
-                        {formatMicroUsdc(
-                          contributor.lines.sharedPool.suggestedMinor,
-                        )}{" "}
-                        + review{" "}
-                        {formatMicroUsdc(
-                          contributor.lines.reviewBudget.suggestedMinor,
-                        )}
-                      </small>
-                    ) : null}
-                  </td>
-                  <td>
-                    {formatMicroUsdc(contributor.approvedMinor)}
-                    {contributor.lines ? (
-                      <small>
-                        Pool{" "}
-                        {formatMicroUsdc(
-                          contributor.lines.sharedPool.approvedMinor,
-                        )}{" "}
-                        + review{" "}
-                        {formatMicroUsdc(
-                          contributor.lines.reviewBudget.approvedMinor,
-                        )}
-                      </small>
-                    ) : null}
-                  </td>
-                  <td>
-                    <strong>{formatMicroUsdc(contributor.paidMinor)}</strong>
-                    {contributor.lines ? (
-                      <small>
-                        Pool{" "}
-                        {formatMicroUsdc(
-                          contributor.lines.sharedPool.paidMinor,
-                        )}{" "}
-                        + review{" "}
-                        {formatMicroUsdc(
-                          contributor.lines.reviewBudget.paidMinor,
-                        )}
-                      </small>
-                    ) : null}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </section>
-  );
-}
-
-function CycleArtifacts({ cycle }: { cycle: CycleIndexEntry }) {
-  const files = [
-    ["Frozen source", cycle.files.sourceSnapshot],
-    ["Proposal", cycle.files.proposal],
-    ["Approved allocation", cycle.files.allocation],
-    ["Unsigned transfer plan", cycle.files.executionPlan],
-    ["Verified settlement", cycle.files.settlement],
-  ] as const;
-  return (
-    <section className="section cycle-artifacts">
-      <div className="section-heading">
-        <h2>Public files</h2>
-      </div>
-      <div className="artifact-links">
-        {files
-          .filter((entry) => entry[1] !== null)
-          .map(([label, file]) =>
-            file ? (
-              <ExternalLinkAnchor href={file.url} key={label}>
-                <span>
-                  <strong>{label}</strong>
-                  <small>{file.sha256.slice(0, 16)}…</small>
-                </span>
-                <ExternalLink aria-hidden="true" size={17} />
-              </ExternalLinkAnchor>
-            ) : null,
-          )}
-      </div>
-    </section>
-  );
-}
-
-function CyclePage({
-  project,
-  cycleId,
-  state,
-  retry,
-}: {
-  project: ProjectDefinition;
-  cycleId: string;
-  state: DataState;
-  retry: () => void;
-}) {
-  if (state.status !== "ready")
-    return (
-      <main className="shell route-main">
-        <DataNotice state={state} retry={retry} />
-      </main>
-    );
-  const record = state.cycleIndex.cycles.find(
-    (cycle) => cycle.projectId === project.id && cycle.cycleId === cycleId,
-  );
-  let view: ProjectView | null = null;
-  try {
-    view = createProjectView(state.snapshot, project.id, cycleId);
-  } catch (error: unknown) {
-    if (!record) {
-      return (
-        <NotFound
-          title={error instanceof Error ? error.message : "Cycle unavailable"}
-        />
-      );
-    }
-  }
-  const from = record?.contributionWindow.from ?? view?.cycle.from;
-  const to = record?.contributionWindow.to ?? view?.cycle.endsAt;
-  if (!from || !to) return <NotFound title="Cycle unavailable" />;
-  const lifecycle =
-    record?.state ?? (view?.cycle.status === "live" ? "live" : "closed");
-  const reminder = cycleSettlementReminder({
-    closesAt: to,
-    fundingState:
-      project.reward.reviewBudget?.fundingState === "committed"
-        ? "committed"
-        : project.reward.fundingState,
-    kind:
-      record?.kind ??
-      (view?.reward.kind === "external-prize-share"
-        ? "external-prize-share"
-        : "monthly-pool"),
-    now: new Date().toISOString(),
-    paymentMode: project.reward.paymentMode,
-    settledAt: record?.settledAt ?? null,
-    state: record?.state ?? (view?.cycle.status === "live" ? "live" : "review"),
-  });
-  const headlineAmount = record
-    ? record.kind === "external-prize-share"
-      ? `${(record.reward.sharePartsPerMillion ?? 0) / 10_000}%`
-      : formatMicroUsdc(
-          record.state === "paid"
-            ? record.reward.paidMinor
-            : record.reward.approvedMinor !== "0"
-              ? record.reward.approvedMinor
-              : record.reward.suggestedMinor,
-        )
-    : view?.reward.kind === "monthly-pool"
-      ? formatMicroUsdc(view.reward.projectedPrincipalMinor)
-      : `${(view?.reward.totalSharePartsPerMillion ?? 0) / 10_000}%`;
-  return (
-    <main className="shell route-main cycle-page">
-      <DataNotice state={state} retry={retry} />
-      <p className="breadcrumb">
-        <Link href={`/projects/${project.slug}`}>{project.name}</Link>
-        <span>/</span>
-        {cycleId}
-      </p>
-      <section className="cycle-hero">
-        <div>
-          <h1>
-            {project.name} · {cycleId}
-          </h1>
-          <p>
-            {lifecycle.replaceAll("-", " ")} · {formatDate(from)}–
-            {formatDate(to)}. Paid means finalized Solana evidence reconciled
-            exactly.
-          </p>
-        </div>
-        <div className="cycle-number">
-          <strong>{headlineAmount}</strong>
-          <span>
-            {record?.state === "paid"
-              ? "paid principal"
-              : record?.kind === "external-prize-share" ||
-                  view?.reward.kind === "external-prize-share"
-                ? "provisional shares assigned"
-                : record
-                  ? record.reward.approvedMinor !== "0"
-                    ? "approved principal"
-                    : "suggested principal"
-                  : "projected principal"}
-          </span>
-        </div>
-      </section>
-      {record?.reward.lines ? (
-        <p className="cycle-line-summary">
-          Shared pool{" "}
-          {formatMicroUsdc(record.reward.lines.sharedPool.suggestedMinor)} +
-          additive review{" "}
-          {formatMicroUsdc(record.reward.lines.reviewBudget.suggestedMinor)}{" "}
-          suggested. The combined amount uses one wallet and one dust-floor
-          decision.
-        </p>
-      ) : null}
-      {reminder ? (
-        <div
-          className={`data-notice cycle-reminder ${reminder.kind}`}
-          role="status"
-        >
-          <CircleAlert aria-hidden="true" size={18} />
-          <span>{reminder.message}</span>
-        </div>
-      ) : null}
-      <ol className="cycle-status-grid" aria-label="Cycle progress">
-        <li>
-          <strong>Contribution</strong>
-          <p>Accepted GitHub work is collected; private traces are optional.</p>
-        </li>
-        <li>
-          <strong>Review</strong>
-          <p>Owners may set every allocation and total payout.</p>
-        </li>
-        <li>
-          <strong>Approval</strong>
-          <p>Wallet-linked amounts become immutable payout intents.</p>
-        </li>
-        <li>
-          <strong>Settlement</strong>
-          <p>The 1% fee applies when the approved principal is paid.</p>
-        </li>
-      </ol>
-      {view ? (
-        <ProjectLeaderboard
-          updatedAt={state.snapshot.generatedAt}
-          view={view}
-        />
-      ) : record ? (
-        <ArchivedCycleLeaderboard cycle={record} />
-      ) : null}
-      {record ? <CycleArtifacts cycle={record} /> : null}
-    </main>
   );
 }
 
@@ -4521,108 +3952,18 @@ function ModelOutcomes({ summary }: { summary: ModelOutcomeSummary }) {
   );
 }
 
-function CycleArchivePage({
-  state,
-  retry,
-}: {
-  state: CycleIndexState;
-  retry: () => void;
-}) {
-  const cycles =
-    state.status === "ready"
-      ? [...state.cycleIndex.cycles].sort((left, right) =>
-          right.cycleId.localeCompare(left.cycleId),
-        )
-      : [];
-  return (
-    <main className="shell evidence-page">
-      <section className="evidence-page-hero">
-        <h1>Every pool gets a dated public record.</h1>
-        <p>
-          Proposed is not approved. Approved is not paid. Each cycle keeps its
-          source snapshot, state, allocation, and settlement evidence distinct.
-        </p>
-        {state.status === "loading" ? (
-          <p role="status">Loading cycle history…</p>
-        ) : state.status === "error" ? (
-          <div role="alert">
-            Cycle history unavailable: {state.message}{" "}
-            <button type="button" onClick={retry}>
-              Retry
-            </button>
-          </div>
-        ) : cycles.length === 0 ? (
-          <p>No published cycles yet.</p>
-        ) : null}
-        {state.status === "ready" && stale(state.cycleIndex) ? (
-          <p className="data-notice data-stale" role="status">
-            Cycle history may be outdated · updated{" "}
-            {formatDate(state.cycleIndex.generatedAt)}
-          </p>
-        ) : null}
-      </section>
-      <div className="cycle-archive-list">
-        {cycles.map((cycle) => (
-          <article
-            className="cycle-archive-card"
-            key={`${cycle.projectId}-${cycle.cycleId}`}
-          >
-            <div>
-              <span>{cycle.projectId}</span>
-              <h2>{formatCycleMonth(cycle.cycleId)}</h2>
-            </div>
-            <dl>
-              <div>
-                <dt>State</dt>
-                <dd>{cycleStateLabel(cycle.state)}</dd>
-              </div>
-              <div>
-                <dt>Suggested</dt>
-                <dd>{formatMicroUsdc(cycle.reward.suggestedMinor)}</dd>
-              </div>
-              <div>
-                <dt>Approved</dt>
-                <dd>{formatMicroUsdc(cycle.reward.approvedMinor)}</dd>
-              </div>
-              <div>
-                <dt>Paid</dt>
-                <dd>{formatMicroUsdc(cycle.reward.paidMinor)}</dd>
-              </div>
-            </dl>
-            <Link href={`/cycles/${cycle.projectId}/${cycle.cycleId}`}>
-              Inspect cycle <ArrowRight aria-hidden="true" />
-            </Link>
-          </article>
-        ))}
-      </div>
-    </main>
-  );
-}
-
-function NotFound({ title = "Page not found" }: { title?: string }) {
-  return (
-    <main className="shell not-found">
-      <h1>{title}</h1>
-      <Link className="button primary-button" href="/">
-        See open projects <ArrowRight aria-hidden="true" />
-      </Link>
-    </main>
-  );
-}
-
 export function App() {
   const route = useRoute();
   return (
     <PointsProvider
       enabled={["home", "project", "profile", "points"].includes(route.kind)}
     >
-      <AppContent />
+      <AppContent route={route} />
     </PointsProvider>
   );
 }
 
-function AppContent() {
-  const route = useRoute();
+function AppContent({ route }: { route: Route }) {
   useInitialHashScroll();
   const needsSnapshot = ![
     "home",

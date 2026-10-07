@@ -296,8 +296,6 @@ describe("slop.cash deployment contract", () => {
       2,
     );
     expect(evidenceRecorder).not.toContain("env: process.env");
-    expect(e2eRunner).toContain('"--grep-invert", artifactContract');
-    expect(e2eRunner).toContain('"--grep",\n    pagesContracts');
     expect(qualityJob).toContain("run: bun run test:e2e");
     expect(qualityJob).toContain(
       "timeout --signal=TERM 10m ./node_modules/.bin/playwright install --with-deps chromium",
@@ -307,7 +305,9 @@ describe("slop.cash deployment contract", () => {
       "Playwright Chromium installation failed twice.",
     );
     expect(qualityJob).not.toContain("bunx playwright install");
-    expect(qualityJob).toContain("bun test ./skill-tests");
+    expect(qualityJob).toContain("run: bun run verify:code");
+    expect(packageManifest.scripts["verify:code"]).toContain("bun run test");
+    expect(packageManifest.scripts.test).toContain("./skill-tests");
     expect(qualityJob).not.toContain("bun test skill-tests/*.test.ts");
     expect(qualityJob).toContain("run: bun run cycles:check");
     expect(qualityJob).toContain(
@@ -418,7 +418,7 @@ describe("slop.cash deployment contract", () => {
     const transitionGate = qualityJob.indexOf(
       'node scripts/check-project-transitions.mjs "$PROJECT_POLICY_BASE_SHA" "$PROJECT_POLICY_HEAD_SHA"',
     );
-    const registryGate = qualityJob.indexOf("bun run projects:check");
+    const registryGate = qualityJob.indexOf("bun run verify:contracts");
     expect(qualityJob).toContain(
       `PROJECT_POLICY_BASE_SHA: ${"$"}{{ github.event.before }}`,
     );

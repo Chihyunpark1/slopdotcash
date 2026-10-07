@@ -19,7 +19,7 @@ import {
   assertOpenEvidenceReferencesCurrent,
   assertReviewCensusStable,
   collectEvaluatedReviewArtifactKeys,
-  collectReviewedPullRequestIds,
+  collectPullRequestReviewCounts,
   collectSearchReferences,
   deriveCurrentHeadReviewDecision,
   deriveSourceUpdatedAt,
@@ -40,7 +40,6 @@ import {
   retrySlopSnapshot,
   runGenerator,
   SEARCH_SAFE_RESULT_LIMIT,
-  sameReferenceSet,
   selectDetailedMergedPullRequestIds,
   selectEvaluatedContributionsForWindow,
   verifyPullRequestEvidence,
@@ -1313,11 +1312,22 @@ describe("rate-efficient query plan", () => {
     };
 
     await expect(
-      collectReviewedPullRequestIds(client, [
+      collectPullRequestReviewCounts(client, [
         { id: "PR_UNREVIEWED" },
         { id: "PR_REVIEWED" },
       ]),
-    ).resolves.toEqual(new Set(["PR_REVIEWED"]));
+    ).resolves.toEqual(
+      new Map([
+        [
+          "PR_UNREVIEWED",
+          { reviewCount: 0, updatedAt: "2026-08-25T18:00:00.000Z" },
+        ],
+        [
+          "PR_REVIEWED",
+          { reviewCount: 2, updatedAt: "2026-08-25T18:00:00.000Z" },
+        ],
+      ]),
+    );
     expect(seenDocuments).toHaveLength(1);
     expect(seenDocuments[0]).toContain(
       "reviews(states: [APPROVED, CHANGES_REQUESTED]) { totalCount }",
@@ -1339,7 +1349,7 @@ describe("rate-efficient query plan", () => {
     };
 
     await expect(
-      collectReviewedPullRequestIds(client, [{ id: "PR_MISSING" }]),
+      collectPullRequestReviewCounts(client, [{ id: "PR_MISSING" }]),
     ).rejects.toThrow(
       "GitHub returned 0 review census nodes for 1 requested IDs",
     );
@@ -1615,26 +1625,6 @@ describe("rate-efficient query plan", () => {
     expect(() => estimateReviewFirstPageDetailCost(-1)).toThrow(
       "non-negative integer",
     );
-  });
-
-  it("invalidates an open snapshot when a node changes version", () => {
-    const before = [
-      {
-        id: "PR_1",
-        kind: "PullRequest" as const,
-        outcome: null,
-        openVersion: `2026-07-30T10:00:00.000Z:${"a".repeat(40)}`,
-      },
-    ];
-    expect(sameReferenceSet(before, structuredClone(before))).toBe(true);
-    expect(
-      sameReferenceSet(before, [
-        {
-          ...before[0],
-          openVersion: `2026-07-30T10:01:00.000Z:${"b".repeat(40)}`,
-        },
-      ]),
-    ).toBe(false);
   });
 
   it("deep-inspects only newest cap-relevant outcomes per actor, project, and month", () => {

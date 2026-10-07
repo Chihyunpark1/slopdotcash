@@ -25,6 +25,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createInstallCommand } from "../src/lib/install-command";
 import { PROJECTS } from "../src/lib/projects.mjs";
 import { createInstallAuthorityFixture } from "../tests/install-authority-fixture";
+import { pythonCommand } from "./skill-python.mjs";
 
 const sourceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const fixtureRoot = mkdtempSync(join(tmpdir(), "slop-site-contract-"));
@@ -50,35 +51,7 @@ let installerArtifactRoot: string;
 let installerArchivePath: string;
 let installerChecksumPath: string;
 
-function pythonWithYaml() {
-  const candidates = [
-    process.env.SLOP_PYTHON,
-    "python3",
-    "/usr/bin/python3",
-  ].filter(
-    (value, index, values): value is string =>
-      Boolean(value) && values.indexOf(value) === index,
-  );
-  for (const executable of candidates) {
-    if (
-      spawnSync(executable, [
-        "-c",
-        "import yaml,sys;sys.exit(0 if yaml.__version__ == '6.0.3' else 1)",
-      ]).status === 0
-    ) {
-      return { executable, prefix: [] as string[] };
-    }
-  }
-  if (spawnSync("uv", ["--version"]).status === 0) {
-    return {
-      executable: "uv",
-      prefix: ["run", "--with", "PyYAML==6.0.3", "python"],
-    };
-  }
-  throw new TypeError("test fixture requires Python with PyYAML 6.0.3 or uv");
-}
-
-const skillPython = pythonWithYaml();
+const skillPython = pythonCommand(repositoryRoot);
 
 type JsonRecord = Record<string, unknown>;
 

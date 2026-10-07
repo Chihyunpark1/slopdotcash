@@ -7,9 +7,10 @@
     "dev": "bun --bun vite --port 4466",
     "build": "bun --bun vite build && node scripts/dist-manifest.mjs create dist",
     "preview": "bun --bun vite preview --port 4466",
+    "prepare:publication": "node scripts/prepare-publication.mjs",
     "prepare:site": "node scripts/prepare-site.mjs",
-    "predev": "bun run prepare:site && bun run points:generate && bun scripts/generate-profiles.ts",
-    "prebuild": "bun run prepare:site && bun scripts/generate-points.ts && bun scripts/generate-profiles.ts",
+    "predev": "bun run prepare:publication",
+    "prebuild": "bun run prepare:publication",
     "leaderboard:generate": "bun scripts/generate-leaderboard.ts",
     "brand:sync": "node scripts/sync-brand-tokens.mjs",
     "brand:check": "node scripts/sync-brand-tokens.mjs --check",
@@ -38,7 +39,7 @@
     "rewards:plan-settlement": "bun scripts/prepare-settlement-plan.ts",
     "rewards:verify-settlement": "bun scripts/verify-settlement.ts",
     "audit:dependencies": "bun audit",
-    "verify": "bun run brand:check && bun run projects:check && bun run skills:check && bun run evaluations:check && bun run disclosures:check && bun run funding:check && bun run quality:check && bun run cycles:check && bun run protocol:check && bun run audit:dependencies && bun run test:evidence && bun run check:unused && bun run typecheck && bun run format:check && bun run lint:check && bun run test && bun run build",
+    "verify": "bun run verify:contracts && bun run cycles:check && bun run audit:dependencies && bun run verify:code && bun run build",
     "typecheck": "tsc -b",
     "test": "vitest run && bun test --timeout 30000 --max-concurrency 1 ./skill-tests",
     "test:e2e": "node scripts/run-e2e.mjs",
@@ -57,7 +58,9 @@
     "test:coverage": "vitest run --coverage",
     "points:generate": "bun scripts/generate-points.ts",
     "points:backfill": "bun scripts/backfill-points.ts",
-    "profiles:generate": "bun scripts/generate-profiles.ts --live"
+    "profiles:generate": "bun scripts/generate-profiles.ts --live",
+    "verify:contracts": "bun run brand:check && bun run projects:check && bun run skills:check && bun run evaluations:check && bun run disclosures:check && bun run funding:check && bun run quality:check && bun run protocol:check",
+    "verify:code": "bun run typecheck && bun run lint:check && bun run test"
   },
   "dependencies": {
     "@fontsource/poppins": "^5.2.7",

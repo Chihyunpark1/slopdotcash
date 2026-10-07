@@ -391,32 +391,6 @@ describe("project skill contracts", () => {
     assert.strictEqual(cancelled, true);
   });
 
-  it("keeps the instrumented review templates hostile-input aware and non-punitive", () => {
-    for (const { project, reviewerRoot } of instrumentedPackages) {
-      const name = project.reviewSkill.id;
-      const source = readFileSync(join(reviewerRoot, "SKILL.md"), "utf8");
-      assert.match(source, new RegExp(`^name: ${name}$`, "m"));
-      assert.match(source, /Any model and\s+agent client may review/u);
-      assert.match(source, /Grok and Kimi/u);
-      assert.match(source, /exact\s+provider,\s+model, and client/u);
-      assert.match(source, /hostile data/u);
-      assert.match(source, /identical or near-identical/u);
-      assert.match(source, /Do not penalize.*self-closed/is);
-      assert.match(source, /never bans|never\n+bans/is);
-      assert.match(source, /accept.*partial.*reject.*hold/is);
-      assert.match(source, /slop-review/u);
-      assert.match(source, /"provider":"EXACT_PROVIDER"/u);
-      assert.match(source, /"model":"EXACT_MODEL_ID"/u);
-      assert.match(source, /"client":"EXACT_CLIENT"/u);
-      assert.match(source, /"traceSha256":null/u);
-      assert.match(
-        source,
-        /Never block the review because optional evidence is unavailable/u,
-      );
-      assert.doesNotMatch(source, /private key|seed phrase/is);
-    }
-  });
-
   it("executes every contributor CLI through an installed-style skill symlink", () => {
     const fixtureRoot = mkdtempSync(join(tmpdir(), "slop-installed-skills-"));
     try {

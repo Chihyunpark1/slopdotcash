@@ -8,8 +8,13 @@ import {
   useRef,
   useState,
 } from "react";
-import { readBoundedJson, readBoundedText } from "./lib/browser-json";
+import {
+  fetchWithDeadline,
+  readBoundedJson,
+  readBoundedText,
+} from "./lib/browser-json";
 import type { CycleIndex } from "./lib/cycle-index";
+import { requestIdentityAssertion } from "./lib/identity-flow";
 import {
   assemblePoints,
   POINTS_NOTICE,
@@ -53,9 +58,8 @@ const Context = createContext<{
   setMe: () => {},
 });
 async function requestJson(url: string, init: RequestInit = {}) {
-  const response = await fetch(url, {
+  const response = await fetchWithDeadline(url, {
     ...init,
-    signal: init.signal ?? AbortSignal.timeout(15000),
     cache: "no-store",
   });
   if (!response.ok)
@@ -72,7 +76,7 @@ async function loadPoints(signal: AbortSignal) {
     index.shards.map(async (s, i) => {
       if (s.path !== `/data/points/${i.toString(16)}.json`)
         throw new Error("Invalid points path");
-      const r = await fetch(s.path, { signal, cache: "no-store" });
+      const r = await fetchWithDeadline(s.path, { signal, cache: "no-store" });
       if (!r.ok) throw new Error("Points shard unavailable");
       return readBoundedText(r, 8 * 1024 * 1024, "points history");
     }),
@@ -108,12 +112,14 @@ export function PointsProvider({
   const [attempt, setAttempt] = useState(0);
   const [requested, setRequested] = useState(false);
   const shouldLoad = enabled || requested;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: retries and membership changes refresh public visibility.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: attempt triggers an explicit reload.
   useEffect(() => {
     if (!shouldLoad) return;
     const controller = new AbortController();
+    setState({ status: "loading" });
     void loadPoints(controller.signal)
       .then((value) => {
+        if (controller.signal.aborted) return;
         setState({
           status: "ready",
           journal: value,
@@ -129,7 +135,7 @@ export function PointsProvider({
           });
       });
     return () => controller.abort();
-  }, [shouldLoad]);
+  }, [shouldLoad, attempt]);
   useEffect(() => {
     const controller = new AbortController();
     if (productOrigin())
@@ -156,27 +162,6 @@ export function PointsProvider({
         });
     return () => controller.abort();
   }, []);
-  useEffect(() => {
-    if (!shouldLoad || !attempt) return;
-    const controller = new AbortController();
-    setState({ status: "loading" });
-    void loadPoints(controller.signal)
-      .then((value) => {
-        setState({
-          status: "ready",
-          journal: value,
-          members: pointMembers(value, new Date().toISOString().slice(0, 7)),
-        });
-      })
-      .catch(() => {
-        if (!controller.signal.aborted)
-          setState({
-            status: "error",
-            message: "Points are unavailable. Try again later.",
-          });
-      });
-    return () => controller.abort();
-  }, [attempt, shouldLoad]);
   return (
     <Context.Provider
       value={{
@@ -383,9 +368,7 @@ export function PointsLabel({
         .reduce((s, a) => s + a.amount, 0) ?? 0)
     : (m?.total ?? 0);
   return (
-    <a href="/points" className="points-label">
-      {n.toLocaleString()} pts
-    </a>
+    <span className="points-label">{n.toLocaleString()} pts</span>
   );
 }
 export function ProfilePoints({
@@ -562,81 +545,49 @@ function JoinPoints({
     );
     if (popup) popup.opener = null;
     try {
-      const flow = (await requestJson(
-        "https://identity.slop.cash/v1/oauth/start",
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ audience: "slop-points-web" }),
-          signal: c.signal,
+      const assertion = await requestIdentityAssertion({
+        audience: "slop-points-web",
+        signal: c.signal,
+        authorize: (url) => {
+          setAuthorization(url);
+          if (popup) popup.location.replace(url);
         },
-      )) as {
-        authorizationUrl: string;
-        flowId: string;
-        pollCapability: string;
-        expiresAt: string;
-      };
-      const url = new URL(flow.authorizationUrl);
-      if (
-        url.origin !== "https://identity.slop.cash" ||
-        url.pathname !== "/v1/oauth/authorize" ||
-        !/^flow_[A-Za-z0-9_-]{20,64}$/.test(flow.flowId) ||
-        !/^[A-Za-z0-9_-]{40,128}$/.test(flow.pollCapability) ||
-        !Number.isFinite(Date.parse(flow.expiresAt))
-      )
-        throw new Error("Invalid sign-in response");
-      setAuthorization(url.href);
-      if (popup) popup.location.replace(url.href);
-      while (Date.now() < Date.parse(flow.expiresAt)) {
-        await new Promise<void>((resolve, reject) => {
-          const timer = setTimeout(() => {
-            c.signal.removeEventListener("abort", abort);
-            resolve();
-          }, 2000);
-          function abort() {
-            clearTimeout(timer);
-            reject(new Error("Sign-in cancelled"));
-          }
-          c.signal.addEventListener("abort", abort, { once: true });
-        });
-        const response = await fetch(
-          "https://identity.slop.cash/v1/oauth/poll",
-          {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              audience: "slop-points-web",
-              flowId: flow.flowId,
-              pollCapability: flow.pollCapability,
-            }),
+        request: async (url, init) => {
+          const response = await fetchWithDeadline(url, {
+            ...init,
             signal: c.signal,
-          },
+            credentials: "omit",
+            redirect: "error",
+            cache: "no-store",
+            referrerPolicy: "no-referrer",
+          });
+          if (!response.ok)
+            throw new Error("Sign-in expired. Please start again.");
+          const body = await readBoundedJson(response, 16384, "sign-in");
+          if (!body || typeof body !== "object" || Array.isArray(body))
+            throw new Error("Invalid sign-in response");
+          return {
+            status: response.status,
+            body: body as Record<string, unknown>,
+          };
+        },
+      });
+      const joined = await requestJson("/api/v1/points/join", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          assertion,
+          public: publish,
+        }),
+        signal: c.signal,
+      });
+      const signedIn = member(joined);
+      setMe(signedIn);
+      if (redirectToProfile)
+        window.location.assign(
+          `/contributors/${encodeURIComponent(signedIn.actor.login)}`,
         );
-        if (response.status === 202) continue;
-        if (!response.ok)
-          throw new Error("Sign-in expired. Please start again.");
-        const result = (await readBoundedJson(response, 16384, "sign-in")) as {
-          assertion: string;
-        };
-        const joined = await requestJson("/api/v1/points/join", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            assertion: result.assertion,
-            public: publish,
-          }),
-          signal: c.signal,
-        });
-        const signedIn = member(joined);
-        setMe(signedIn);
-        if (redirectToProfile)
-          window.location.assign(
-            `/contributors/${encodeURIComponent(signedIn.actor.login)}`,
-          );
-        setMessage("You’re signed in. Your welcome points are recorded.");
-        return;
-      }
-      throw new Error("Sign-in expired. Please start again.");
+      setMessage("You’re signed in. Your welcome points are recorded.");
     } catch (e) {
       if (!c.signal.aborted)
         setMessage(e instanceof Error ? e.message : "Sign-in unavailable");

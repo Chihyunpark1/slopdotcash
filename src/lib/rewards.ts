@@ -11,8 +11,7 @@ import {
   LAST_LEGACY_CAP_CYCLE,
 } from "./allocation-funding";
 import { isSolanaTransactionId } from "./funding-address.mjs";
-import { assertExactModelIdentity } from "./model-identity";
-import { findProject, type ProjectId } from "./projects.mjs";
+import { findProject } from "./projects.mjs";
 import { isSolanaAddress, WALLET_CLAIM_REPOSITORY } from "./wallets";
 
 export const REWARD_PROTOCOL_VERSION = "1" as const;
@@ -326,35 +325,6 @@ export function feeForPrincipal(
     );
   }
   return ((BigInt(principalMinor) * BigInt(basisPoints)) / 10_000n).toString();
-}
-
-/**
- * Computes only the newly due fee so splitting a settlement cannot change
- * integer rounding or reduce the project's cumulative obligation.
- */
-export function incrementalFeeForPrincipal(
-  settledBeforeMinor: string,
-  batchMinor: string,
-  basisPoints: number = PLATFORM_FEE_BASIS_POINTS,
-): string {
-  const settledBefore = BigInt(settledBeforeMinor);
-  const batch = BigInt(batchMinor);
-  if (settledBefore < 0n || batch < 0n) {
-    throw new RangeError("settled principal cannot be negative");
-  }
-  if (
-    !Number.isSafeInteger(basisPoints) ||
-    basisPoints < 0 ||
-    basisPoints > 10_000
-  ) {
-    throw new TypeError(
-      "basis points must be an integer from 0 through 10,000",
-    );
-  }
-  return (
-    ((settledBefore + batch) * BigInt(basisPoints)) / 10_000n -
-    (settledBefore * BigInt(basisPoints)) / 10_000n
-  ).toString();
 }
 
 function assertActor(
@@ -1925,24 +1895,4 @@ export function assertRewardSettlementManifest(
     },
     totals: { approvedMinor, paidMinor, feeMinor },
   };
-}
-
-/** Confirms that an open project received exact, non-placeholder disclosure. */
-export function hasDeclaredProjectModelIdentity(
-  projectId: ProjectId,
-  input: { client: string; model: string; provider: string },
-): boolean {
-  const project = findProject(projectId);
-  if (
-    project?.modelPolicy.mode !== "open-declared" ||
-    !project.modelPolicy.disclosureRequired
-  ) {
-    return false;
-  }
-  try {
-    assertExactModelIdentity(input);
-    return true;
-  } catch {
-    return false;
-  }
 }

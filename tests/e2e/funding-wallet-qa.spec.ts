@@ -9,9 +9,9 @@ const address = "11111111111111111111111111111111";
 const sha = (value: unknown) =>
   createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
-test("serves wallet registration on direct navigation and reload", async ({
-  page,
-}) => {
+test("serves wallet registration on direct navigation and reload", {
+  tag: ["@pages"],
+}, async ({ page }) => {
   for (const path of ["/wallet", "/wallet/"]) {
     const response = await page.goto(path, { waitUntil: "networkidle" });
     expect(response?.status()).toBe(200);

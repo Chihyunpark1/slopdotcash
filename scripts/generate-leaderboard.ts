@@ -1884,18 +1884,6 @@ export async function collectPullRequestReviewCounts(
   return reviewCounts;
 }
 
-export async function collectReviewedPullRequestIds(
-  client: GraphqlExecutor,
-  references: ReadonlyArray<{ id: string }>,
-): Promise<Set<string>> {
-  const reviewCounts = await collectPullRequestReviewCounts(client, references);
-  return new Set(
-    [...reviewCounts].flatMap(([id, entry]) =>
-      entry.reviewCount > 0 ? [id] : [],
-    ),
-  );
-}
-
 async function preflightRepository(
   client: GraphqlExecutor,
   targetRepository: TargetRepository,
@@ -2757,24 +2745,6 @@ export async function retryOpenBatch<T>(
   );
 }
 
-export function sameReferenceSet(
-  left: NodeReference[],
-  right: NodeReference[],
-): boolean {
-  if (left.length !== right.length) {
-    return false;
-  }
-  const rightIds = new Set(right.map((reference) => reference.id));
-  const rightVersions = new Map(
-    right.map((reference) => [reference.id, reference.openVersion]),
-  );
-  return left.every(
-    (reference) =>
-      rightIds.has(reference.id) &&
-      rightVersions.get(reference.id) === reference.openVersion,
-  );
-}
-
 /**
  * Selects outcomes eligible for detail-dependent bonuses. Base merge scoring
  * remains complete and uncapped; this bounds only expensive GitHub hydration.
@@ -2823,23 +2793,6 @@ export function selectDetailedMergedPullRequestIds(
     selected.add(outcome.id);
   }
   return selected;
-}
-
-export async function selectHydratedMergedPullRequestIds(
-  client: GraphqlExecutor,
-  candidates: ReadonlyArray<{
-    outcome: MergedPullRequestOutcome;
-    projectId: string;
-  }>,
-  verificationWindowFrom: Date,
-): Promise<Set<string>> {
-  return (
-    await planMergedPullRequestHydration(
-      client,
-      candidates,
-      verificationWindowFrom,
-    )
-  ).hydratedIds;
 }
 
 export interface MergedPullRequestHydrationPlan {

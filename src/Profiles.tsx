@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { readBoundedJson } from "./lib/browser-json";
+import { fetchWithDeadline, readBoundedJson } from "./lib/browser-json";
 import type { CycleIndex } from "./lib/cycle-index";
 import {
   assertProfiles,
@@ -31,7 +31,10 @@ export function useProfiles() {
   useEffect(() => {
     const c = new AbortController();
     setState({ status: "loading" });
-    void fetch("/data/profiles.json", { signal: c.signal, cache: "no-store" })
+    void fetchWithDeadline("/data/profiles.json", {
+      signal: c.signal,
+      cache: "no-store",
+    })
       .then(async (r) => {
         if (!r.ok) throw Error("Profiles unavailable");
         const v = await readBoundedJson(r, 8 * 1024 * 1024, "profiles");

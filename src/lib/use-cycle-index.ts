@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { readBoundedJson } from "./browser-json";
+import { fetchWithDeadline, readBoundedJson } from "./browser-json";
 import { assertCycleIndex, type CycleIndex } from "./cycle-index";
 
 export type CycleIndexState =
@@ -19,7 +19,7 @@ export function useCycleIndex(enabled: boolean): [CycleIndexState, () => void] {
     const timeout = window.setTimeout(() => controller.abort(), 12_000);
     async function load() {
       try {
-        const response = await fetch(
+        const response = await fetchWithDeadline(
           `/data/cycles/index.json?attempt=${attempt}`,
           {
             cache: "no-store",

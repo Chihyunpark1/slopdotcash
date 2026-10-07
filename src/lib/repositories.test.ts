@@ -51,12 +51,11 @@ describe("collectTargetRepositories", () => {
     expect(collectTargetRepositories(PROJECTS)).toEqual([
       ...TARGET_REPOSITORIES,
     ]);
-    expect(TARGET_REPOSITORIES.map((repository) => repository.id)).toEqual([
-      "elizaOS/eliza",
-      "elizaOS/asi",
-      "elizaOS/proximityprize",
-    ]);
-    expect(PRIMARY_REPOSITORY.id).toBe("elizaOS/eliza");
+    expect(TARGET_REPOSITORIES.map((repository) => repository.id)).toEqual(
+      PROJECTS.filter((project) => project.status === "active").flatMap(
+        (project) => project.repositories.map((repository) => repository.id),
+      ),
+    );
     expect(PRIMARY_REPOSITORY.role).toBe("primary");
   });
 

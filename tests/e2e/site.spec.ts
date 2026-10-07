@@ -559,10 +559,9 @@ test("never presents Delta Star's external prize as platform money", async ({
   ).toBeVisible();
 });
 
-test("renders contributor and cycle records from validated public data", async ({
-  page,
-  request,
-}) => {
+test("renders contributor and cycle records from validated public data", {
+  tag: ["@pages"],
+}, async ({ page, request }) => {
   const snapshot = await loadSnapshot(request);
   const cycles = await loadCycles(request);
   const actor =
@@ -819,10 +818,9 @@ test("creates a valid GitHub-native project handoff", async ({
   ).toBeVisible();
 });
 
-test("serves byte-consistent install and read-only artifacts for every project", async ({
-  baseURL,
-  request,
-}) => {
+test("serves byte-consistent install and read-only artifacts for every project", {
+  tag: ["@pages", "@pages-only"],
+}, async ({ baseURL, request }) => {
   const documentResponse = await request.get("/");
   const policy = documentResponse.headers()["content-security-policy"];
   expect(policy).toBeDefined();
