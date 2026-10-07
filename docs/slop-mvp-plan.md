@@ -52,7 +52,7 @@ No package is marked implemented by this document. Create bounded implementation
 - **Identity:** live GitHub and X configuration independently qualified; optional X failure does not block contribution or payment.
 - **Bot scope and penalties:** optional/off/incomplete/ready/degraded states, tagged nonmember, untagged member, unknown membership, external opt-in, ignored maintainer/contributor, stale revision, manual versus bot closure, failed close, merge, reopen and appeal; each has its specified review and journal outcome.
 - **Community security:** isolated VM, trusted outside collector, file/disk/process/network telemetry, canary probes, controlled egress, tamper detection, recursive artifact quarantine, independent pinned Astra/Opus scans, incomplete/clean/malicious dispositions, no unscanned execution, and revision revocation.
-- **Contracts:** exact deployed code, network/asset/vault identity, permissions, reserve invariants, donation rights, fee arithmetic, and independent security review.
+- **Contracts:** exact deployed code, network/asset/vault identity, permissions, reserve invariants, donation rights, fee arithmetic, no Slop-held key able to originate or redirect a payment, and independent security review.
 - **Financial operations:** complete Base/Solana test scenarios, ambiguous-send recovery, replay protection, finalized receipts, queue/indexer restart and reconciliation.
 - **UI:** desktop/mobile, keyboard, 200% zoom, WCAG AA, copy/download/link checks, console/network evidence, uploaded walkthrough and test videos.
 - **Deployment:** approved protected workflow and environment; production website/API/contract checks are separate. Claim the deploy/DNS lever before any such change.
