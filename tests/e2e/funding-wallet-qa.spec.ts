@@ -2,6 +2,11 @@
 import { createHash } from "node:crypto";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, type TestInfo, test } from "@playwright/test";
+import { deploymentOrigins, deploymentTier } from "../../src/lib/deployment";
+
+const deployment = deploymentOrigins(
+  deploymentTier(process.env.VITE_SLOP_ENVIRONMENT),
+);
 
 test.setTimeout(120_000);
 
@@ -215,7 +220,7 @@ for (const sameTab of [false, true]) {
         exp: Date.parse(expiresAt) / 1000,
       }),
     ).toString("base64url")}.fixture`;
-    await context.route("https://identity.slop.cash/**", async (route) => {
+    await context.route(`${deployment.identity}/**`, async (route) => {
       const path = new URL(route.request().url()).pathname;
       if (path === "/v1/oauth/authorize") {
         authorized = true;
@@ -232,7 +237,7 @@ for (const sameTab of [false, true]) {
             pollCapability: "p".repeat(48),
             expiresAt,
             pollAfterSeconds: 1,
-            authorizationUrl: `https://identity.slop.cash/v1/oauth/authorize?flow_id=${flowId}&state=${"s".repeat(48)}`,
+            authorizationUrl: `${deployment.identity}/v1/oauth/authorize?flow_id=${flowId}&state=${"s".repeat(48)}`,
           },
         });
       } else if (path === "/v1/oauth/poll") {
@@ -253,7 +258,7 @@ for (const sameTab of [false, true]) {
         });
       } else throw new Error(`Unexpected identity request ${path}`);
     });
-    await context.route("https://api.slop.cash/**", async (route) => {
+    await context.route(`${deployment.api}/**`, async (route) => {
       const path = new URL(route.request().url()).pathname;
       if (path === "/api/v1/auth/session") {
         await route.fulfill({
@@ -343,7 +348,7 @@ for (const sameTab of [false, true]) {
       page.getByRole("link", { name: "View public claim" }),
     ).toHaveAttribute(
       "href",
-      "https://api.slop.cash/api/v1/wallet-claims/qa_new_claim",
+      `${deployment.api}/api/v1/wallet-claims/qa_new_claim`,
     );
     await audit(page, info, "wallet-confirmed-synthetic");
     await info.attach("console-network.json", {
