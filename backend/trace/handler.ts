@@ -223,7 +223,7 @@ function publicBrowserResponse(
   const origin = request.headers.get("origin");
   if (
     origin === null ||
-    !deploymentOrigins(deps.tier).browserOrigins.has(origin)
+    !deploymentOrigins(deps.tier).traceBrowserOrigins.has(origin)
   ) {
     return response;
   }
@@ -1393,7 +1393,7 @@ export async function handleTraceApi(
   }
   if (
     origin !== null &&
-    !deploymentOrigins(deps.tier).browserOrigins.has(origin)
+    !deploymentOrigins(deps.tier).traceBrowserOrigins.has(origin)
   )
     return json(403, { error: "origin_not_allowed" });
   if (preflight) {
