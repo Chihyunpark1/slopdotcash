@@ -306,16 +306,15 @@ or tag.
 
 Required protected-environment secrets are `CLOUDFLARE_API_TOKEN` and
 `CLOUDFLARE_ACCOUNT_ID`; Actions supplies `GITHUB_TOKEN` for ingestion. The
-`eliza-army-production` environment allows only `main`, requires the
-designated reviewer, and disallows administrator bypass. Repository rules
+`eliza-army-production` environment allows only `main` and disallows
+administrator bypass. Successful protected merges deploy automatically. Repository rules
 require a pull request, resolved threads, and non-fast-forward history with no
 bypass actors.
 
-Code releases require approval at `eliza-army-production` before entering the
-publication lock. Publication credentials live in the main-only
-`slop-data-refresh` environment. Its scoped token must support Pages, identity and
-D1 release operations; never expose it to pull-request runs. The approval job
-has no publication lock, so waiting for a reviewer cannot starve data refreshes.
+Code releases use the main-only `eliza-army-production` environment. Scheduled
+refreshes use `slop-data-refresh`. No separate manual release approval is
+required. Publication credentials must never be exposed to pull-request runs.
+Both release paths use the shared publication lock.
 
 Scheduled refreshes build the currently published GitHub-approved ancestor of
 `main`, compare the complete bundle against a successful retained baseline,

@@ -28,7 +28,7 @@ secrets there, never in a file committed to Git:
 
 - `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`: the deployment account and
   a token with Pages, Workers Scripts, D1, and R2 permissions for staging.
-- `GITHUB_APP_CLIENT_ID` and `GITHUB_APP_CLIENT_SECRET`: a separate GitHub OAuth
+- `SLOP_GITHUB_CLIENT_ID` and `SLOP_GITHUB_CLIENT_SECRET`: a separate GitHub OAuth
   application for staging. Use `https://staging.slop.cash` as its homepage and
   `https://identity-staging.slop.cash/v1/oauth/callback` as its callback.
 - `IDENTITY_STATE_KEY`, `IDENTITY_ASSERTION_KEY`, and `TRACE_AUTH_SECRET`:

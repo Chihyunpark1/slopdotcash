@@ -303,7 +303,7 @@ jobs:
       - name: Require staging credentials
         env:
           HAS_CLOUDFLARE: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
-          HAS_CLIENT: ${{ secrets.GITHUB_APP_CLIENT_ID != '' && secrets.GITHUB_APP_CLIENT_SECRET != '' }}
+          HAS_CLIENT: ${{ secrets.SLOP_GITHUB_CLIENT_ID != '' && secrets.SLOP_GITHUB_CLIENT_SECRET != '' }}
           HAS_KEYS: ${{ secrets.IDENTITY_STATE_KEY != '' && secrets.IDENTITY_ASSERTION_KEY != '' && secrets.TRACE_AUTH_SECRET != '' }}
         run: |
           test "$HAS_CLOUDFLARE" = true
@@ -313,8 +313,8 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          GITHUB_APP_CLIENT_ID: ${{ secrets.GITHUB_APP_CLIENT_ID }}
-          GITHUB_APP_CLIENT_SECRET: ${{ secrets.GITHUB_APP_CLIENT_SECRET }}
+          GITHUB_APP_CLIENT_ID: ${{ secrets.SLOP_GITHUB_CLIENT_ID }}
+          GITHUB_APP_CLIENT_SECRET: ${{ secrets.SLOP_GITHUB_CLIENT_SECRET }}
           IDENTITY_STATE_KEY: ${{ secrets.IDENTITY_STATE_KEY }}
           IDENTITY_ASSERTION_KEY: ${{ secrets.IDENTITY_ASSERTION_KEY }}
           TRACE_AUTH_SECRET: ${{ secrets.TRACE_AUTH_SECRET }}
