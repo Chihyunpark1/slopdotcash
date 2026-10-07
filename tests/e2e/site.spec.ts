@@ -1125,7 +1125,7 @@ test("shows an explicit error for invalid data and retries", async ({
   await page.getByRole("button", { name: /Retry/u }).click();
   await expect(page.getByRole("alert")).toHaveCount(0);
   await expect(
-    page.getByRole("heading", { name: /leaderboard\./u }),
+    page.getByRole("heading", { name: "Contributor standings", exact: true }),
   ).toBeVisible();
   expect(attempts).toBe(failedAttempts + 1);
 });
