@@ -153,8 +153,9 @@ test("ranks archived work separately from the month its payment settled", async 
   await page.route("**/data/leaderboard.json?**", (route) =>
     route.fulfill({ json: snapshotFixture() }),
   );
+  const history = archivedPaidCycleIndex();
   await page.route("**/data/cycles/index.json?**", (route) =>
-    route.fulfill({ json: archivedPaidCycleIndex() }),
+    route.fulfill({ json: history }),
   );
   await page.goto("/?sort=money#leaderboard");
   const standings = page.getByRole("region", {
@@ -176,4 +177,24 @@ test("ranks archived work separately from the month its payment settled", async 
   await page.goto("/?sort=money#leaderboard");
   await expect(recipient.locator("td").nth(2)).toHaveText("7");
   await expect(recipient.locator("td").nth(4)).toHaveText("$0");
+
+  // A current identity must also win when only an older payment creates the row.
+  history.cycles[0].contributors[0].actor.id =
+    snapshotFixture().leaders[0].actor.id;
+  await page.clock.setFixedTime(new Date("2026-08-17T12:00:00.000Z"));
+  await page.goto("/?sort=money&identity=renamed#leaderboard");
+  const currentLink = standings.getByRole("link", {
+    name: "finish-line",
+    exact: true,
+  });
+  await expect(currentLink).toHaveAttribute(
+    "href",
+    "/contributors/finish-line",
+  );
+  await expect(currentLink.locator("../..").locator("td").nth(4)).toHaveText(
+    "$1",
+  );
+  await expect(
+    standings.getByRole("link", { name: "archive-only", exact: true }),
+  ).toHaveCount(0);
 });
