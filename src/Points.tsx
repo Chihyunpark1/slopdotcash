@@ -980,7 +980,15 @@ export function ContributorStandings({
             (sort !== "score" || projection.scoreAvailable)
       ) ? (
         <>
-          <div className="points-table">
+          <p className="standings-scroll-hint">
+            Scroll the table to see all columns.
+          </p>
+          <section
+            className="points-table"
+            aria-label="Contributor standings table"
+            // biome-ignore lint/a11y/noNoninteractiveTabindex: Keyboard users must be able to scroll all table columns.
+            tabIndex={0}
+          >
             <table>
               <thead>
                 <tr>
@@ -1023,7 +1031,7 @@ export function ContributorStandings({
                   ))}
               </tbody>
             </table>
-          </div>
+          </section>
           {rows.length === 0 ? (
             <p>No recorded contributions match this view.</p>
           ) : null}

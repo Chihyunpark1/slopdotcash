@@ -47,6 +47,29 @@ test(
         .getByText(/^[\d,]+ contributors$/),
     ).toBeVisible();
     await page.evaluate(() => document.fonts.ready);
+    if ((page.viewportSize()?.width ?? 0) <= 390) {
+      const scroller = page.getByRole("region", {
+        name: "Contributor standings table",
+        exact: true,
+      });
+      expect(
+        await scroller.evaluate((el) => el.scrollWidth > el.clientWidth),
+      ).toBe(true);
+      await scroller.focus();
+      await page.keyboard.press("ArrowRight");
+      await expect
+        .poll(() => scroller.evaluate((el) => el.scrollLeft))
+        .toBeGreaterThan(0);
+      await scroller.evaluate((el) => {
+        el.scrollLeft = 0;
+      });
+      const nameCell = page
+        .getByRole("table")
+        .locator("tbody tr td:nth-child(2)")
+        .first();
+      expect((await nameCell.boundingBox())?.width).toBeGreaterThan(100);
+    }
+
     await page.getByLabel("Period", { exact: true }).selectOption("lifetime");
     const first = page.getByRole("table").getByRole("row").nth(1);
     const login = await first.getByRole("link").innerText();

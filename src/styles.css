@@ -3573,7 +3573,11 @@ small {
   max-width: 100%;
   overflow-x: auto;
 }
+.standings-scroll-hint {
+  display: none;
+}
 .points-table table {
+  min-width: 40rem;
   width: 100%;
   border-collapse: collapse;
 }
@@ -3913,5 +3917,12 @@ small {
   .model-outcome-details dl > div {
     grid-template-columns: 1fr;
     gap: 4px;
+  }
+}
+
+@media (max-width: 760px) {
+  .standings-scroll-hint {
+    display: block;
+    font-size: 0.875rem;
   }
 }
