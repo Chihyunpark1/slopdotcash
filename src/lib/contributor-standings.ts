@@ -19,6 +19,14 @@ export function contributorStandings(
       state.cycleIndex.cycles.some(
         (c) => c.cycleId === month && (!projectId || c.projectId === projectId),
       ));
+  const currentActors = new Map(
+    (members ?? []).map((member) => [member.actor.id, member.actor]),
+  );
+  if (state.status === "ready") {
+    for (const leader of state.snapshot.leaders) {
+      currentActors.set(leader.actor.id, leader.actor);
+    }
+  }
   const rows = new Map<
     string,
     {
@@ -33,7 +41,7 @@ export function contributorStandings(
     let value = rows.get(actor.id);
     if (!value) {
       value = {
-        actor,
+        actor: currentActors.get(actor.id) ?? actor,
         score: scoreAvailable ? 0 : null,
         points: members ? 0 : null,
         money: state.status === "ready" ? 0n : null,
