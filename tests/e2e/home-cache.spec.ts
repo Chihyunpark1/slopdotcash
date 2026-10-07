@@ -38,14 +38,24 @@ test("renders bundled projects with data stalled and GitHub blocked", async ({
     }
     await page.keyboard.press("Tab");
     await expect(page.locator(":focus")).toBeVisible();
-    await page.evaluate(() => {
-      document.documentElement.style.zoom = "2";
+    await page.screenshot({
+      path: test.info().outputPath("cached-projects.png"),
+      fullPage: true,
     });
-    expect(
-      await page.evaluate(
-        () => document.documentElement.scrollWidth <= window.innerWidth,
-      ),
-    ).toBe(true);
+    // Keep at least 320 CSS pixels for reflow. Doubling the 320px viewport
+    // tests a 160px layout, below the site's supported minimum.
+    if ((page.viewportSize()?.width ?? 0) >= 640) {
+      await page.evaluate(() => {
+        document.documentElement.style.zoom = "2";
+      });
+    }
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => document.documentElement.scrollWidth <= window.innerWidth,
+        ),
+      )
+      .toBe(true);
     const accessibility = await new AxeBuilder({ page })
       .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
       .analyze();
@@ -56,10 +66,6 @@ test("renders bundled projects with data stalled and GitHub blocked", async ({
       ),
     ).toEqual([]);
     expect(errors).toEqual([]);
-    await page.screenshot({
-      path: test.info().outputPath("cached-projects.png"),
-      fullPage: true,
-    });
   } finally {
     await test.info().attach("homepage-network-and-console", {
       body: JSON.stringify({ requests, errors }, null, 2),
