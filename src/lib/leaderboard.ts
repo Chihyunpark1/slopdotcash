@@ -3034,6 +3034,7 @@ export function createLeaderboardSnapshot(
       }
     }
 
+    const reviewLedgerStart = ledger.length;
     const ratification = scoreRatifications.get(pullRequest.id);
     const awardedReviewers = new Set<string>();
     const hasEvaluatedReviewReservation = (actorId: string): boolean =>
@@ -3139,7 +3140,7 @@ export function createLeaderboardSnapshot(
           "Immutable maintainer score ratification for an accepted outcome.",
       });
     }
-    for (const review of dedupeByNodeId(pullRequest.reviews).sort(
+    const orderedReviews = dedupeByNodeId(pullRequest.reviews).sort(
       (left, right) => {
         if (left.submittedAt === right.submittedAt) {
           return left.id.localeCompare(right.id);
@@ -3152,7 +3153,8 @@ export function createLeaderboardSnapshot(
         }
         return left.submittedAt.localeCompare(right.submittedAt);
       },
-    )) {
+    );
+    for (const review of orderedReviews) {
       if (review.author && !isBotActor(review.author)) {
         actorEntry(entries, review.author).rawActivity.reviews += 1;
       }
@@ -3229,6 +3231,45 @@ export function createLeaderboardSnapshot(
       } else {
         excludeReview(pullRequest, review, "reviewer-cycle-cap");
       }
+    }
+    // Preserve the later verification without another award or evidence bonus.
+    // Missing reviewed commits cannot establish a change of head.
+    for (const event of ledger.slice(reviewLedgerStart)) {
+      if (
+        event.category !== "substantive-review" ||
+        event.source.kind !== "review"
+      )
+        continue;
+      const firstIndex = orderedReviews.findIndex(
+        (review) => review.id === event.source.id,
+      );
+      const first = orderedReviews[firstIndex];
+      if (
+        !first?.commitId ||
+        reviewExclusionReason(first, pullRequest) !== null
+      )
+        continue;
+      const heads = new Set<string>();
+      const history: NonNullable<ScoreEvent["reviewHistory"]> = [];
+      for (const review of orderedReviews.slice(firstIndex)) {
+        if (
+          review.author?.id !== event.actor.id ||
+          !review.commitId ||
+          !review.submittedAt ||
+          heads.has(review.commitId) ||
+          reviewExclusionReason(review, pullRequest) !== null
+        )
+          continue;
+        heads.add(review.commitId);
+        history.push({
+          sourceId: review.id,
+          state: review.state as "APPROVED" | "CHANGES_REQUESTED",
+          commitId: review.commitId,
+          submittedAt: review.submittedAt,
+          url: review.url,
+        });
+      }
+      if (history.length > 1) event.reviewHistory = history;
     }
   }
 
@@ -4627,6 +4668,66 @@ function assertLedgerValue(
     `${path}.source.kind`,
   );
   assertString(source.title, `${path}.source.title`);
+  if ("reviewHistory" in event) {
+    if (event.category !== "substantive-review" || source.kind !== "review")
+      throw new Error(
+        `${path}.reviewHistory is reserved for formal review awards`,
+      );
+    if (!Array.isArray(event.reviewHistory))
+      throw new Error(`${path}.reviewHistory must be an array`);
+    const history = event.reviewHistory;
+    if (history.length < 2)
+      throw new Error(`${path}.reviewHistory must include a later decision`);
+    const ids = new Set<string>();
+    const heads = new Set<string>();
+    let previousTime = "";
+    let previousId = "";
+    for (const [index, value] of history.entries()) {
+      const historyPath = `${path}.reviewHistory[${index}]`;
+      const decision = assertObject(value, historyPath);
+      if (
+        Object.keys(decision).sort().join("\0") !==
+        "commitId\0sourceId\0state\0submittedAt\0url"
+      )
+        throw new Error(`${historyPath} has unexpected or missing fields`);
+      assertString(decision.sourceId, `${historyPath}.sourceId`);
+      assertEnum(
+        decision.state,
+        ["APPROVED", "CHANGES_REQUESTED"],
+        `${historyPath}.state`,
+      );
+      assertString(decision.commitId, `${historyPath}.commitId`);
+      if (!/^[a-f0-9]{40}$/u.test(decision.commitId))
+        throw new Error(`${historyPath}.commitId must be an exact commit`);
+      assertIsoTimestamp(decision.submittedAt, `${historyPath}.submittedAt`);
+      assertRepositoryUrl(
+        decision.url,
+        `${historyPath}.url`,
+        "review",
+        Number(source.number),
+        event.repository as RepositoryId,
+      );
+      if (
+        index === 0 &&
+        (decision.sourceId !== source.id ||
+          decision.url !== source.url ||
+          decision.submittedAt !== event.occurredAt)
+      )
+        throw new Error(`${historyPath} must identify the awarded source`);
+      if (ids.has(decision.sourceId) || heads.has(decision.commitId))
+        throw new Error(`${historyPath} repeats a source or reviewed commit`);
+      if (
+        decision.submittedAt < previousTime ||
+        (decision.submittedAt === previousTime &&
+          decision.sourceId <= previousId)
+      )
+        throw new Error(`${historyPath} is not in deterministic review order`);
+      ids.add(decision.sourceId);
+      heads.add(decision.commitId);
+      previousTime = decision.submittedAt;
+      previousId = decision.sourceId;
+    }
+  }
   if (source.kind === "external") {
     if (event.category !== "evaluated-contribution") {
       throw new Error(

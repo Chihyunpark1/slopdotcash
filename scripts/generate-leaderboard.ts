@@ -2504,6 +2504,7 @@ async function finalizePullRequests(
         submittedAt: review.submittedAt,
         url: review.url,
         author: review.author,
+        commitId: review.commitId,
         inlineCommentCount,
       };
     });
