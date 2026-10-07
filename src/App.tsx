@@ -1,6 +1,7 @@
-import { Link } from "./Link";
+import { Link, useInitialHashScroll } from "./Link";
 import { CONTACT_EMAIL, CONTACT_MAILTO } from "./lib/contact";
 import { copyText } from "./lib/copy-text";
+import { homeProjects } from "./lib/home-projects";
 import { SOURCE_REPOSITORY } from "./lib/source-repository";
 import {
   LoginPage,
@@ -316,6 +317,9 @@ export function monthlyPoolLabel(
     : `${formatMicroUsdc(reward.committedMinor)} committed · accessibility unknown · target ${reward.monthlyCapDisplay}`;
 }
 
+/** A pledged pool never headlines its cap; the cap is small print only. */
+const UNFUNDED_POOL_HEADLINE = "Not funded yet";
+
 function formatPercent(partsPerMillion: number): string {
   return `${(partsPerMillion / 10_000).toFixed(2)}%`;
 }
@@ -438,6 +442,7 @@ function Footer() {
         <div className="footer-links">
           <Link href="/#projects">Projects</Link>
           <Link href="/how-it-works">How scoring works</Link>
+          <Link href="/how-it-works#faq">FAQ</Link>
           <Link href="/receipts">Receipts</Link>
           <Link href="/models">Models</Link>
           <Link href="/cycles">Cycle archive</Link>
@@ -570,13 +575,21 @@ function ProjectCard({ project }: { project: ProjectDefinition }) {
       </div>
       <div className="project-card-content">
         <p className="project-summary">{project.description}</p>
-        <p className="project-bounty">
-          <strong>{amount}</strong>
-          {project.reward.kind === "monthly-pool" ? <span>/mo</span> : null}
-        </p>
-        {project.reward.kind === "monthly-pool" && !unfunded ? (
+        {unfunded ? (
+          <p className="project-bounty project-bounty-unfunded">
+            <strong>{UNFUNDED_POOL_HEADLINE}</strong>
+          </p>
+        ) : (
+          <p className="project-bounty">
+            <strong>{amount}</strong>
+            {project.reward.kind === "monthly-pool" ? <span>/mo</span> : null}
+          </p>
+        )}
+        {project.reward.kind === "monthly-pool" ? (
           <small className="project-money-state">
-            Committed balance · accessibility unknown · payments disabled
+            {unfunded
+              ? `Target ${amount}/mo`
+              : "Committed balance · accessibility unknown · payments disabled"}
           </small>
         ) : null}
         {project.reward.reviewBudget ? (
@@ -639,15 +652,8 @@ function GlobalLeaderboard() {
   );
 }
 
-function HomePage({ state, retry }: { state: DataState; retry: () => void }) {
-  const views = state.status === "ready" ? state.views : [];
-  const promotedProjects = PROJECTS.filter((project) =>
-    projectPromotionEligible(
-      project,
-      state.status === "ready" ? state.cycleIndex.cycles : null,
-      views.find((view) => view.project.id === project.id)?.cycle.id ?? null,
-    ),
-  );
+function HomePage() {
+  const promotedProjects = homeProjects();
   const featuredProjects = promotedProjects.filter(
     (project) => project.listingTier === "featured",
   );
@@ -657,8 +663,6 @@ function HomePage({ state, retry }: { state: DataState; retry: () => void }) {
   return (
     <main>
       <section className="hero shell">
-        <DataNotice state={state} retry={retry} />
-
         <TypewriterHeroHeading />
         <p className="hero-copy">
           Fund accepted work on GitHub. Slop calculates allocations from public
@@ -971,11 +975,37 @@ function InstallPanel({ project }: { project: ProjectDefinition }) {
   );
 }
 
-function RewardValue({ leader }: { leader: ProjectContributor }) {
-  return leader.simulatedMinor !== null ? (
-    formatMicroUsdc(leader.simulatedDisplayMinor ?? leader.simulatedMinor)
-  ) : (
-    <>{formatPercent(leader.projectedSharePartsPerMillion ?? 0)} share</>
+/** Dollars are simulated only against committed funds; otherwise a share. */
+function RewardValue({
+  leader,
+  view,
+}: {
+  leader: ProjectContributor;
+  view: ProjectView;
+}) {
+  if (leader.simulatedMinor === null) {
+    return (
+      <>{formatPercent(leader.projectedSharePartsPerMillion ?? 0)} share</>
+    );
+  }
+  if (!monthlyPoolUnfunded(view.project.reward)) {
+    return formatMicroUsdc(
+      leader.simulatedDisplayMinor ?? leader.simulatedMinor,
+    );
+  }
+  const totalWeight = view.leaders.reduce(
+    (total, entry) => total + entry.adjustedWeight,
+    0,
+  );
+  return (
+    <>
+      {formatPercent(
+        totalWeight > 0
+          ? Math.round((leader.adjustedWeight * 1_000_000) / totalWeight)
+          : 0,
+      )}{" "}
+      of score
+    </>
   );
 }
 
@@ -1004,7 +1034,9 @@ function ProjectLeaderboard({
           ) : null}
           {view.reward.kind === "monthly-pool" ? (
             <p>
-              Shares simulate the {monthlyPoolLabel(view.project.reward)} cap.
+              {monthlyPoolUnfunded(view.project.reward)
+                ? `${UNFUNDED_POOL_HEADLINE}.`
+                : `Shares simulate the ${monthlyPoolLabel(view.project.reward)} cap.`}{" "}
               Not approved payouts.
             </p>
           ) : null}
@@ -1022,7 +1054,12 @@ function ProjectLeaderboard({
                   <th scope="col">Rank</th>
                   <th scope="col">Contributor</th>
                   <th scope="col">Score</th>
-                  <th scope="col">Simulated share</th>
+                  <th scope="col">
+                    {view.reward.kind === "monthly-pool" &&
+                    monthlyPoolUnfunded(view.project.reward)
+                      ? "Share of score"
+                      : "Simulated share"}
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -1063,7 +1100,7 @@ function ProjectLeaderboard({
                     </td>
                     <td>
                       <strong>
-                        <RewardValue leader={leader} />
+                        <RewardValue leader={leader} view={view} />
                       </strong>
                     </td>
                   </tr>
@@ -1777,27 +1814,25 @@ function ProjectPage({
             </div>
             {promotionEligible ? (
               <aside className="reward-card">
-                <span>
-                  {project.reward.kind === "monthly-pool"
-                    ? "MONTHLY POOL"
-                    : "EXTERNAL OPPORTUNITY"}
-                </span>
                 <strong
                   className={
-                    project.reward.kind === "monthly-pool"
+                    project.reward.kind === "monthly-pool" &&
+                    !monthlyPoolUnfunded(project.reward)
                       ? "reward-amount-monthly"
                       : undefined
                   }
                 >
                   {project.reward.kind === "monthly-pool"
-                    ? `${monthlyPoolCapLabel(project.reward)} / mo`
+                    ? monthlyPoolUnfunded(project.reward)
+                      ? UNFUNDED_POOL_HEADLINE
+                      : `${monthlyPoolCapLabel(project.reward)} / mo`
                     : project.reward.externalOpportunity
                         ?.advertisedAmountDisplay}
                 </strong>
                 <p>
                   {project.reward.kind === "monthly-pool"
                     ? monthlyPoolUnfunded(project.reward)
-                      ? `Target ${project.reward.monthlyCapDisplay} per month. No funding is committed, so no payment is scheduled until the project commits funds.`
+                      ? `Target ${project.reward.monthlyCapDisplay} per month. No payments scheduled.`
                       : `${formatMicroUsdc(project.reward.committedMinor)} committed against a ${project.reward.monthlyCapDisplay} monthly target. Accessibility is unknown; no payment is enabled.`
                     : "10% of an award actually received is allocated to Slop Cash; the remaining 90% is shared among accepted contributors. The prize sponsor controls eligibility and payment."}
                 </p>
@@ -2191,7 +2226,7 @@ function ProfilePage({
                       </small>
                     </span>
                     <span className="profile-project-stat">
-                      <RewardValue leader={leader} />
+                      <RewardValue leader={leader} view={view} />
                     </span>
                     <ChevronRight aria-hidden="true" />
                   </Link>
@@ -3348,10 +3383,128 @@ function HowItWorksPage() {
         <h2>What Slop never holds.</h2>
         <ul>
           <li>No contributor or project private keys.</li>
-          <li>No treasury, escrow, or platform token.</li>
+          <li>No project or sponsor funds, and no escrow.</li>
+          <li>No token requirement. Pools pay in USDC.</li>
           <li>No authority to sign or broadcast payments.</li>
           <li>No paid claim without finalized public evidence.</li>
         </ul>
+      </section>
+      <section
+        className="custody-proof faq"
+        id="faq"
+        aria-labelledby="faq-title"
+      >
+        <h2 id="faq-title">Questions contributors ask.</h2>
+        <details>
+          <summary>Which repositories count?</summary>
+          <p>
+            Repositories listed by an active project on Slop. Each project page
+            names them and links its skill. Paused projects are listed but not
+            collected yet, and pull requests anywhere else, including the Slop
+            repository itself, are not in any pool.
+          </p>
+        </details>
+        <details>
+          <summary>Do I need to claim an issue first?</summary>
+          <p>
+            No. There is no assignment, claiming, or reservation. Pick unblocked
+            work, open a pull request, and the maintainers decide what merges.
+            Only merged work scores.
+          </p>
+        </details>
+        <details>
+          <summary>Do reviews score?</summary>
+          <p>Yes. A review counts as a standard review, 1 point, when:</p>
+          <ul>
+            <li>
+              It is submitted as Approve or Request changes. A plain Comment
+              review does not score.
+            </li>
+            <li>It is on someone else&apos;s pull request.</li>
+            <li>
+              It has at least 20 characters of written reasoning or an inline
+              comment.
+            </li>
+            <li>
+              It is submitted before the pull request merges, and the pull
+              request does merge.
+            </li>
+          </ul>
+          <p>
+            One review scores per person per pull request, and reviews by or of
+            bot accounts do not score. If you left a Comment review, you can
+            submit a new Approve or Request changes review while the pull
+            request is still open.
+          </p>
+        </details>
+        <details>
+          <summary>When will my work show up?</summary>
+          <p>
+            Open pull requests do not score. Once a pull request merges, it and
+            its qualifying reviews appear at the next data refresh, which runs
+            every 6 hours. Each one is dated when it happened, so points can
+            appear spread through the day. There is no waiting period and no
+            minimum account age.
+          </p>
+        </details>
+        <details>
+          <summary>Why does my merge show only 1/3 of a point?</summary>
+          <p>
+            Every merge starts as a provisional micro unit. A review agent may
+            propose a higher tier from the table above, and the score moves up
+            only when a maintainer ratifies that tier on the exact merged
+            commit. Related or split pull requests share one work unit.
+          </p>
+        </details>
+        <details>
+          <summary>Does the model I use matter?</summary>
+          <p>
+            Not to your score. Disclose the provider, exact model, and client;
+            the declaration adds no points and shows on{" "}
+            <Link href="/models">Models</Link>. A valid signed receipt with a
+            finalized private trace adds a fixed 15% to that outcome.
+          </p>
+        </details>
+        <details>
+          <summary>How do I get paid?</summary>
+          <p>
+            Register a public Solana address on the{" "}
+            <Link href="/wallet">wallet page</Link> with your GitHub account. No
+            wallet connection or signing is needed. Payments are USDC on Solana,
+            sent by the project creator, never by Slop. A wallet must be
+            registered before a month freezes to apply to that month. Without
+            one, your row stays unclaimed and carries forward.
+          </p>
+        </details>
+        <details>
+          <summary>When are payments sent?</summary>
+          <p>
+            At 00:11 UTC on the first of each month, the previous month freezes
+            into a proposal. After 14 days of public review the creator approves
+            it and sends USDC from their own wallet. Slop shows a payment as
+            paid only after the transfers are confirmed on-chain. Amounts below
+            $2 carry to the next month.
+          </p>
+        </details>
+        <details>
+          <summary>What does projected mean? Is the pool funded?</summary>
+          <p>
+            Projected is a live estimate from accepted score at the
+            project&apos;s cap. It is not a balance or a guarantee. A cap is a
+            target, and a pool can allocate only funds committed on-chain. Funds
+            committed after a month freezes apply to later months, not to that
+            one.
+          </p>
+        </details>
+        <details>
+          <summary>What is the 14-day review?</summary>
+          <p>
+            It reviews the monthly allocation, not your code. After the freeze
+            the proposal is public for 14 days, and the creator may approve,
+            hold, exclude, reduce, or increase rows, each with a public reason.
+            It is separate from pull request reviews on GitHub.
+          </p>
+        </details>
       </section>
       <section className="custody-proof mechanism-sources">
         <h2>Read the contracts. Inspect the record.</h2>
@@ -4166,6 +4319,15 @@ function ModelOutcomes({ summary }: { summary: ModelOutcomeSummary }) {
           {count.format(totals.signedDeclarations)} signed across{" "}
           {count.format(totals.distinctClients)} harnesses
         </span>
+        {totals.declarationsWithoutExactModel > 0 ? (
+          <span>
+            <strong>
+              {count.format(totals.declarationsWithoutExactModel)}
+            </strong>{" "}
+            more state that the exact model was unavailable and count toward no
+            model
+          </span>
+        ) : null}
       </div>
 
       <section className="model-outcomes-section">
@@ -4445,7 +4607,9 @@ export function App() {
 
 function AppContent() {
   const route = useRoute();
+  useInitialHashScroll();
   const needsSnapshot = ![
+    "home",
     "points",
     "login",
     "how-it-works",
@@ -4458,7 +4622,7 @@ function AppContent() {
   const [state, retry] = useSnapshot(needsSnapshot);
   const [archive, retryArchive] = useCycleIndex(route.kind === "cycle-archive");
   let content: ReactNode;
-  if (route.kind === "home") content = <HomePage retry={retry} state={state} />;
+  if (route.kind === "home") content = <HomePage />;
   else if (route.kind === "points") content = <PointsPage />;
   else if (route.kind === "login") content = <LoginPage />;
   else if (route.kind === "how-it-works") content = <HowItWorksPage />;

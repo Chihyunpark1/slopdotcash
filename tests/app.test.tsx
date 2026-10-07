@@ -506,9 +506,26 @@ describe("discovery", () => {
     ).not.toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(screen.queryByText(/No accepted outcomes/u)).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Eliza" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Delta Star" })).toBeVisible();
+    expect(vi.mocked(fetch).mock.calls.map(([url]) => String(url))).not.toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("/data/leaderboard.json"),
+      ]),
+    );
+    expect(
+      vi
+        .mocked(fetch)
+        .mock.calls.some(
+          ([url]) =>
+            String(url).includes("/data/cycles/") ||
+            String(url).includes("github"),
+        ),
+    ).toBe(false);
   });
 
   it("labels an old but valid snapshot as stale rather than unavailable", async () => {
+    route("/projects/eliza");
     const snapshot = snapshotFixture();
     const generatedAt = new Date(
       Date.now() - 9 * 60 * 60 * 1_000,
@@ -619,7 +636,7 @@ describe("discovery", () => {
     expect(
       screen.getByRole("heading", { name: "Featured" }),
     ).toBeInTheDocument();
-    expect(screen.queryByText("Community projects")).not.toBeInTheDocument();
+
     expect(screen.getByRole("heading", { name: "Eliza" })).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: "Delta Star" }),
@@ -631,12 +648,10 @@ describe("discovery", () => {
       .closest("a");
     expect(elizaCard).not.toBeNull();
     if (!elizaCard) throw new Error("Eliza project card is missing");
-    expect(within(elizaCard).queryByText(/Unfunded/u)).not.toBeInTheDocument();
-    expect(within(elizaCard).getByText("$5k")).toBeInTheDocument();
-    expect(within(elizaCard).getByText("/mo")).toBeInTheDocument();
-    expect(
-      within(elizaCard).queryByText("Target cap · no funding committed"),
-    ).not.toBeInTheDocument();
+    // A pledged pool headlines its state; the cap is small print only.
+    expect(within(elizaCard).getByText("Not funded yet")).toBeInTheDocument();
+    expect(within(elizaCard).queryByText("$5k")).not.toBeInTheDocument();
+    expect(within(elizaCard).getByText("Target $5k/mo")).toBeInTheDocument();
     expect(
       screen.queryByText("The proof is the product."),
     ).not.toBeInTheDocument();
@@ -685,7 +700,34 @@ describe("discovery", () => {
     expect(window.location.hash).toBe("#leaderboard");
   });
 
+  it("lands a direct hash load on its section after the data renders", async () => {
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    });
+    route("/#leaderboard");
+    mockSnapshot();
+    render(<App />);
+
+    await screen.findByRole("heading", { name: "Leaderboard" });
+    await waitFor(() =>
+      expect(scrollIntoView.mock.contexts.at(-1)).toHaveProperty(
+        "id",
+        "leaderboard",
+      ),
+    );
+
+    // Once the reader scrolls, later renders must not pull them back.
+    fireEvent.wheel(window);
+    scrollIntoView.mockClear();
+    document.body.append(document.createElement("div"));
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    expect(scrollIntoView).not.toHaveBeenCalled();
+  });
+
   it("renders malformed public data as an error and retries explicitly", async () => {
+    route("/projects/eliza");
     let serveValidData = false;
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
@@ -710,7 +752,7 @@ describe("discovery", () => {
     serveValidData = true;
     fireEvent.click(retry);
     expect(
-      await screen.findByRole("heading", { name: "Leaderboard" }),
+      await screen.findByRole("heading", { name: /leaderboard\./u }),
     ).toBeVisible();
     await waitFor(() =>
       expect(screen.queryByRole("alert")).not.toBeInTheDocument(),
@@ -719,6 +761,7 @@ describe("discovery", () => {
   });
 
   it("aborts the abandoned sibling request before an automatic retry", async () => {
+    route("/projects/eliza");
     const abandonedAbort = vi.fn();
     let snapshotAttempts = 0;
     vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
@@ -748,7 +791,7 @@ describe("discovery", () => {
     expect(
       await screen.findByRole(
         "heading",
-        { name: "Leaderboard" },
+        { name: /leaderboard\./u },
         { timeout: 5_000 },
       ),
     ).toBeVisible();
@@ -757,6 +800,7 @@ describe("discovery", () => {
   });
 
   it("rejects a declared snapshot larger than the browser safety limit", async () => {
+    route("/projects/eliza");
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       if (String(input).includes("/data/cycles/")) {
         return Response.json(cycleIndexFixture());
@@ -884,14 +928,13 @@ describe("project routes", () => {
     expect(
       screen.queryByText("$10,000 monthly pool", { exact: false }),
     ).not.toBeInTheDocument();
+    const rewardCard = screen.getByText("Not funded yet").closest("aside");
+    expect(rewardCard?.querySelector("strong")).toHaveTextContent(
+      "Not funded yet",
+    );
+    expect(rewardCard).not.toHaveTextContent("$5k");
     expect(
-      screen
-        .getByText("MONTHLY POOL")
-        .closest("aside")
-        ?.querySelector(".reward-amount-monthly"),
-    ).toHaveTextContent("$5k / mo");
-    expect(
-      screen.getByText(/Target \$5,000 per month\. No funding is committed/u),
+      screen.getByText(/Target \$5,000 per month\. No payments scheduled/u),
     ).toBeInTheDocument();
     expect(
       screen.queryByText("simulated monthly pool"),
@@ -968,7 +1011,6 @@ describe("project routes", () => {
     expect(
       await screen.findByRole("heading", { name: "Make money solving math." }),
     ).toBeInTheDocument();
-    expect(screen.getByText("EXTERNAL OPPORTUNITY")).toBeInTheDocument();
     expect(
       screen.getByText("No platform pool · no dollar projection"),
     ).toBeInTheDocument();
