@@ -368,3 +368,33 @@ describe("project policy transitions", () => {
     );
   });
 });
+
+it("keeps the escrow chain and fee promise fixed once selected", () => {
+  const policy = {
+    schemaVersion: "1",
+    effectiveCycle: "2026-10",
+    chain: "base",
+    feeBasisPoints: 200,
+    withdrawalFeeBasisPoints: 1000,
+    feeMode: "deduct-from-gross",
+    deployments: [],
+  };
+  const original = {
+    ...structuredClone(eliza),
+    escrow: policy,
+    reward: {
+      ...eliza.reward,
+      chain: "base",
+      feeBasisPoints: 200,
+      paymentMode: "disabled",
+    },
+  };
+  const changed = {
+    ...original,
+    escrow: { ...policy, chain: "solana" },
+    reward: { ...original.reward, chain: "solana" },
+  };
+  expect(() => assertProjectPolicyTransition(original, changed)).toThrow(
+    /settlement chain/,
+  );
+});

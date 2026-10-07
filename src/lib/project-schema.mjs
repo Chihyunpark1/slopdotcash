@@ -1,3 +1,4 @@
+import { assertEscrowPolicy } from "./escrow-policy.mjs";
 import { assertFreshCyclePaymentPolicy } from "./fresh-cycle-policy.mjs";
 /**
  * Validates untrusted project folders before they enter discovery, ingestion,
@@ -824,7 +825,7 @@ function validateReviewBudget(value, field, poolPaymentMode) {
 function validateReward(
   value,
   field,
-  { allowLegacyExternalPrizeFee = false } = {},
+  { allowLegacyExternalPrizeFee = false, escrow = undefined } = {},
 ) {
   const reward = record(value, field);
   const hasExternal = Object.hasOwn(reward, "externalOpportunity");
@@ -873,7 +874,7 @@ function validateReward(
   text(reward.monthlyCapDisplay, `${field}.monthlyCapDisplay`, { max: 80 });
   timestamp(reward.rewardStartAt, `${field}.rewardStartAt`);
   const expectedFeeBasisPoints =
-    reward.kind === "external-prize-share" ? 1000 : 100;
+    reward.kind === "external-prize-share" ? 1000 : escrow ? 200 : 100;
   const hasLegacyExternalPrizeFee =
     allowLegacyExternalPrizeFee &&
     reward.kind === "external-prize-share" &&
@@ -890,7 +891,7 @@ function validateReward(
     if (
       hasExternal ||
       reward.currency !== "USDC" ||
-      reward.chain !== "solana" ||
+      reward.chain !== (escrow?.chain ?? "solana") ||
       reward.unusedFunds !== "rollover-without-cap-increase" ||
       (paymentsDisabled
         ? !(
@@ -1040,10 +1041,27 @@ function validateProjectDefinition(
   exactKeys(
     project,
     allowLegacyMissingListingTier && !("listingTier" in project)
-      ? PROJECT_KEYS.filter((key) => key !== "listingTier")
-      : PROJECT_KEYS,
+      ? [
+          ...PROJECT_KEYS.filter((key) => key !== "listingTier"),
+          ...(Object.hasOwn(project, "escrow") ? ["escrow"] : []),
+        ]
+      : [
+          ...PROJECT_KEYS,
+          ...(Object.hasOwn(project, "escrow") ? ["escrow"] : []),
+        ],
     "project",
   );
+  if (project.escrow !== undefined) {
+    assertEscrowPolicy(project.escrow);
+    if (project.reward?.kind !== "monthly-pool")
+      throw new TypeError(
+        "External prize shares must be funded and converted before escrow activation",
+      );
+    if (project.reward?.paymentMode !== "disabled")
+      throw new TypeError(
+        "Escrow migration cannot leave the legacy payment path enabled",
+      );
+  }
   if (project.schemaVersion !== "1")
     throw new TypeError("project schemaVersion is unsupported");
   const id = text(project.id, "project.id", {
@@ -1096,6 +1114,7 @@ function validateProjectDefinition(
   );
   validateReward(project.reward, "project.reward", {
     allowLegacyExternalPrizeFee,
+    escrow: project.escrow,
   });
   validateFunding(project.funding, id);
   if (

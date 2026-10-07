@@ -3729,6 +3729,29 @@ small {
   text-align: left;
 }
 
+.earnings-page {
+  padding-block: 2rem 4rem;
+}
+.earnings-wallets {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr));
+  gap: 1rem;
+  margin-block: 2rem;
+}
+.earnings-page .wallet-address {
+  overflow-wrap: anywhere;
+}
+
+.earnings-page .points-table caption {
+  text-align: left;
+  padding-block: 1rem;
+}
+.earnings-page .points-table th,
+.earnings-page .points-table td {
+  white-space: normal;
+  min-width: 7rem;
+}
+
 /* Compact records keep technical evidence available without repeating large cards. */
 .footer-records {
   align-items: baseline;
