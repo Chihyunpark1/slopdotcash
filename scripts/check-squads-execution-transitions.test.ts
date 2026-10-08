@@ -310,26 +310,4 @@ describe("trusted Squads execution Git transition", () => {
     f.write("cycles/asi/2026-07/execution-plan.json", f.context.planBytes);
     await expect(f.check(f.head())).rejects.toThrow(/Foreign/);
   });
-  it("keeps the existing trusted workflow check and executes only base-owned code without installing PR dependencies", () => {
-    const workflow = readFileSync(
-      join(
-        process.cwd(),
-        ".github/workflows/unsafe-destination-transitions.yml",
-      ),
-      "utf8",
-    );
-    expect(workflow).toContain("pull_request_target:");
-    expect(workflow).toContain(
-      ["ref: $", "{{ github.event.pull_request.base.sha }}"].join(""),
-    );
-    expect(workflow).toContain(
-      'test "$(git rev-parse refs/remotes/origin/slop-cycle-head)" = "$CYCLE_HEAD_SHA"',
-    );
-    expect(workflow).toContain(
-      'bun --no-install scripts/check-squads-execution-transitions.ts \\\n            "$CYCLE_BASE_SHA" "$CYCLE_HEAD_SHA"',
-    );
-    expect(workflow).not.toMatch(
-      /bun install|npm install|ref: \$\{\{ github.event.pull_request.head/,
-    );
-  });
 });

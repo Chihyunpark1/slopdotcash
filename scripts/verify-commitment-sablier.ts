@@ -17,6 +17,7 @@ import {
   sablierStreamCallData,
   type VerifiedSablierStream,
 } from "../src/lib/sablier-funding";
+import { parseValueArguments } from "./parse-value-arguments";
 
 export const EVM_COMMITMENT_RPC_AUTHORITIES = Object.freeze({
   base: [
@@ -57,21 +58,7 @@ const CLI_USAGE =
   "Usage: verify-commitment-sablier.ts --network <base|ethereum> --stream-id <integer> --recipient <0x-address>";
 
 export function parseCommitmentSablierArguments(argv: readonly string[]) {
-  const parsed = new Map<string, string>();
-  for (let index = 0; index < argv.length; index += 2) {
-    const name = argv[index];
-    const value = argv[index + 1];
-    if (
-      !name ||
-      !CLI_ARGUMENTS.has(name) ||
-      !value ||
-      value.startsWith("--") ||
-      parsed.has(name)
-    ) {
-      throw new TypeError(CLI_USAGE);
-    }
-    parsed.set(name, value);
-  }
+  const parsed = parseValueArguments(argv, CLI_ARGUMENTS, CLI_USAGE);
   return {
     network: parsed.get("--network") ?? null,
     streamId: parsed.get("--stream-id") ?? null,

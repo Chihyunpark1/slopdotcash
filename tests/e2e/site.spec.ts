@@ -179,7 +179,7 @@ test("shows signer loss and expired capability without payout availability", asy
   });
 });
 
-test("discovers projects and one points-ranked homepage leaderboard", async ({
+test("discovers projects and one score-ranked homepage leaderboard", async ({
   page,
 }) => {
   await page.emulateMedia({ reducedMotion: "no-preference" });
@@ -323,7 +323,7 @@ test("discovers projects and one points-ranked homepage leaderboard", async ({
     name: "Top sloperators",
     exact: true,
   });
-  await expect(leaderboard.getByRole("table")).toBeVisible();
+  await expect(leaderboard.getByLabel("Sort by")).toHaveValue("score");
   await expect(
     page.getByRole("heading", { name: "Contribution points", exact: true }),
   ).toHaveCount(0);
@@ -336,12 +336,11 @@ test("discovers projects and one points-ranked homepage leaderboard", async ({
   await leaderboard
     .getByLabel("Period", { exact: true })
     .selectOption("lifetime");
+  await expect(leaderboard.getByRole("table")).toBeVisible();
   const pointValues = await leaderboard
-    .locator("tbody tr td:last-child")
+    .locator("tbody tr td:nth-child(3)")
     .allTextContents();
-  const totals = pointValues.map((value) =>
-    Number(value.replace(/[^0-9]/g, "")),
-  );
+  const totals = pointValues.map((value) => Number(value.replaceAll(",", "")));
   expect(totals.length).toBeGreaterThan(0);
   expect(totals).toEqual([...totals].sort((a, b) => b - a));
   const firstLogin = await leaderboard
@@ -525,6 +524,7 @@ test("starts Eliza with one prompt and no separate payout form", async ({
   await expect(
     page.getByText(/GitHub ledger \+ reward records live/u),
   ).toHaveCount(0);
+  await page.getByText("Cycle allocation details", { exact: true }).click();
   await expect(page.getByText(/^Updated /u)).toBeVisible();
   await expect(page.getByText(/receipt-linked tokens/u)).toHaveCount(0);
   const shareCells = await page
@@ -566,10 +566,9 @@ test("never presents Delta Star's external prize as platform money", async ({
   ).toBeVisible();
 });
 
-test("renders contributor and cycle records from validated public data", async ({
-  page,
-  request,
-}) => {
+test("renders contributor and cycle records from validated public data", {
+  tag: ["@pages"],
+}, async ({ page, request }) => {
   const snapshot = await loadSnapshot(request);
   const cycles = await loadCycles(request);
   const actor =
@@ -607,7 +606,9 @@ test("renders contributor and cycle records from validated public data", async (
   });
   await expect(page.getByRole("heading", { name: actor.login })).toBeVisible();
   await expect(
-    page.locator(".profile-totals").getByText("paid", { exact: true }),
+    page
+      .locator(".profile-totals")
+      .getByText("verified payments received · USDC", { exact: true }),
   ).toBeVisible();
   await expect(
     page
@@ -854,10 +855,9 @@ test("creates a valid GitHub-native project handoff", async ({
   ).toBeVisible();
 });
 
-test("serves byte-consistent install and read-only artifacts for every project", async ({
-  baseURL,
-  request,
-}) => {
+test("serves byte-consistent install and read-only artifacts for every project", {
+  tag: ["@pages", "@pages-only"],
+}, async ({ baseURL, request }) => {
   const documentResponse = await request.get("/");
   const policy = documentResponse.headers()["content-security-policy"];
   expect(policy).toBeDefined();
@@ -1160,7 +1160,7 @@ test("shows an explicit error for invalid data and retries", async ({
   await page.getByRole("button", { name: /Retry/u }).click();
   await expect(page.getByRole("alert")).toHaveCount(0);
   await expect(
-    page.getByRole("heading", { name: /leaderboard\./u }),
+    page.getByRole("heading", { name: "Contributor standings", exact: true }),
   ).toBeVisible();
   expect(attempts).toBe(failedAttempts + 1);
 });

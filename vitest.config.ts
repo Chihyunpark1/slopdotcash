@@ -40,18 +40,27 @@ export default defineConfig({
       {
         extends: true,
         test: {
-          name: "integration",
+          name: "server",
           include: [
             "functions/**/*.test.ts",
             "workers/**/*.test.ts",
-            "src/**/*.test.{ts,tsx}",
             "scripts/**/*.test.{ts,mjs}",
-            "tests/**/*.test.{ts,tsx}",
+            "tests/**/*.test.ts",
           ],
           sequence: { groupOrder: 1 },
+          environment: "node",
+          // Shared publication fixtures remain serial until independently isolated.
+          fileParallelism: false,
+          setupFiles: [],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: "ui",
+          include: ["src/**/*.test.tsx", "tests/**/*.test.tsx"],
+          sequence: { groupOrder: 2 },
           environment: "jsdom",
-          exclude: ["src/lib/**/*.test.ts"],
-          // Shared publication and installer fixtures are intentionally serial.
           fileParallelism: false,
           setupFiles: ["./tests/setup.ts"],
         },
@@ -60,7 +69,7 @@ export default defineConfig({
         extends: true,
         test: {
           name: "installer",
-          sequence: { groupOrder: 2 },
+          sequence: { groupOrder: 3 },
           environment: "node",
           include: ["src/lib/install-command.test.ts"],
           fileParallelism: false,

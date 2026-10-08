@@ -6,9 +6,7 @@ import {
   assertRunReceiptMarker,
   assertRunReceiptPolicyJoin,
   type ProjectRunReceipt,
-  parseRunMarker,
   runReceiptMarker,
-  serializeRunMarker,
 } from "./run-receipts";
 
 const receipt: ProjectRunReceipt = {
@@ -48,12 +46,6 @@ const receipt: ProjectRunReceipt = {
 };
 
 describe("project run receipt", () => {
-  it("round-trips the canonical final-line marker", () => {
-    const marker = serializeRunMarker(receipt);
-    expect(marker).toContain("slop-contribution-attribution:v1");
-    expect(parseRunMarker(marker)).toEqual(receipt);
-  });
-
   it("rejects repository and project mismatches", () => {
     const marker = runReceiptMarker(receipt);
     marker.run.repository = "SlopDotCash/proximityprize";
@@ -127,7 +119,7 @@ describe("project run receipt", () => {
         acknowledgedAt: "2026-08-16T00:00:00.000Z",
       },
     };
-    expect(parseRunMarker(serializeRunMarker(current))).toEqual(current);
+    expect(assertRunReceiptMarker(runReceiptMarker(current))).toEqual(current);
 
     const missing = runReceiptMarker(current);
     delete missing.run.policy_acknowledgement;
@@ -171,7 +163,9 @@ describe("project run receipt", () => {
         acknowledgedAt: "2026-08-15T00:00:00.000Z",
       },
     };
-    expect(parseRunMarker(serializeRunMarker(historical))).toEqual(historical);
+    expect(assertRunReceiptMarker(runReceiptMarker(historical))).toEqual(
+      historical,
+    );
   });
 
   it("rejects extra fields and noncanonical money", () => {
@@ -293,7 +287,7 @@ describe("project run receipt", () => {
         acknowledgedAt: "2026-08-18T00:00:00.000Z",
       },
     };
-    expect(parseRunMarker(serializeRunMarker(current))).toEqual(current);
+    expect(assertRunReceiptMarker(runReceiptMarker(current))).toEqual(current);
     expect(assertRunReceiptPolicyJoin(current, project)).toBe(current);
     const acknowledgement = current.policyAcknowledgement;
     if (!acknowledgement) throw new Error("missing policy acknowledgement");
