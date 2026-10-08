@@ -80,6 +80,10 @@ export interface ProjectDefinition {
   readonly description: string;
   readonly listingTier: "featured" | "community";
   readonly status: ProjectStatus;
+  /** Reviewed participation restrictions; these do not activate a project. */
+  readonly participation?:
+    | { readonly state: "archived"; readonly successorProjectId: ProjectId }
+    | { readonly state: "permission-required" };
   readonly steward: {
     readonly displayName: string;
     readonly kind: "individual" | "organization" | "dao" | "collective";

@@ -1044,10 +1044,12 @@ function validateProjectDefinition(
       ? [
           ...PROJECT_KEYS.filter((key) => key !== "listingTier"),
           ...(Object.hasOwn(project, "escrow") ? ["escrow"] : []),
+          ...(Object.hasOwn(project, "participation") ? ["participation"] : []),
         ]
       : [
           ...PROJECT_KEYS,
           ...(Object.hasOwn(project, "escrow") ? ["escrow"] : []),
+          ...(Object.hasOwn(project, "participation") ? ["participation"] : []),
         ],
     "project",
   );
@@ -1083,6 +1085,35 @@ function validateProjectDefinition(
   }
   if (project.status !== "active" && project.status !== "paused") {
     throw new TypeError("project.status is invalid");
+  }
+  if (project.participation !== undefined) {
+    const participation = record(
+      project.participation,
+      "project.participation",
+    );
+    if (participation.state === "archived") {
+      exactKeys(
+        participation,
+        ["state", "successorProjectId"],
+        "project.participation",
+      );
+      text(
+        participation.successorProjectId,
+        "project.participation.successorProjectId",
+        {
+          max: 48,
+          pattern: /^[a-z0-9](?:[a-z0-9-]{0,46}[a-z0-9])?$/u,
+        },
+      );
+      if (participation.successorProjectId === id)
+        throw new TypeError("archived project cannot be its own successor");
+    } else if (participation.state === "permission-required") {
+      exactKeys(participation, ["state"], "project.participation");
+    } else {
+      throw new TypeError("project.participation.state is invalid");
+    }
+    if (project.status !== "paused")
+      throw new TypeError("restricted participation requires a paused project");
   }
   if (
     !Array.isArray(project.repositories) ||
@@ -1239,6 +1270,19 @@ export function assertProjectRegistry(values) {
   ]) {
     if (new Set(entries).size !== entries.length) {
       throw new TypeError(`project registry contains duplicate ${field}`);
+    }
+  }
+  for (const project of projects) {
+    if (
+      project.participation?.state === "archived" &&
+      !projects.some(
+        (candidate) =>
+          candidate.id === project.participation.successorProjectId,
+      )
+    ) {
+      throw new TypeError(
+        "archived project successor is not in the project registry",
+      );
     }
   }
   return projects;
