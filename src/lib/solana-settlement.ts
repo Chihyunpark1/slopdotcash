@@ -440,3 +440,34 @@ export async function verifyRewardSettlementOnchain(input: {
   assertSettlementChronology(settlement.settledAt, verified);
   return verified;
 }
+
+/** A Base transfer has no intent memo and can satisfy only one frozen cycle. */
+export function assertDistinctBaseSettlementTransactions(
+  settlements: readonly RewardSettlementManifest[],
+): void {
+  const owners = new Map<string, string>();
+  for (const settlement of settlements) {
+    if (settlement.chain !== "base") continue;
+    const owner = `${settlement.projectId}/${settlement.cycleId}`;
+    const signatures = settlement.attempts
+      .filter((attempt) => attempt.state === "finalized")
+      .map((attempt) => attempt.signature);
+    if (
+      settlement.platformFee.state === "paid" ||
+      settlement.platformFee.state === "reported"
+    ) {
+      signatures.push(settlement.platformFee.signature);
+    }
+    for (const signature of signatures) {
+      if (!signature) continue;
+      const key = signature.toLowerCase();
+      const prior = owners.get(key);
+      if (prior && prior !== owner) {
+        throw new TypeError(
+          `Base settlement transaction already consumed by ${prior}`,
+        );
+      }
+      owners.set(key, owner);
+    }
+  }
+}

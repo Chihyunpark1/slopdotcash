@@ -34,7 +34,10 @@ import {
   DEFAULT_SOLANA_RPC_URL,
   fetchFinalizedSolanaTransaction,
 } from "./solana-rpc";
-import { validateCycleTransition } from "./sync-cycle-index";
+import {
+  assertSettlementTransactionsAvailable,
+  validateCycleTransition,
+} from "./sync-cycle-index";
 import { verifyBaseSettlementTransaction } from "./verify-settlement-evm";
 import { writeNewJsonFile } from "./write-new-file";
 
@@ -383,6 +386,7 @@ export async function verifySettlement(
     verifyBaseTransaction:
       options.verifyBaseTransaction ?? verifyBaseSettlementTransaction,
   });
+  await assertSettlementTransactionsAvailable(settlement);
   await (
     options.write ??
     ((path, value) =>

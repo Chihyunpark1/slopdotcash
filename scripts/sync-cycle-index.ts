@@ -43,7 +43,10 @@ import {
   assertNetworkSettlementExecutionPlan,
   type NetworkSettlementExecutionPlan,
 } from "../src/lib/settlement-plan";
-import { verifyRewardSettlementOnchain } from "../src/lib/solana-settlement";
+import {
+  assertDistinctBaseSettlementTransactions,
+  verifyRewardSettlementOnchain,
+} from "../src/lib/solana-settlement";
 import { assertEscrowDecisions } from "./escrow-review";
 import { validateEscrowCycle } from "./prepare-escrow-cycle";
 import { loadPriorCycleAccrual } from "./prior-cycle-accrual";
@@ -606,7 +609,9 @@ export async function validateCycleTransition(
   ).entry;
 }
 
-async function collectCycles(): Promise<CycleBuild[]> {
+async function collectCycles(
+  pendingSettlement?: RewardSettlementManifest,
+): Promise<CycleBuild[]> {
   const rootStats = await lstat(CYCLES_ROOT).catch(
     (error: NodeJS.ErrnoException) => {
       if (error.code === "ENOENT") return null;
@@ -716,17 +721,33 @@ async function collectCycles(): Promise<CycleBuild[]> {
           projectEntry.name,
           cycleEntry.name,
           join(projectDirectory, cycleEntry.name),
+          {
+            allowPendingTransactionEvidence:
+              pendingSettlement?.projectId === projectEntry.name &&
+              pendingSettlement.cycleId === cycleEntry.name,
+          },
         ),
       );
       if (builds.length > MAX_CYCLES)
         throw new RangeError("cycle limit exceeded");
     }
   }
+  assertDistinctBaseSettlementTransactions([
+    ...builds.flatMap((build) => (build.settlement ? [build.settlement] : [])),
+    ...(pendingSettlement ? [pendingSettlement] : []),
+  ]);
   return builds.sort(
     (left, right) =>
       right.entry.cycleId.localeCompare(left.entry.cycleId) ||
       left.entry.projectId.localeCompare(right.entry.projectId),
   );
+}
+
+/** Checks the candidate against every already recorded cycle before writing. */
+export async function assertSettlementTransactionsAvailable(
+  settlement: RewardSettlementManifest,
+): Promise<void> {
+  if (settlement.chain === "base") await collectCycles(settlement);
 }
 
 export async function syncCycleIndex(
