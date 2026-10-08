@@ -158,6 +158,11 @@ test("public funding records and the payout workspace are separate tabs", async 
   await expect(records).toHaveAttribute("aria-selected", "true");
   await page.goto("/projects/eliza/funding#payouts");
   await expect(payouts).toHaveAttribute("aria-selected", "true");
+  // Audit the settled workspace, not its loading transition.
+  await expect(page.locator(".recipient-row").first()).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Save draft on this device" }),
+  ).toBeEnabled();
   expect(errors).toEqual([]);
   expect(
     (
