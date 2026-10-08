@@ -765,11 +765,12 @@ export function ProjectParticipation({
       <section className="section" id="start">
         <h2>Permission required</h2>
         <p>
-          Ask{" "}
+          Contact{" "}
           <ExternalLinkAnchor href={project.steward.github.profileUrl}>
             {project.steward.displayName}
           </ExternalLinkAnchor>{" "}
-          for permission before contributing. Project activation remains paused.
+          about permission before contributing. Project activation remains
+          paused.
         </p>
       </section>
     );
