@@ -1578,6 +1578,7 @@ test("derives Solana addresses on the settlement verification page", async ({
     page.getByText("No execution has been bound yet.", { exact: false }),
   ).toBeVisible();
 
+  await page.getByText("Advanced verification", { exact: true }).click();
   // A real August 2026 recipient. Its canonical USDC associated token account
   // is fixed by the Solana address derivation, so the value below is checkable
   // against any explorer and pins the in-repo derivation to mainnet reality.
