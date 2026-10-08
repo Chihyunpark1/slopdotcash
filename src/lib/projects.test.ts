@@ -6,7 +6,7 @@ import {
   findProjectByRepositoryId,
   PROJECTS,
 } from "./projects.mjs";
-import { findTargetRepository, TARGET_REPOSITORIES } from "./repositories.mjs";
+import { TARGET_REPOSITORIES } from "./repositories.mjs";
 
 describe("project registry", () => {
   it("defines the launch projects with distinct reward semantics", () => {
@@ -75,15 +75,19 @@ describe("project registry", () => {
       "delta-star",
     );
     expect(findProjectByRepositoryId("SlopDotCash/asi")?.id).toBe("asi");
-    expect(findTargetRepository("SlopDotCash", "proximityprize")).toMatchObject(
-      {
-        id: "elizaOS/proximityprize",
-        owner: "SlopDotCash",
-        name: "proximityprize",
-        expectedNodeId: "R_kgDOT48hJQ",
-      },
-    );
-    expect(findTargetRepository("SlopDotCash", "asi")).toMatchObject({
+    expect(
+      TARGET_REPOSITORIES.find(
+        (repository) => repository.id === "elizaOS/proximityprize",
+      ),
+    ).toMatchObject({
+      id: "elizaOS/proximityprize",
+      owner: "SlopDotCash",
+      name: "proximityprize",
+      expectedNodeId: "R_kgDOT48hJQ",
+    });
+    expect(
+      TARGET_REPOSITORIES.find((repository) => repository.id === "elizaOS/asi"),
+    ).toMatchObject({
       id: "elizaOS/asi",
       owner: "SlopDotCash",
       name: "asi",

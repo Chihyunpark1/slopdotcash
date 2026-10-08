@@ -3399,15 +3399,6 @@ small {
   font-size: 0.875rem;
   line-height: 1.6;
 }
-.points-total {
-  font-size: clamp(2rem, 7vw, 4rem);
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  margin: 1rem 0;
-}
-.points-total span {
-  font-size: 1rem;
-}
 .points-controls {
   display: flex;
   flex-wrap: wrap;
@@ -3457,7 +3448,11 @@ small {
   max-width: 100%;
   overflow-x: auto;
 }
+.standings-scroll-hint {
+  display: none;
+}
 .points-table table {
+  min-width: 40rem;
   width: 100%;
   border-collapse: collapse;
 }
@@ -3484,12 +3479,7 @@ small {
 .points-history small {
   display: block;
 }
-.points-label {
-  display: inline-block;
-  margin-left: 0.5rem;
-  font-size: 0.8rem;
-  font-variant-numeric: tabular-nums;
-}
+
 @media (max-width: 520px) {
   .points-controls label {
     width: 100%;
@@ -3818,5 +3808,12 @@ small {
   .model-outcome-details dl > div {
     grid-template-columns: 1fr;
     gap: 4px;
+  }
+}
+
+@media (max-width: 760px) {
+  .standings-scroll-hint {
+    display: block;
+    font-size: 0.875rem;
   }
 }

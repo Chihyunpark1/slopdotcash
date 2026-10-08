@@ -44,6 +44,17 @@ export function planCarriesPlatformFee(instrumentId: unknown): boolean {
   );
 }
 
+/** The frozen funding-basis identity of a reviewed Squads instrument of either
+ * kind. Every ledger that names an instrument uses this exact string. */
+export function squadsInstrumentId(instrument: {
+  kind: "squads-v4-vault" | "squads-project-vault";
+  multisig: string;
+  vaultIndex: number;
+  vault: string;
+}): string {
+  return `${instrument.kind}:solana:${instrument.multisig}:${instrument.vaultIndex}:${instrument.vault}`;
+}
+
 export interface SettlementPlanTransfer {
   paymentId: string;
   kind: "contributor" | "platform-fee";
@@ -111,14 +122,6 @@ const NETWORK_LABEL: Record<SettlementNetwork, string> = {
   solana: "Solana public key",
 };
 
-function decimalTokenAmount(amountMinor: string): string {
-  const canonical = minor(amountMinor, "payment request amountMinor");
-  const padded = canonical.padStart(USDC_DECIMALS + 1, "0");
-  const whole = padded.slice(0, -USDC_DECIMALS);
-  const fraction = padded.slice(-USDC_DECIMALS);
-  return `${whole}.${fraction}`;
-}
-
 function assertPlannedTransfer(
   plan: NetworkSettlementExecutionPlan,
   transfer: SettlementPlanTransfer,
@@ -133,38 +136,6 @@ function assertPlannedTransfer(
   ) {
     throw new TypeError("Payment request transfer is not in the mainnet plan");
   }
-}
-
-/**
- * Creates a standard non-custodial Solana Pay request for one immutable plan
- * transfer. A wallet still shows and signs the ordinary USDC transfer, and the
- * cycle remains unpaid until finalized deltas are independently verified.
- */
-export function createSolanaPayTransferRequest(
-  plan: SettlementExecutionPlan,
-  transfer: SettlementPlanTransfer,
-): string {
-  if (
-    plan.cluster !== "mainnet-beta" ||
-    plan.token.mint !== SOLANA_MAINNET_USDC_MINT ||
-    plan.token.decimals !== USDC_DECIMALS
-  ) {
-    throw new TypeError("Payment request transfer is not in the mainnet plan");
-  }
-  assertPlannedTransfer(plan, transfer);
-  const recipient = address(
-    "solana",
-    transfer.recipientOwner,
-    "recipientOwner",
-  );
-  const query = new URLSearchParams({
-    amount: decimalTokenAmount(transfer.amountMinor),
-    "spl-token": SOLANA_MAINNET_USDC_MINT,
-    label: "Slop",
-    message: `${plan.projectId} ${plan.cycleId} payout`,
-    memo: transfer.paymentId,
-  });
-  return `solana:${recipient}?${query.toString()}`;
 }
 
 /**

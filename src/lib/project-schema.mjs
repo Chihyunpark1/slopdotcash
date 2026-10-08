@@ -1019,7 +1019,7 @@ function validateFunding(value, projectId) {
       policy.projectId !== projectId ||
       !(funding.commitments ?? []).some(
         (v) =>
-          v.kind === "squads-v4-vault" &&
+          (v.kind === "squads-v4-vault" || v.kind === "squads-project-vault") &&
           v.replacedAt === null &&
           v.monthlyCommitment?.cycleId === policy.cycleId,
       )

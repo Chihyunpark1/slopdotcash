@@ -1,7 +1,6 @@
 /** Tests GitHub issue and immutable README wallet observation without a network. */
 
 import { describe, expect, it, vi } from "vitest";
-import { formatPublishedWallet } from "../src/lib/wallets";
 import { fetchPublishedGithubWallet } from "./github-wallets";
 
 const ADDRESS = "11111111111111111111111111111111";
@@ -18,7 +17,7 @@ function jsonResponse(value: unknown, status = 200): Response {
 
 describe("GitHub wallet observation", () => {
   it("refetches profile bytes at an immutable commit", async () => {
-    const markdown = `# finish-line\n${formatPublishedWallet(ADDRESS)}\n`;
+    const markdown = `# finish-line\n<!-- slop-wallet:v1 {"chain":"solana","address":"${ADDRESS}"} -->\n`;
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse(IDENTITY))

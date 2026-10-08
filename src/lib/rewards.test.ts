@@ -6,7 +6,6 @@ import {
   assertRewardAllocationManifest,
   assertRewardSettlementManifest,
   feeForPrincipal,
-  incrementalFeeForPrincipal,
   type RewardAllocationManifest,
 } from "./rewards";
 
@@ -159,14 +158,9 @@ describe("reward manifests", () => {
       feeMinor: "10000",
     });
     expect(feeForPrincipal("999", 300)).toBe("29");
-    expect(incrementalFeeForPrincipal("99", "1", 100)).toBe("1");
-    expect(incrementalFeeForPrincipal("0", "99", 100)).toBe("0");
     expect(() => feeForPrincipal("-1", 100)).toThrow(/principal/u);
     expect(() => feeForPrincipal("1", -1)).toThrow(/basis points/u);
     expect(() => feeForPrincipal("1", 10_001)).toThrow(/basis points/u);
-    expect(() => incrementalFeeForPrincipal("1", "1", 0.5)).toThrow(
-      /basis points/u,
-    );
   });
 
   it("rejects cap overflow, silent reductions, and early approval", () => {

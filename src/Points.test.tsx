@@ -21,6 +21,7 @@ import { PointsPage, PointsProvider, ProfilePoints } from "./Points";
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  window.history.replaceState({}, "", "/");
 });
 function fixture(corrupt = false, renamed = false) {
   const now = new Date().toISOString();
@@ -110,7 +111,7 @@ describe("points product", () => {
     );
     await waitFor(() =>
       expect(
-        screen.getByText("30", { selector: ".points-total" }),
+        screen.getByText("30", { selector: ".profile-totals strong" }),
       ).toBeVisible(),
     );
     expect(
@@ -124,19 +125,23 @@ describe("points product", () => {
         <PointsPage />
       </PointsProvider>,
     );
+    expect(screen.getByLabelText("Sort by")).toHaveValue("score");
+    fireEvent.change(screen.getByLabelText("Sort by"), {
+      target: { value: "points" },
+    });
     const row = await screen.findByRole("row", {
-      name: /1 second-user 30 pts/,
+      name: /1 second-user Unavailable 30 pts/,
     });
     expect(row).toBeVisible();
     expect(
-      screen.getByRole("row", { name: /1 finish-line 30 pts/ }),
+      screen.getByRole("row", { name: /1 finish-line Unavailable 30 pts/ }),
     ).toBeVisible();
     fireEvent.change(screen.getByLabelText("Find a contributor"), {
       target: { value: "second" },
     });
     expect(screen.queryByRole("row", { name: /finish-line/ })).toBeNull();
     expect(
-      screen.getByRole("row", { name: /1 second-user 30 pts/ }),
+      screen.getByRole("row", { name: /1 second-user Unavailable 30 pts/ }),
     ).toBeVisible();
     expect(screen.getByText(/Points have no monetary value/)).toBeVisible();
     fireEvent.change(screen.getByLabelText("Period"), {
@@ -166,7 +171,7 @@ describe("points product", () => {
     );
     await waitFor(() =>
       expect(
-        screen.getByText("30", { selector: ".points-total" }),
+        screen.getByText("30", { selector: ".profile-totals strong" }),
       ).toBeVisible(),
     );
     expect(screen.getByText("First accepted contribution")).toBeVisible();

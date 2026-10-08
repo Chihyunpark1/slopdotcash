@@ -292,10 +292,11 @@ multisig vaults on Solana and Sablier Lockup v4 streams on Base or Ethereum.
 Slop has no admin or fee position in any instrument and no key in the 2-of-2
 vault or a stream. On a 2-of-3 project vault Slop holds one vote-only key, and
 a payout is approved for payment only once the creator's on-chain proposal is
-bound in `funding/executions/ledger.json`; project vaults cannot activate
-payments until the readiness, reservation, and signer protocols cover three
-members. A positive committed amount requires an active reviewed instrument
-and deterministic verifier evidence. Never call funds “escrow” or
+bound in `funding/executions/ledger.json`. A project vault activates payments
+only with its exact reviewed fresh-cycle policy; its release needs current
+capability reports from the creator and the independent signer, and Slop's
+key never attests. A positive committed amount requires an active reviewed
+instrument and deterministic verifier evidence. Never call funds “escrow” or
 “guaranteed.”
 
 ## Project authority and IP
