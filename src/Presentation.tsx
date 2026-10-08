@@ -86,13 +86,21 @@ export function ExternalLinkAnchor({
   children,
   className,
   href,
+  onClick,
 }: {
   children: ReactNode;
   className?: string;
   href: string;
+  onClick?: () => void;
 }) {
   return (
-    <a className={className} href={href} rel="noreferrer" target="_blank">
+    <a
+      className={className}
+      href={href}
+      onClick={onClick}
+      rel="noreferrer"
+      target="_blank"
+    >
       {children}
     </a>
   );

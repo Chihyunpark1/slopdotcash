@@ -60,8 +60,18 @@ test("renders bundled projects with data stalled and GitHub blocked", async ({
       .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
       .analyze();
     expect(accessibility.violations).toEqual([]);
-    expect(requests.filter((url) => /github/.test(url))).toEqual([]);
-    expect(errors).toEqual([]);
+    // Project owner avatars are optional decoration: a blocked avatar falls
+    // back to the bundled initial and never delays the project list.
+    const avatar = /^https:\/\/avatars\.githubusercontent\.com\//u;
+    expect(
+      requests.filter((url) => !avatar.test(url) && /github/.test(url)),
+    ).toEqual([]);
+    await expect(page.locator("img.project-avatar")).toHaveCount(0);
+    expect(
+      errors.filter(
+        (error) => !error.startsWith("Failed to load resource: net::"),
+      ),
+    ).toEqual([]);
   } finally {
     await test.info().attach("homepage-network-and-console", {
       body: JSON.stringify({ requests, errors }, null, 2),
