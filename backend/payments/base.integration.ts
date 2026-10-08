@@ -814,6 +814,10 @@ try {
           db,
           {
             async submit(input) {
+              const latest = (await rpc("eth_getBlockByNumber", [
+                "latest",
+                false,
+              ])) as { timestamp: string };
               const bindingTx = (await rpc("eth_sendTransaction", [
                 {
                   from: attester,
@@ -824,7 +828,7 @@ try {
                     destination: input.destination,
                     expectedVersion: "0",
                     claimDigest: `0x${input.claimDigest}`,
-                    expiresAt: String(Math.floor(Date.now() / 1000) + 3600),
+                    expiresAt: String(Number(BigInt(latest.timestamp)) + 3600),
                   }),
                 },
               ])) as string;
