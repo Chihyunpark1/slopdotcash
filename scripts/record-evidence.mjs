@@ -541,7 +541,7 @@ try {
       });
     await page.locator("#projects").waitFor({ state: "visible" });
     await page
-      .getByRole("region", { name: "Leaderboard", exact: true })
+      .locator("#leaderboard")
       .getByLabel("Period", { exact: true })
       .selectOption("lifetime");
     await page
