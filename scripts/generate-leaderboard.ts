@@ -2014,18 +2014,33 @@ export async function collectSearchReferences(
     );
   }
   for (const reference of deduped) {
-    await completeOutcomeCommits(client, reference);
+    await completeOutcomeCommits(client, reference, repository);
   }
   return deduped;
 }
 
+// GitHub lists at most 250 commits for one pull request while totalCount
+// reports the true number, so a larger listing can never be complete.
+const GITHUB_PULL_REQUEST_COMMIT_LIST_LIMIT = 250;
+
 async function completeOutcomeCommits(
   client: GraphqlExecutor,
   reference: NodeReference,
+  repository: TargetRepository,
 ): Promise<void> {
   const outcome = reference.outcome;
   const firstPage = reference.commitPage;
   if (!outcome || !firstPage) return;
+  // Only integration-branch merges share credit. A promotion pull request or
+  // one above GitHub's listing limit keeps author-only credit (null evidence).
+  if (
+    outcome.baseRefName !== repository.integrationBranch ||
+    firstPage.totalCount > GITHUB_PULL_REQUEST_COMMIT_LIST_LIMIT
+  ) {
+    outcome.commits = null;
+    delete reference.commitPage;
+    return;
+  }
   const commits = outcome.commits;
   if (!commits) throw new Error(`PR #${outcome.number} has no commit evidence`);
   let pageInfo = firstPage.pageInfo;
