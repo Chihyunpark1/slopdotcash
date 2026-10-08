@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from "react";
+import type { ReactNode } from "react";
 import { fetchWithDeadline, readBoundedJson } from "./lib/browser-json";
 import type { CycleIndex } from "./lib/cycle-index";
 import {
@@ -232,80 +232,6 @@ export function ProfileActivity({
           </ul>
         </details>
       ) : null}
-    </section>
-  );
-}
-export function ContributorDirectory() {
-  const { state, retry } = useProfiles();
-  const [query, setQuery] = useState("");
-  const [page, setPage] = useState(0);
-  const people =
-    state.status === "ready"
-      ? state.index.people
-          .filter((p) => p.login.toLowerCase().includes(query.toLowerCase()))
-          .sort((a, b) => a.login.localeCompare(b.login))
-      : [];
-  return (
-    <section className="points-panel" aria-label="Contributor directory">
-      <h2>Find a contributor</h2>
-      <p>
-        Profiles include everyone with a recorded PR, including open and closed
-        work.
-      </p>
-      <label>
-        GitHub username{" "}
-        <input
-          type="search"
-          value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
-            setPage(0);
-          }}
-        />
-      </label>
-      {state.status === "loading" ? (
-        <p role="status">Loading contributors…</p>
-      ) : state.status === "error" ? (
-        <p role="status">
-          Directory unavailable.{" "}
-          <button type="button" onClick={retry}>
-            Retry directory
-          </button>
-        </p>
-      ) : (
-        <>
-          <p>{people.length.toLocaleString()} contributors</p>
-          <ul className="points-people">
-            {people.slice(page * 24, (page + 1) * 24).map((p) => (
-              <li key={p.id}>
-                <a href={`/contributors/${encodeURIComponent(p.login)}`}>
-                  {p.login}
-                </a>
-                <span>{profileCounts(p).merged} merged PRs</span>
-              </li>
-            ))}
-          </ul>
-          {people.length === 0 ? (
-            <p>No contributors match this username.</p>
-          ) : null}
-          <div className="points-controls">
-            <button
-              type="button"
-              disabled={page === 0}
-              onClick={() => setPage((n) => n - 1)}
-            >
-              Previous contributors
-            </button>
-            <button
-              type="button"
-              disabled={(page + 1) * 24 >= people.length}
-              onClick={() => setPage((n) => n + 1)}
-            >
-              Next contributors
-            </button>
-          </div>
-        </>
-      )}
     </section>
   );
 }

@@ -136,16 +136,17 @@ test("social membership shows connection points, respects privacy and survives d
   ).toBeVisible();
   await expect(page.getByRole("table")).toHaveCount(0);
   await expect(
-    page.getByRole("region", { name: "Community members" }),
+    page.getByRole("region", { name: "People", exact: true }),
   ).toHaveCount(0);
   const social = page.getByRole("region", { name: "Connect X" });
   await expect(social.getByRole("checkbox")).toHaveCount(1);
-  const community = page.getByRole("region", { name: "Community members" });
+  const community = page.getByRole("region", { name: "People", exact: true });
   await social
     .getByLabel("Show my X account with my public membership", { exact: true })
     .click();
   await expect(social.getByText("X visibility updated.")).toBeVisible();
   await page.goto("https://slop.cash/points#people");
+  await community.getByLabel("GitHub username").fill("social-member");
   await expect(
     community.getByRole("link", { name: "X · @social_member" }),
   ).toBeVisible();
@@ -168,6 +169,7 @@ test("social membership shows connection points, respects privacy and survives d
     social.getByText("X disconnected. Your earned points are retained."),
   ).toBeVisible();
   await page.goto("https://slop.cash/points#people");
+  await community.getByLabel("GitHub username").fill("social-member");
   await expect(
     community.getByRole("link", { name: "X · @social_member" }),
   ).toHaveCount(0);
