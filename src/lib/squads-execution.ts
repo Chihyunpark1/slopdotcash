@@ -36,7 +36,8 @@ export interface SquadsBatchChildBinding {
   transactionAccount: string;
   /** SHA256 of the complete stored VaultTransactionMessage Borsh bytes. */
   messageSha256: string;
-  /** Zero-based positions in the immutable parent plan, fee included. */
+  /** Zero-based positions in the immutable parent plan, fee included when
+   * the plan carries one; a project vault plan never does (RFC #500 s.8). */
   transferIndexes: number[];
 }
 export interface SquadsBatchExecutionBinding

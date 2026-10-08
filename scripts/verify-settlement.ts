@@ -10,6 +10,7 @@ import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isEvmTransactionHash } from "../src/lib/evm-funding";
+import { assertFreshCyclePaymentPolicy } from "../src/lib/fresh-cycle-policy.mjs";
 import { isSolanaTransactionId } from "../src/lib/funding-address.mjs";
 import {
   assertProjectVaultApprovalBinding,
@@ -25,7 +26,10 @@ import {
   assertRewardSettlementManifest,
   type SettlementNetwork,
 } from "../src/lib/rewards";
-import { assertNetworkSettlementExecutionPlan } from "../src/lib/settlement-plan";
+import {
+  assertNetworkSettlementExecutionPlan,
+  planCarriesPlatformFee,
+} from "../src/lib/settlement-plan";
 import {
   type VerifyBaseSettlementTransaction,
   verifyRewardSettlementOnchain,
@@ -246,6 +250,64 @@ async function readJson(
   }
 }
 
+/**
+ * The platform fee record for a settlement. A 2-of-2 vault pays it from the
+ * plan's fee transfer. A project vault carries no fee transfer (RFC #500
+ * section 8): the fee due is the allocation's, the recipient is the reviewed
+ * fresh-cycle policy's, and the evidence is the creator's separate transaction,
+ * which the on-chain verifier then proves did not move the vault's USDC.
+ */
+export function projectVaultPlatformFee(input: {
+  allocation: {
+    fundingBasis?: { instrumentId?: string | null };
+    totals: { feeMinor: string };
+  };
+  feeTransfer: { recipientOwner: string; amountMinor: string } | undefined;
+  platformFeeSignature: string | null;
+  policy: unknown;
+}): {
+  recipient: string | null;
+  dueMinor: string;
+  paidMinor: string;
+  signature: string | null;
+  state: "not-applicable" | "paid";
+} {
+  if (input.feeTransfer) {
+    return {
+      recipient: input.feeTransfer.recipientOwner,
+      dueMinor: input.feeTransfer.amountMinor,
+      paidMinor: input.feeTransfer.amountMinor,
+      signature: input.platformFeeSignature,
+      state: "paid",
+    };
+  }
+  const dueMinor = input.allocation.totals.feeMinor;
+  if (
+    planCarriesPlatformFee(input.allocation.fundingBasis?.instrumentId) ||
+    BigInt(dueMinor) === 0n
+  ) {
+    return {
+      recipient: null,
+      dueMinor: "0",
+      paidMinor: "0",
+      signature: null,
+      state: "not-applicable",
+    };
+  }
+  if (!input.platformFeeSignature) {
+    throw new TypeError(
+      "Project vault settlement requires the creator's separate fee transaction signature",
+    );
+  }
+  return {
+    recipient: assertFreshCyclePaymentPolicy(input.policy).feeRecipient,
+    dueMinor,
+    paidMinor: dueMinor,
+    signature: input.platformFeeSignature,
+    state: "paid",
+  };
+}
+
 export async function verifySettlement(
   arguments_: VerifyArguments,
   options: {
@@ -260,7 +322,10 @@ export async function verifySettlement(
     write?: (path: string, value: unknown) => Promise<void>;
   } = {},
 ) {
-  assertProjectPaymentsEnabled(arguments_.projectId, arguments_.cycleId);
+  const project = assertProjectPaymentsEnabled(
+    arguments_.projectId,
+    arguments_.cycleId,
+  );
   const cycle = await (options.validate ?? validateCycleTransition)(
     arguments_.projectId,
     arguments_.cycleId,
@@ -314,6 +379,12 @@ export async function verifySettlement(
   const feeTransfer = plan.transfers.find(
     (transfer) => transfer.kind === "platform-fee",
   );
+  const platformFee = projectVaultPlatformFee({
+    allocation,
+    feeTransfer,
+    platformFeeSignature: evidence.platformFeeSignature,
+    policy: project.funding.freshCyclePaymentPolicy,
+  });
   const settlement = assertRewardSettlementManifest(
     {
       schemaVersion: "1",
@@ -351,21 +422,7 @@ export async function verifySettlement(
         ...attempt,
         state: "finalized",
       })),
-      platformFee: feeTransfer
-        ? {
-            recipient: feeTransfer.recipientOwner,
-            dueMinor: feeTransfer.amountMinor,
-            paidMinor: feeTransfer.amountMinor,
-            signature: evidence.platformFeeSignature,
-            state: "paid",
-          }
-        : {
-            recipient: null,
-            dueMinor: "0",
-            paidMinor: "0",
-            signature: null,
-            state: "not-applicable",
-          },
+      platformFee,
       totals: {
         approvedMinor: allocation.totals.approvedMinor,
         paidMinor: allocation.totals.approvedMinor,

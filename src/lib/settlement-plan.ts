@@ -27,6 +27,22 @@ export const BASE_MAINNET_CHAIN_ID = Number(EVM_FUNDING_CHAIN_IDS.base);
 export const BASE_MAINNET_USDC_CONTRACT = EVM_FUNDING_USDC_CONTRACTS.base;
 export const USDC_DECIMALS = 6 as const;
 export const MAX_TRANSFERS_PER_PLAN = 200;
+export const PROJECT_VAULT_INSTRUMENT_PREFIX = "squads-project-vault:solana:";
+
+/**
+ * RFC #500 section 8. A 2-of-2 vault pays the platform fee from the vault, so
+ * its plan ends with a fee transfer. A project vault holds contributor
+ * principal only: the creator sends the fee as a separate transfer from the
+ * creator's own wallet, so the plan carries no fee transfer, reports
+ * `platformFeeMinor: "0"`, and nothing Slop votes on can pay Slop. The fee
+ * due stays `allocation.totals.feeMinor` and is reconciled at settlement.
+ */
+export function planCarriesPlatformFee(instrumentId: unknown): boolean {
+  return !(
+    typeof instrumentId === "string" &&
+    instrumentId.startsWith(PROJECT_VAULT_INSTRUMENT_PREFIX)
+  );
+}
 
 export interface SettlementPlanTransfer {
   paymentId: string;
@@ -210,13 +226,16 @@ function createPlanBody(
     throw new TypeError("Settlement allocation digest is invalid");
   }
   const sourceOwner = address(network, input.sourceOwner, "sourceOwner");
+  const carriesFee = planCarriesPlatformFee(
+    allocation.fundingBasis?.instrumentId,
+  );
   const approved = allocation.allocations.filter(
     (row) => row.state === "approved",
   );
   if (approved.length === 0) {
     throw new RangeError("Approved allocation contains no payable intents");
   }
-  if (approved.length + 1 > MAX_TRANSFERS_PER_PLAN) {
+  if (approved.length + (carriesFee ? 1 : 0) > MAX_TRANSFERS_PER_PLAN) {
     throw new RangeError("Settlement exceeds the bounded transfer-plan limit");
   }
   const transfers: SettlementPlanTransfer[] = approved.map((row) => {
@@ -245,7 +264,7 @@ function createPlanBody(
         : {}),
     };
   });
-  const platformFeeMinor = allocation.totals.feeMinor;
+  const platformFeeMinor = carriesFee ? allocation.totals.feeMinor : "0";
   if (BigInt(platformFeeMinor) > 0n) {
     const feeRecipient = address(network, input.feeRecipient, "feeRecipient");
     if (feeRecipient === sourceOwner) {

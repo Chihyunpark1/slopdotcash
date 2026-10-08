@@ -19,6 +19,7 @@ import {
 import {
   assertNetworkSettlementExecutionPlan,
   type NetworkSettlementExecutionPlan,
+  planCarriesPlatformFee,
   type SettlementPlanTransfer,
   SOLANA_MAINNET_USDC_MINT,
   USDC_DECIMALS,
@@ -232,12 +233,16 @@ export function assertFinalizedUsdcTransfer(
   };
 }
 
-/** Validates one finalized direct-funding credit without trusting its sender. */
+/** Validates one finalized direct-funding credit without trusting its sender.
+ * `excludedOwner` names a wallet whose USDC accounts cannot participate.
+ * A zero net change can hide a top-up followed by a fee transfer, so project
+ * vault fees require a separate transaction without the vault's accounts. */
 export function assertFinalizedUsdcFundingTransfer(
   transactionValue: unknown,
   expectedSignature: string,
   recipientOwner: string,
   amountMinor: string,
+  options: { excludedOwner?: string } = {},
 ): VerifiedSolanaTransaction {
   signature(expectedSignature, "expected signature");
   if (
@@ -246,6 +251,13 @@ export function assertFinalizedUsdcFundingTransfer(
     !/^[1-9]\d*$/u.test(amountMinor)
   ) {
     throw new TypeError("funding transfer expectation is invalid");
+  }
+  if (
+    options.excludedOwner !== undefined &&
+    (!isSolanaAddress(options.excludedOwner) ||
+      options.excludedOwner === recipientOwner)
+  ) {
+    throw new TypeError("excluded owner must be a distinct Solana public key");
   }
   const transaction = record(transactionValue, "Solana transaction");
   const meta = record(transaction.meta, "Solana transaction.meta");
@@ -303,6 +315,14 @@ export function assertFinalizedUsdcFundingTransfer(
   if (netDelta !== 0n) {
     throw new TypeError(
       "Solana funding transaction USDC deltas do not balance",
+    );
+  }
+  if (
+    options.excludedOwner !== undefined &&
+    deltas.has(options.excludedOwner)
+  ) {
+    throw new TypeError(
+      "Solana funding transaction includes USDC accounts of the excluded vault",
     );
   }
   return {
@@ -430,12 +450,40 @@ export async function verifyRewardSettlementOnchain(input: {
     const transfer = plan.transfers.find(
       (candidate) => candidate.kind === "platform-fee",
     );
-    if (!transfer || !settlement.platformFee.signature) {
+    const feeSignature = settlement.platformFee.signature;
+    if (transfer && feeSignature) {
+      verified.push(await verifyTransaction(feeSignature, [transfer]));
+    } else if (
+      feeSignature &&
+      !planCarriesPlatformFee(allocation.fundingBasis?.instrumentId)
+    ) {
+      // RFC #500 section 8: on a project vault the fee is a separate transfer
+      // from the creator's own wallet. It must credit the reviewed fee
+      // recipient exactly, must not move the vault's USDC at all, and becomes
+      // payable only once the contributor payout is complete, so it cannot
+      // predate any finalized contributor transaction.
+      if (plan.kind !== "solana-usdc-transfer-plan" || !getTransaction) {
+        throw new TypeError("Project vault fee needs the Solana reader");
+      }
+      if (!settlement.platformFee.recipient) {
+        throw new TypeError("Project vault fee has no reviewed recipient");
+      }
+      const fee = assertFinalizedUsdcFundingTransfer(
+        await getTransaction(feeSignature),
+        feeSignature,
+        settlement.platformFee.recipient,
+        settlement.platformFee.dueMinor,
+        { excludedOwner: plan.sourceOwner },
+      );
+      if (verified.some((payout) => payout.blockTime > fee.blockTime)) {
+        throw new TypeError(
+          "Project vault fee was sent before the contributor payout completed",
+        );
+      }
+      verified.push(fee);
+    } else {
       throw new TypeError("Reported platform fee has no planned transaction");
     }
-    verified.push(
-      await verifyTransaction(settlement.platformFee.signature, [transfer]),
-    );
   }
   assertSettlementChronology(settlement.settledAt, verified);
   return verified;
