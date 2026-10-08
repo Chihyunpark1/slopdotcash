@@ -49,7 +49,7 @@ import {
   type NetworkSettlementExecutionPlan,
 } from "../src/lib/settlement-plan";
 import {
-  assertDistinctBaseSettlementTransactions,
+  assertDistinctSettlementTransactions,
   verifyRewardSettlementOnchain,
 } from "../src/lib/solana-settlement";
 import { assertEscrowDecisions } from "./escrow-review";
@@ -782,7 +782,7 @@ async function collectCycles(
         throw new RangeError("cycle limit exceeded");
     }
   }
-  assertDistinctBaseSettlementTransactions([
+  assertDistinctSettlementTransactions([
     ...builds.flatMap((build) => (build.settlement ? [build.settlement] : [])),
     ...(pendingSettlement ? [pendingSettlement] : []),
   ]);
@@ -797,7 +797,7 @@ async function collectCycles(
 export async function assertSettlementTransactionsAvailable(
   settlement: RewardSettlementManifest,
 ): Promise<void> {
-  if (settlement.chain === "base") await collectCycles(settlement);
+  await collectCycles(settlement);
 }
 
 export async function syncCycleIndex(

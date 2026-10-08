@@ -20,8 +20,10 @@ import {
   assertNetworkSettlementExecutionPlan,
   type NetworkSettlementExecutionPlan,
   planCarriesPlatformFee,
+  projectInstruments,
   type SettlementPlanTransfer,
   SOLANA_MAINNET_USDC_MINT,
+  squadsInstrumentId,
   USDC_DECIMALS,
 } from "./settlement-plan";
 import { isSolanaAddress } from "./wallets";
@@ -233,7 +235,9 @@ export function assertFinalizedUsdcTransfer(
   };
 }
 
-/** Validates one finalized direct-funding credit without trusting its sender.
+/** Validates one finalized direct-funding credit. Without `requiredSender`
+ * the sender is not trusted; with it, that wallet must be the only debited
+ * USDC owner and must send the exact amount.
  * `excludedOwner` names a wallet whose USDC accounts cannot participate.
  * A zero net change can hide a top-up followed by a fee transfer, so project
  * vault fees require a separate transaction without the vault's accounts. */
@@ -242,7 +246,7 @@ export function assertFinalizedUsdcFundingTransfer(
   expectedSignature: string,
   recipientOwner: string,
   amountMinor: string,
-  options: { excludedOwner?: string } = {},
+  options: { excludedOwner?: string; requiredSender?: string } = {},
 ): VerifiedSolanaTransaction {
   signature(expectedSignature, "expected signature");
   if (
@@ -258,6 +262,14 @@ export function assertFinalizedUsdcFundingTransfer(
       options.excludedOwner === recipientOwner)
   ) {
     throw new TypeError("excluded owner must be a distinct Solana public key");
+  }
+  if (
+    options.requiredSender !== undefined &&
+    (!isSolanaAddress(options.requiredSender) ||
+      options.requiredSender === recipientOwner ||
+      options.requiredSender === options.excludedOwner)
+  ) {
+    throw new TypeError("required sender must be a distinct Solana public key");
   }
   const transaction = record(transactionValue, "Solana transaction");
   const meta = record(transaction.meta, "Solana transaction.meta");
@@ -307,6 +319,18 @@ export function assertFinalizedUsdcFundingTransfer(
     )
   ) {
     throw new TypeError("Solana funding transaction has an undeclared credit");
+  }
+  if (options.requiredSender !== undefined) {
+    const debited = [...deltas.entries()].filter(([, delta]) => delta < 0n);
+    if (
+      debited.length !== 1 ||
+      debited[0][0] !== options.requiredSender ||
+      debited[0][1] !== -expected
+    ) {
+      throw new TypeError(
+        "Solana funding transaction was not sent by the required payer",
+      );
+    }
   }
   const netDelta = [...deltas.values()].reduce(
     (total, delta) => total + delta,
@@ -460,19 +484,34 @@ export async function verifyRewardSettlementOnchain(input: {
       !planCarriesPlatformFee(allocation.fundingBasis?.instrumentId)
     ) {
       // RFC #500 section 8: on a project vault the fee is a separate transfer
-      // from the creator's own wallet. It must credit the reviewed fee
-      // recipient exactly, must not move the vault's USDC at all, and becomes
-      // payable only once the contributor payout is complete, so it cannot
-      // predate any finalized contributor transaction.
+      // from the creator seat wallet (the reviewed instrument's creatorMember).
+      // That wallet must be the only debited USDC owner, the transfer must
+      // credit the reviewed fee recipient exactly, must not move the vault's
+      // USDC at all, and becomes payable only once the contributor payout is
+      // complete, so it cannot predate any finalized contributor transaction.
       if (!settlement.platformFee.recipient) {
         throw new TypeError("Project vault fee has no reviewed recipient");
+      }
+      const instrument = (
+        input.fundingInstruments ?? projectInstruments(allocation.projectId)
+      ).find(
+        (candidate) =>
+          candidate.kind === "squads-project-vault" &&
+          squadsInstrumentId(candidate) ===
+            allocation.fundingBasis?.instrumentId,
+      );
+      if (instrument?.kind !== "squads-project-vault") {
+        throw new TypeError("Project vault fee has no reviewed instrument");
       }
       const fee = assertFinalizedUsdcFundingTransfer(
         await getTransaction(feeSignature),
         feeSignature,
         settlement.platformFee.recipient,
         settlement.platformFee.dueMinor,
-        { excludedOwner: plan.sourceOwner },
+        {
+          excludedOwner: plan.sourceOwner,
+          requiredSender: instrument.creatorMember,
+        },
       );
       if (verified.some((payout) => payout.blockTime > fee.blockTime)) {
         throw new TypeError(
@@ -488,13 +527,14 @@ export async function verifyRewardSettlementOnchain(input: {
   return verified;
 }
 
-/** A Base transfer has no intent memo and can satisfy only one frozen cycle. */
-export function assertDistinctBaseSettlementTransactions(
+/** A settlement transaction can satisfy only one frozen cycle. A Base
+ * transfer has no intent memo, and a project-vault fee has no memo either, so
+ * every recorded signature on every network must be unique across cycles. */
+export function assertDistinctSettlementTransactions(
   settlements: readonly RewardSettlementManifest[],
 ): void {
   const owners = new Map<string, string>();
   for (const settlement of settlements) {
-    if (settlement.chain !== "base") continue;
     const owner = `${settlement.projectId}/${settlement.cycleId}`;
     const signatures = settlement.attempts
       .filter((attempt) => attempt.state === "finalized")
@@ -507,11 +547,12 @@ export function assertDistinctBaseSettlementTransactions(
     }
     for (const signature of signatures) {
       if (!signature) continue;
-      const key = signature.toLowerCase();
+      const key =
+        settlement.chain === "base" ? signature.toLowerCase() : signature;
       const prior = owners.get(key);
       if (prior && prior !== owner) {
         throw new TypeError(
-          `Base settlement transaction already consumed by ${prior}`,
+          `Settlement transaction ${signature} already consumed by ${prior}`,
         );
       }
       owners.set(key, owner);

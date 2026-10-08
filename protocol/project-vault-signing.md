@@ -64,7 +64,7 @@ is run from a clean checkout of `develop`, and its output is kept.
    transfer in the plan goes to a wallet frozen in the approved allocation. A
    refund or windup transfer goes to the creator's declared funder wallet. A
    project vault proposal carries no fee transfer: the 1% fee is a separate
-   transfer the creator sends from the creator's own wallet, never from the
+   transfer the creator sends from the creator seat wallet (`creatorMember`), never from the
    vault (RFC #500 section 8), so `totals.platformFeeMinor` in the plan is
    `0`. A plan or proposal that contains a transfer to Slop's fee recipient or
    to any other Slop address ends the procedure. Slop never votes on a

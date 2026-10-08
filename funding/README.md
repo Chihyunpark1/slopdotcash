@@ -343,7 +343,8 @@ the settlement verifier records the finalized payment beside the windup. See
 execution plan ends with the fee transfer, readiness requires the vault to
 cover principal plus fee, and a batch must include that transfer. On a
 project vault the rule is different (RFC #500 section 8): the 1% fee is a
-separate transfer the creator sends from the creator's own wallet, the vault
+separate transfer the creator sends from the creator seat wallet
+(`creatorMember`), the vault
 holds contributor principal only, the plan and the proposal carry no fee
 transfer, and settlement reconciles the fee from the creator's own transfer.
 Slop never votes on a proposal that contains a transfer to a Slop address.
@@ -361,8 +362,10 @@ What enforces it, all read-only:
 - A Squads batch is compiled from the plan, so it covers contributor
   transfers only; a proposal with a fee child cannot match the plan.
 - Settlement proves the fee as a separate finalized transaction that credits
-  the reviewed `freshCyclePaymentPolicy.feeRecipient` exactly, moves none of
-  the vault's USDC, and is not earlier than any finalized contributor
+  the reviewed `freshCyclePaymentPolicy.feeRecipient` exactly, debits only
+  the reviewed `creatorMember` of the instrument that funded the cycle,
+  moves none of the vault's USDC, uses a signature that no other cycle's
+  `settlement.json` records, and is not earlier than any finalized contributor
   transfer, because the fee becomes payable only when the contributor payout
   is complete. Without that transaction the cycle cannot be recorded as
   `paid`.
