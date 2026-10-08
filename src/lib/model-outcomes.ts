@@ -282,6 +282,8 @@ export function summarizeModelOutcomes(
     acceptedReviewsWithModel: 0,
   };
 
+  const mergedSourceIdsWithModel = new Set<string>();
+  const mergedSourceIdsWithSignedRun = new Set<string>();
   const countOutcome = (event: ScoreEvent, isPullRequest: boolean): void => {
     const candidates =
       (isPullRequest
@@ -298,10 +300,13 @@ export function summarizeModelOutcomes(
     const share = event.points / keys.length;
 
     if (isPullRequest) {
-      totals.mergedPullRequestsWithModel += 1;
+      mergedSourceIdsWithModel.add(event.source.id);
+      totals.mergedPullRequestsWithModel = mergedSourceIdsWithModel.size;
       totals.pullRequestPointsWithModel += event.points;
       if (own.some((attribution) => attribution.run)) {
-        totals.mergedPullRequestsWithSignedRun += 1;
+        mergedSourceIdsWithSignedRun.add(event.source.id);
+        totals.mergedPullRequestsWithSignedRun =
+          mergedSourceIdsWithSignedRun.size;
       }
     } else {
       totals.acceptedReviewsWithModel += 1;
