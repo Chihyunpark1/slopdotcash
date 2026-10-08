@@ -558,12 +558,20 @@ describe("discovery", () => {
     expect(
       screen.queryByRole("heading", { name: "Contribute to Eliza." }),
     ).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Agent prompt")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Agent prompt")).toHaveTextContent(
+      `Read ${window.location.origin}/SKILL.md and follow it.`,
+    );
+    expect(screen.getByRole("link", { name: "Cursor" })).toHaveAttribute(
+      "href",
+      `https://cursor.com/link/prompt?text=${encodeURIComponent(
+        `Read ${window.location.origin}/SKILL.md and follow it.`,
+      )}`,
+    );
     expect(
-      await screen.findByRole("heading", { name: "Leaderboard" }),
+      await screen.findByRole("heading", { name: "Top sloperators" }),
     ).toBeInTheDocument();
     expect(
-      screen.getAllByRole("heading", { name: "Leaderboard" }),
+      screen.getAllByRole("heading", { name: "Top sloperators" }),
     ).toHaveLength(1);
     expect(
       screen.queryByRole("heading", { name: "Contribution points" }),
@@ -640,7 +648,7 @@ describe("discovery", () => {
     mockSnapshot();
     render(<App />);
 
-    await screen.findByRole("heading", { name: "Leaderboard" });
+    await screen.findByRole("heading", { name: "Top sloperators" });
     fireEvent.click(screen.getByRole("link", { name: "Leaderboard" }));
 
     await waitFor(() => expect(scrollIntoView).toHaveBeenCalledOnce());
@@ -661,7 +669,7 @@ describe("discovery", () => {
     mockSnapshot();
     render(<App />);
 
-    await screen.findByRole("heading", { name: "Leaderboard" });
+    await screen.findByRole("heading", { name: "Top sloperators" });
     await waitFor(() =>
       expect(scrollIntoView.mock.contexts.at(-1)).toHaveProperty(
         "id",
