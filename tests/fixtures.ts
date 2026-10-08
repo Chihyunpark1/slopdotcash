@@ -555,6 +555,7 @@ export function archivedPaidCycleIndex() {
         allocation: file("allocation"),
         executionPlan: file("execution-plan"),
         settlement: file("settlement"),
+        windup: null,
       },
     },
   ];

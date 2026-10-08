@@ -331,7 +331,12 @@ export async function verifySettlement(
     arguments_.cycleId,
     { allowPendingTransactionEvidence: true },
   );
-  if (cycle.state !== "settlement-planned") {
+  // A project vault windup (RFC #500 s.10) holds every approved row but does
+  // not cancel the bound Squads proposal: approval and the time lock are what
+  // the program checks at execution, not the balance at some earlier instant.
+  // If funds return and the exact bound plan executes, its finalized evidence
+  // is verified here like any other and recorded beside the windup.
+  if (cycle.state !== "settlement-planned" && cycle.state !== "wound-up") {
     throw new TypeError(
       "Only a verified execution plan can enter settlement verification",
     );

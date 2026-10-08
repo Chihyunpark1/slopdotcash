@@ -21,6 +21,7 @@ import {
   type StandingsSort,
 } from "./lib/contributor-standings";
 import type { CycleIndex } from "./lib/cycle-index";
+import { deploymentTier } from "./lib/deployment";
 import { requestIdentityAssertion } from "./lib/identity-flow";
 import {
   assemblePoints,
@@ -584,6 +585,7 @@ function JoinPoints({
           ].includes(window.location.origin)
             ? import.meta.env.VITE_IDENTITY_PUBLIC_ORIGIN
             : undefined,
+          deploymentTier(import.meta.env.VITE_SLOP_ENVIRONMENT),
         ),
         audience: "slop-points-web",
         signal: c.signal,

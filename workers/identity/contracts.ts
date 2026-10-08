@@ -1,3 +1,7 @@
+import {
+  type DeploymentTier,
+  deploymentOrigins,
+} from "../../src/lib/deployment";
 export const IDENTITY_PUBLIC_ORIGIN = "https://identity.slop.cash";
 export const IDENTITY_INTERNAL_HOST = "identity.internal";
 export const IDENTITY_AUDIENCE = "private-trace-api";
@@ -79,9 +83,12 @@ export interface IdentityPersistence {
 }
 
 /** Dedicated isolated test worker only; never arbitrary OAuth redirect hosts. */
-export function identityPublicOrigin(value?: string): string {
-  if (value === undefined || value === IDENTITY_PUBLIC_ORIGIN)
-    return IDENTITY_PUBLIC_ORIGIN;
+export function identityPublicOrigin(
+  value?: string,
+  tier?: DeploymentTier,
+): string {
+  const canonical = deploymentOrigins(tier).identity;
+  if (value === undefined || value === canonical) return canonical;
   if (
     /^https:\/\/slop-identity-test\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.workers\.dev$/.test(
       value,

@@ -133,27 +133,12 @@ Options:
                       brand-new surface has no before state).
   --json              Print machine-readable findings JSON.
   --head-sha <sha>    Require the evidence-head marker to match this PR head.
-  --self-test         Run the planted-fixture self-check.
   --help, -h          Show this help.
 
 Environment:
   GITHUB_TOKEN or GH_TOKEN
                       Optional token sent while resolving trusted artifacts.
 `);
-}
-
-/** Compatibility entrypoint; normal verification runs these cases in Vitest. */
-export async function runSelfTest() {
-  const fixtures = await import("./check-pr-evidence-fixtures.mjs");
-  fixtures.runSelfTest({
-    evaluatePrEvidence,
-    findRetiredRepoEvidenceFiles,
-    inspectEvidenceHead,
-    REQUIRED_EVIDENCE_ROWS,
-    SURFACE_ARTIFACT_ROW_IDS,
-    SURFACE_OCR_EVIDENCE_ROW,
-  });
-  console.log("check-pr-evidence self-test passed.");
 }
 
 // The diagnostic for a PR body carrying NONE of the template's evidence-row
@@ -183,10 +168,6 @@ async function main() {
   if (args.includes("--help") || args.includes("-h")) {
     usage();
     process.exit(0);
-  }
-  if (args.includes("--self-test")) {
-    await runSelfTest();
-    return;
   }
 
   const body = readBody(args);

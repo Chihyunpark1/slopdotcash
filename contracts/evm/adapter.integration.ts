@@ -85,7 +85,7 @@ try {
     }
   }
   assert(ready, "Anvil startup");
-  const token = deploy("test/ProjectEscrow.t.sol:TestDollar");
+  const token = deploy("integration/TestDollar.sol:TestDollar");
   const vault = deploy("src/ProjectEscrow.sol:ProjectEscrow", [
     id,
     token,

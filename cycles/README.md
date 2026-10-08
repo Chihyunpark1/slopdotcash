@@ -124,6 +124,42 @@ either. Once written, the trusted transition gate holds the lapsed row at its
 original wallet, amount, and zero approval, so a lapse cannot be quietly
 rewritten or reversed.
 
+### Project vault windup
+
+On a 2-of-3 project vault (RFC #500) the vault is the creator's money until a
+payout is `paid`. The creator may return any part of the balance to the
+creator's own wallet at any time; Slop takes no part and cannot prevent it.
+When that happens after the creator has bound a proposal for an approved
+allocation, the proposal can no longer execute for lack of balance and the
+approved rows cannot be paid.
+
+The reserved `allocation.json` is permanently immutable, so the rows are not
+rewritten. `funding:prepare-project-vault-windup` derives `windup.json` from
+public evidence only: the frozen allocation and plan, the execution binding in
+`funding/executions/ledger.json`, the verified `refund` records in the funding
+ledger observed after approval, and one finalized quorum observation of the
+vault balance. It refuses while the vault still covers the plan, while no
+verified refund followed approval, or while the proposal is not bound. The
+record names the refund transactions, holds every approved row at its approved
+amount with one deterministic public reason, and is validated against those
+files by the cycle index, which always supplies the project's verified funding
+ledger: every named refund must be a verified record there, and the ledger's
+own verified balance as of the observation must fall short of the plan. How
+the file was produced grants nothing. Its cycle state is `wound-up`.
+
+A windup is not a cancellation. An approved Squads proposal stays approved on
+chain, and the program checks approval and the time lock at execution, not the
+balance at an earlier instant; if funds return to the vault, an executor can
+still execute the exact bound plan. So `wound-up` holds every approved row at
+its approved amount with no funded backing, nothing is paid in that state, and
+the cycle leaves it only through the ordinary settlement path: the settlement
+verifier accepts the cycle, reconciles finalized evidence against the same
+bound plan, and `transactions.json` and `settlement.json` are recorded beside
+`windup.json` without rewriting it. A held row is never carried or reissued,
+because a reserved intent is never imported as carry. A windup is a decision
+by the creator about the creator's funds, not a decision against any
+contributor, and the record says so.
+
 ### Unsafe destination reports
 
 A contributor may report the exact Slop wallet claim on an open proposal as
@@ -222,7 +258,13 @@ GitHub trust boundary, not permission granted by this report mechanism.
   transaction hashes;
 - `settlement.json` — generated only after finalized on-chain balance changes
   reconcile every contributor transfer and the 1% platform fee charged when
-  the approved payout is paid.
+  the approved payout is paid;
+- `windup.json` — only on a cycle funded by a 2-of-3 project vault: the
+  creator returned the vault after binding the proposal, so every approved
+  row is held with a public reason naming the finalized refund transactions.
+  It does not cancel the bound proposal; if the vault is refunded and the
+  exact bound plan later executes, `transactions.json` and `settlement.json`
+  are recorded beside it (see "Project vault windup" below).
 
 Delta Star uses only `source-snapshot.json` and `proposal.json`; it publishes a
 provisional contribution percentage and never represents the external prize as
