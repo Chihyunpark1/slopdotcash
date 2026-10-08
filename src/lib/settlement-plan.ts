@@ -327,7 +327,7 @@ export function createSettlementExecutionPlan(
     const instrumentId = allocation.fundingBasis.instrumentId;
     if (
       !instrumentId?.startsWith("squads-v4-vault:solana:") &&
-      !instrumentId?.startsWith("squads-project-vault:solana:")
+      !instrumentId?.startsWith(PROJECT_VAULT_INSTRUMENT_PREFIX)
     ) {
       throw new TypeError(
         "Settlement requires a frozen Solana Squads funding instrument",

@@ -455,6 +455,8 @@ export async function verifyRewardSettlementOnchain(input: {
       verified.push(await verifyTransaction(feeSignature, [transfer]));
     } else if (
       feeSignature &&
+      getTransaction &&
+      plan.kind === "solana-usdc-transfer-plan" &&
       !planCarriesPlatformFee(allocation.fundingBasis?.instrumentId)
     ) {
       // RFC #500 section 8: on a project vault the fee is a separate transfer
@@ -462,9 +464,6 @@ export async function verifyRewardSettlementOnchain(input: {
       // recipient exactly, must not move the vault's USDC at all, and becomes
       // payable only once the contributor payout is complete, so it cannot
       // predate any finalized contributor transaction.
-      if (plan.kind !== "solana-usdc-transfer-plan" || !getTransaction) {
-        throw new TypeError("Project vault fee needs the Solana reader");
-      }
       if (!settlement.platformFee.recipient) {
         throw new TypeError("Project vault fee has no reviewed recipient");
       }
