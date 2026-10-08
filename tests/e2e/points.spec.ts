@@ -63,15 +63,17 @@ test(
       "lifetime",
     );
     await page.goto("/points?sort=points&period=lifetime");
-    const rules = page.getByRole("region", { name: "Point categories" });
+    const rules = page.getByRole("list", { name: "Point categories" });
+    for (const [activity, points] of [
+      ["Join with GitHub", "5 once"],
+      ["First X connection", "10 once"],
+    ])
+      await expect(
+        rules.getByRole("listitem").filter({ hasText: activity }),
+      ).toContainText(`${points}Not in earned-point standings`);
     await expect(
-      rules.getByRole("row", { name: /Join with GitHub 5 once Not included/u }),
-    ).toBeVisible();
-    await expect(
-      rules.getByRole("row", {
-        name: /First X connection 10 once Not included/u,
-      }),
-    ).toBeVisible();
+      rules.getByRole("listitem").filter({ hasText: "Finalized payout cycle" }),
+    ).toContainText("Counts in earned-point standings");
     await expect(
       page.getByText(/Points never change Slop Score/u),
     ).toBeVisible();
