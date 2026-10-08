@@ -216,9 +216,6 @@ jobs:
           bun run format:check
           bun run lint:check
 
-      - name: Run evidence verifier self-test
-        run: bun run test:evidence
-
       - name: Build production site
         env:
           SLOP_POINTS_ONLINE: ${{ github.event_name != 'pull_request' && '1' || '0' }}

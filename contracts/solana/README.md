@@ -34,14 +34,9 @@ entire transaction, including fees and accounting. Frozen destinations do not bl
 other awards. `paid`, reserve, principal paid and fee counters are on-chain. Paid
 records remain permanently allocated to prevent account recreation replay.
 
-## Local integration
+## Local build
 
-Run `npm test` here. This builds the actual SBF binary, starts a disposable local
-Solana validator, creates a six-decimal test mint, and exercises real SPL transfers.
-The test performs the 1,000-token canonical lifecycle, delayed wallet registration,
-wallet rotation, reserve protection, split withdrawals, frozen destination rollback,
-duplicate payment and award rejection, wrong destination and unauthorized binding.
-All local keys and evidence stay in ignored `.local/`; they are test-only.
+Run `npm run build` here. This builds the actual SBF binary and its IDL.
 `cargo check --locked` verifies the host program build but does not prove SBF or
 validator execution. Use Anchor 0.32.1 and the platform tools pinned in the scripts.
 

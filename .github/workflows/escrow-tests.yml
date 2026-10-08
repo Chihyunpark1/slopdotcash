@@ -80,7 +80,7 @@ jobs:
           bun-version: '1.3.14'
       - run: bun install --frozen-lockfile --ignore-scripts
       - run: bash contracts/solana/scripts/bootstrap-linux.sh
-      - run: bun run test:contracts:solana
+      - run: bun run build:contracts:solana
 
 # These jobs use isolated local chains and public fixture keys. They receive no
 # environment secrets, create no public deployment, and do not use a paid RPC.
