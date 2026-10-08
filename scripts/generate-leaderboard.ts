@@ -192,7 +192,7 @@ interface NodeReference {
   kind: "Issue" | "PullRequest";
   outcome: MergedPullRequestOutcome | null;
   openVersion: string | null;
-  commitPage?: NestedPageState;
+  commitPage?: NestedPageState & { baseRefOid: string; headRefOid: string };
 }
 
 type ExpectedRecordState = "closed" | "merged" | "open";
@@ -238,6 +238,12 @@ export interface RateLimitSnapshot {
 }
 
 export interface GraphqlExecutor {
+  compareCommitPage?(
+    repository: TargetRepository,
+    base: string,
+    head: string,
+    page: number,
+  ): Promise<JsonRecord>;
   execute(document: string, variables?: GraphqlVariables): Promise<JsonRecord>;
   ensureBudget?(requiredCost: number): Promise<void>;
   getRequestCount(): number;
@@ -503,6 +509,8 @@ const SEARCH_REFERENCES_QUERY = `
           additions
           deletions
           baseRefName
+          baseRefOid
+          headRefOid
           commits(first: 100) {
             totalCount
             pageInfo { hasNextPage endCursor }
@@ -1533,6 +1541,25 @@ export class GitHubGraphqlClient implements GraphqlExecutor {
     document: string,
     variables: GraphqlVariables = {},
   ): Promise<JsonRecord> {
+    return this.#executeRequest(document, variables);
+  }
+
+  async compareCommitPage(
+    repository: TargetRepository,
+    base: string,
+    head: string,
+    page: number,
+  ): Promise<JsonRecord> {
+    const path = `/repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.name)}/compare/${base}...${head}?per_page=${GRAPHQL_PAGE_SIZE}&page=${page}`;
+    return this.#executeRequest("", {}, path);
+  }
+
+  async #executeRequest(
+    document: string,
+    variables: GraphqlVariables,
+    restPath?: string,
+  ): Promise<JsonRecord> {
+    const apiLabel = restPath ? "GitHub comparison" : "GitHub GraphQL";
     let response: Response | null = null;
     let payload: unknown;
     let parsedResponse = false;
@@ -1542,7 +1569,7 @@ export class GitHubGraphqlClient implements GraphqlExecutor {
       attempt <= MAX_GRAPHQL_REQUEST_ATTEMPTS;
       attempt += 1
     ) {
-      await this.ensureBudget(1);
+      if (!restPath) await this.ensureBudget(1);
       this.#requestCount += 1;
       const controller = new AbortController();
       const timeout = setTimeout(() => {
@@ -1550,18 +1577,24 @@ export class GitHubGraphqlClient implements GraphqlExecutor {
       }, this.#requestTimeoutMs);
       let responseBody = "";
       try {
-        response = await this.#fetch("https://api.github.com/graphql", {
-          method: "POST",
-          headers: {
-            Accept: "application/vnd.github+json",
-            Authorization: `Bearer ${this.#token}`,
-            "Content-Type": "application/json",
-            "User-Agent": "eliza-computer-leaderboard",
-            "X-GitHub-Api-Version": "2022-11-28",
+        response = await this.#fetch(
+          `https://api.github.com${restPath ?? "/graphql"}`,
+          {
+            method: restPath ? "GET" : "POST",
+            redirect: "error",
+            headers: {
+              Accept: "application/vnd.github+json",
+              Authorization: `Bearer ${this.#token}`,
+              "Content-Type": "application/json",
+              "User-Agent": "eliza-computer-leaderboard",
+              "X-GitHub-Api-Version": "2022-11-28",
+            },
+            body: restPath
+              ? undefined
+              : JSON.stringify({ query: document, variables: activeVariables }),
+            signal: controller.signal,
           },
-          body: JSON.stringify({ query: document, variables: activeVariables }),
-          signal: controller.signal,
-        });
+        );
         responseBody = await readGraphqlResponseBody(response);
       } catch (cause) {
         if (cause instanceof GraphqlResponseBoundaryError) throw cause;
@@ -1572,8 +1605,8 @@ export class GitHubGraphqlClient implements GraphqlExecutor {
         if (!retryable || attempt === MAX_GRAPHQL_REQUEST_ATTEMPTS) {
           throw new Error(
             timedOut
-              ? `GitHub GraphQL request timed out after ${this.#requestTimeoutMs}ms (${attempt}/${MAX_GRAPHQL_REQUEST_ATTEMPTS})`
-              : `GitHub GraphQL network request failed (${attempt}/${MAX_GRAPHQL_REQUEST_ATTEMPTS})`,
+              ? `${apiLabel} request timed out after ${this.#requestTimeoutMs}ms (${attempt}/${MAX_GRAPHQL_REQUEST_ATTEMPTS})`
+              : `${apiLabel} network request failed (${attempt}/${MAX_GRAPHQL_REQUEST_ATTEMPTS})`,
             { cause },
           );
         }
@@ -1619,8 +1652,8 @@ export class GitHubGraphqlClient implements GraphqlExecutor {
         // non-JSON API failures; exhausted malformed-JSON retries fail closed.
         throw new Error(
           retryableMalformedJson
-            ? `GitHub GraphQL HTTP ${response.status} returned malformed JSON (${attempt}/${MAX_GRAPHQL_REQUEST_ATTEMPTS}; ${contentType ?? "unknown content type"})`
-            : `GitHub GraphQL HTTP ${response.status} returned a non-JSON response (${attempt}/${MAX_GRAPHQL_REQUEST_ATTEMPTS}; ${contentType ?? "unknown content type"}${describePageSize(activeVariables)})`,
+            ? `${apiLabel} HTTP ${response.status} returned malformed JSON (${attempt}/${MAX_GRAPHQL_REQUEST_ATTEMPTS}; ${contentType ?? "unknown content type"})`
+            : `${apiLabel} HTTP ${response.status} returned a non-JSON response (${attempt}/${MAX_GRAPHQL_REQUEST_ATTEMPTS}; ${contentType ?? "unknown content type"}${describePageSize(activeVariables)})`,
           { cause },
         );
       }
@@ -1631,15 +1664,14 @@ export class GitHubGraphqlClient implements GraphqlExecutor {
     const envelope = asRecord(payload, "GitHub GraphQL response");
     if (!response.ok) {
       throw new Error(
-        `GitHub GraphQL HTTP ${response.status}: ${sanitizeGraphqlError(envelope.message)}`,
+        `${apiLabel} HTTP ${response.status}: ${sanitizeGraphqlError(envelope.message)}`,
       );
     }
     if (Array.isArray(envelope.errors) && envelope.errors.length > 0) {
       const errors = envelope.errors.map(sanitizeGraphqlError).join("; ");
-      throw new Error(
-        `GitHub GraphQL rejected the leaderboard query: ${errors}`,
-      );
+      throw new Error(`${apiLabel} rejected the leaderboard query: ${errors}`);
     }
+    if (restPath) return envelope;
     const data = asRecord(envelope.data, "GitHub GraphQL response.data");
     const rateLimit = parseRateLimit(data.rateLimit);
     this.#startingRemaining =
@@ -1659,7 +1691,7 @@ export class GitHubGraphqlClient implements GraphqlExecutor {
       rateLimit.remaining < this.#minimumRateLimitReserve
     ) {
       throw new Error(
-        `GitHub GraphQL safety budget exceeded (${this.#windowConsumedCost}/${effectiveMaxGenerationCost} points consumed in the current window, ${rateLimit.remaining} remaining; reserve ${this.#minimumRateLimitReserve})`,
+        `${apiLabel} safety budget exceeded (${this.#windowConsumedCost}/${effectiveMaxGenerationCost} points consumed in the current window, ${rateLimit.remaining} remaining; reserve ${this.#minimumRateLimitReserve})`,
       );
     }
     return data;
@@ -1782,6 +1814,8 @@ function parseSearchReference(
     ...(kind === "PullRequest"
       ? {
           commitPage: {
+            baseRefOid: asFullCommitSha(node.baseRefOid, `${path}.baseRefOid`),
+            headRefOid: asFullCommitSha(node.headRefOid, `${path}.headRefOid`),
             totalCount: asNumber(
               child(node, "commits", path).totalCount,
               `${path}.commits.totalCount`,
@@ -2019,8 +2053,8 @@ export async function collectSearchReferences(
   return deduped;
 }
 
-// GitHub lists at most 250 commits for one pull request while totalCount
-// reports the true number, so a larger listing can never be complete.
+// The pull-request connection stops at 250 commits. GitHub's comparison
+// endpoint can paginate the complete immutable base/head range beyond that.
 const GITHUB_PULL_REQUEST_COMMIT_LIST_LIMIT = 250;
 
 async function completeOutcomeCommits(
@@ -2031,19 +2065,79 @@ async function completeOutcomeCommits(
   const outcome = reference.outcome;
   const firstPage = reference.commitPage;
   if (!outcome || !firstPage) return;
-  // Only integration-branch merges share credit. A promotion pull request or
-  // one above GitHub's listing limit keeps author-only credit (null evidence).
-  if (
-    outcome.baseRefName !== repository.integrationBranch ||
-    firstPage.totalCount > GITHUB_PULL_REQUEST_COMMIT_LIST_LIMIT
-  ) {
+  // Other branches retain author-only credit and need no commit hydration.
+  if (outcome.baseRefName !== repository.integrationBranch) {
     outcome.commits = null;
     delete reference.commitPage;
     return;
   }
-  const commits = outcome.commits;
+  let commits = outcome.commits;
   if (!commits) throw new Error(`PR #${outcome.number} has no commit evidence`);
-  let pageInfo = firstPage.pageInfo;
+  if (firstPage.totalCount > GITHUB_PULL_REQUEST_COMMIT_LIST_LIMIT) {
+    if (!client.compareCommitPage)
+      throw new Error("Complete commit comparison is unavailable");
+    const compared: NonNullable<MergedPullRequestOutcome["commits"]> = [];
+    for (
+      let page = 1;
+      page <= Math.ceil(firstPage.totalCount / GRAPHQL_PAGE_SIZE);
+      page += 1
+    ) {
+      const data = await client.compareCommitPage(
+        repository,
+        firstPage.baseRefOid,
+        firstPage.headRefOid,
+        page,
+      );
+      if (
+        data.total_commits !== firstPage.totalCount ||
+        child(data, "base_commit", "comparison").sha !== firstPage.baseRefOid
+      ) {
+        throw new Error(
+          `PR #${outcome.number} comparison does not match its commit range`,
+        );
+      }
+      const nodes = asArray(data.commits, "comparison.commits").map(
+        (value, index) => {
+          const path = `comparison.commits[${index}]`;
+          const commit = asRecord(value, path);
+          const author =
+            commit.author === null
+              ? null
+              : asRecord(commit.author, `${path}.author`);
+          return {
+            commit: {
+              oid: commit.sha,
+              author: {
+                user:
+                  author === null
+                    ? null
+                    : {
+                        __typename: author.type,
+                        id: author.node_id,
+                        login: author.login,
+                        avatarUrl: author.avatar_url,
+                        url: author.html_url,
+                      },
+              },
+            },
+          };
+        },
+      );
+      compared.push(...parseOutcomeCommits({ nodes }, "comparison"));
+    }
+    const known = new Set(compared.map((commit) => commit.oid));
+    if (
+      !known.has(firstPage.headRefOid) ||
+      commits.some((commit) => !known.has(commit.oid))
+    ) {
+      throw new Error(`PR #${outcome.number} comparison omitted known commits`);
+    }
+    commits = compared;
+  }
+  let pageInfo =
+    firstPage.totalCount > GITHUB_PULL_REQUEST_COMMIT_LIST_LIMIT
+      ? { hasNextPage: false, endCursor: null }
+      : firstPage.pageInfo;
   const cursors = new Set<string>();
   while (pageInfo.hasNextPage) {
     const cursor = pageInfo.endCursor;
@@ -2079,6 +2173,7 @@ async function completeOutcomeCommits(
       `PR #${outcome.number} commit totals do not match complete unique evidence`,
     );
   }
+  outcome.commits = commits;
   delete reference.commitPage;
 }
 
@@ -3885,6 +3980,6 @@ if (import.meta.main) {
     },
   });
   process.stdout.write(
-    `[slop.cash] wrote ${DEFAULT_OUTPUT_PATH} (${snapshot.leaders.length} leaders, ${snapshot.ledger.length} score events, ${snapshot.source.requestCount} GraphQL requests, ${snapshot.source.rateLimit.remaining}/${snapshot.source.rateLimit.limit} points remaining)\n`,
+    `[slop.cash] wrote ${DEFAULT_OUTPUT_PATH} (${snapshot.leaders.length} leaders, ${snapshot.ledger.length} score events, ${snapshot.source.requestCount} GitHub requests, ${snapshot.source.rateLimit.remaining}/${snapshot.source.rateLimit.limit} GraphQL points remaining)\n`,
   );
 }
