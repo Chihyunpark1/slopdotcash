@@ -204,6 +204,9 @@ export function PointsProvider({
     </Context.Provider>
   );
 }
+const currentPath = () =>
+  `${window.location.pathname}${window.location.search}${window.location.hash}`;
+
 export function PointsNav({ onNavigate }: { onNavigate?: () => void }) {
   const { state, me, session, setMe, requestPoints, refresh } =
     useContext(Context);
@@ -247,6 +250,16 @@ export function PointsNav({ onNavigate }: { onNavigate?: () => void }) {
   useEffect(() => {
     if (signedIn) requestPoints();
   }, [signedIn, requestPoints]);
+  const [loginReturn, setLoginReturn] = useState(currentPath);
+  useEffect(() => {
+    const update = () => setLoginReturn(currentPath());
+    window.addEventListener("popstate", update);
+    window.addEventListener("hashchange", update);
+    return () => {
+      window.removeEventListener("popstate", update);
+      window.removeEventListener("hashchange", update);
+    };
+  }, []);
   const navigate = () => {
     setOpen(false);
     onNavigate?.();
@@ -278,13 +291,12 @@ export function PointsNav({ onNavigate }: { onNavigate?: () => void }) {
     return (
       <a
         className="account-control account-login"
-        href="/login"
-        onClick={(event) => {
-          const here = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-          if (window.location.pathname !== "/login" && here !== "/")
-            event.currentTarget.href = `/login?next=${encodeURIComponent(here)}`;
-          navigate();
-        }}
+        href={
+          window.location.pathname === "/login" || loginReturn === "/"
+            ? "/login"
+            : `/login?next=${encodeURIComponent(loginReturn)}`
+        }
+        onClick={navigate}
       >
         Log in
       </a>

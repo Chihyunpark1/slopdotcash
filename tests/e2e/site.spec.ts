@@ -1681,6 +1681,12 @@ test("lands direct hash links on their section", async ({ page }) => {
 test("legacy verification links open the How it works payment section", async ({
   page,
 }) => {
+  for (const path of ["/constructor", "/__proto__"]) {
+    await page.goto(path);
+    await expect(
+      page.getByRole("heading", { name: "Page not found", exact: true }),
+    ).toBeVisible();
+  }
   for (const path of ["/verification", "/verification/"]) {
     await page.goto(path, { waitUntil: "networkidle" });
     await expect(page).toHaveURL(/\/how-it-works#verification$/u);

@@ -228,14 +228,15 @@ function internalRoute(pathname: string): Route {
 }
 
 /** Legacy pages now live as sections of their canonical routes. */
-const LEGACY_SECTIONS: Record<string, string> = {
-  wallet: "/account#wallets",
-  verification: "/how-it-works#verification",
-};
+const LEGACY_SECTIONS = new Map([
+  ["wallet", "/account#wallets"],
+  ["verification", "/how-it-works#verification"],
+]);
 
 function canonicalPath(): string {
-  const legacy =
-    LEGACY_SECTIONS[window.location.pathname.replace(/^\/|\/$/gu, "")];
+  const legacy = LEGACY_SECTIONS.get(
+    window.location.pathname.replace(/^\/|\/$/gu, ""),
+  );
   if (legacy) {
     const [path, hash] = legacy.split("#");
     window.history.replaceState(

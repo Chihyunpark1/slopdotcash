@@ -167,10 +167,28 @@ test("the header login link keeps the current page as the return route", async (
   page,
 }) => {
   await page.goto("/how-it-works#faq");
-  await page
+  const link = page
     .getByRole("banner")
-    .getByRole("link", { name: "Log in", exact: true })
-    .click();
+    .getByRole("link", { name: "Log in", exact: true });
+  await expect(link).toHaveAttribute(
+    "href",
+    `/login?next=${encodeURIComponent("/how-it-works#faq")}`,
+  );
+  await page.evaluate(() => {
+    window.location.hash = "verification";
+  });
+  await expect(link).toHaveAttribute(
+    "href",
+    `/login?next=${encodeURIComponent("/how-it-works#verification")}`,
+  );
+  await page.evaluate(() => {
+    window.location.hash = "faq";
+  });
+  await expect(link).toHaveAttribute(
+    "href",
+    `/login?next=${encodeURIComponent("/how-it-works#faq")}`,
+  );
+  await link.click();
   await expect(page).toHaveURL(
     `/login?next=${encodeURIComponent("/how-it-works#faq")}`,
   );
