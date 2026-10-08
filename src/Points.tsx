@@ -842,31 +842,19 @@ export function PointsPage() {
       <ContributorStandings />
       <section className="points-panel" id="rules">
         <h2>Ways to earn</h2>
-        <section
-          className="points-table"
-          aria-label="Point categories"
-          // biome-ignore lint/a11y/noNoninteractiveTabindex: Keyboard users must be able to scroll all table columns.
-          tabIndex={0}
-        >
-          <table>
-            <thead>
-              <tr>
-                <th scope="col">Activity</th>
-                <th scope="col">Points</th>
-                <th scope="col">Earned-point standings</th>
-              </tr>
-            </thead>
-            <tbody>
-              {POINT_CATEGORIES.map(([activity, points, ranked]) => (
-                <tr key={activity}>
-                  <th scope="row">{activity}</th>
-                  <td>{points}</td>
-                  <td>{ranked ? "Included" : "Not included"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
+        <ul aria-label="Point categories" className="points-rules">
+          {POINT_CATEGORIES.map(([activity, points, ranked]) => (
+            <li key={activity}>
+              <span>{activity}</span>
+              <strong>{points}</strong>
+              <small>
+                {ranked
+                  ? "Counts in earned-point standings"
+                  : "Not in earned-point standings"}
+              </small>
+            </li>
+          ))}
+        </ul>
         <p className="points-meta">
           Points never change Slop Score or Money received. Points persist
           across months, and corrections stay in the history. Review coverage
