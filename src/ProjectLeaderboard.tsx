@@ -33,7 +33,7 @@ export function ProjectLeaderboard({
   retry: () => void;
 }) {
   return (
-    <>
+    <div id="contributors">
       <ContributorStandings
         projectId={props.view.project.id}
         scoreState={state}
@@ -44,7 +44,7 @@ export function ProjectLeaderboard({
         <summary>Cycle allocation details</summary>
         <CycleAllocation {...props} />
       </details>
-    </>
+    </div>
   );
 }
 

@@ -745,6 +745,35 @@ export function ProjectParticipation({
   cycles: readonly PromotionCycle[] | null;
   displayCycleId: string | null;
 }) {
+  if (project.participation?.state === "archived") {
+    const successor = findProject(project.participation.successorProjectId);
+    return (
+      <section className="section" id="start">
+        <h2>Archived</h2>
+        <p>
+          Continue with{" "}
+          <Link href={`/projects/${project.participation.successorProjectId}`}>
+            {successor?.name ?? project.participation.successorProjectId}
+          </Link>
+          .
+        </p>
+      </section>
+    );
+  }
+  if (project.participation?.state === "permission-required") {
+    return (
+      <section className="section" id="start">
+        <h2>Permission required</h2>
+        <p>
+          Ask{" "}
+          <ExternalLinkAnchor href={project.steward.github.profileUrl}>
+            {project.steward.displayName}
+          </ExternalLinkAnchor>{" "}
+          for permission before contributing. Project activation remains paused.
+        </p>
+      </section>
+    );
+  }
   if (project.status === "paused") {
     return (
       <section className="section" id="start">
@@ -1016,21 +1045,25 @@ export function ProjectFunding({ project }: { project: ProjectDefinition }) {
       Date.parse(route.effectiveAt) <= now &&
       (route.replacedAt === null || now < Date.parse(route.replacedAt)),
   );
+  if (activeRoutes.length === 0) {
+    return project.reward.kind === "external-prize-share" ? null : (
+      <section className="section project-funding">
+        <p>
+          Direct funding unavailable. No reviewed receiving address is
+          published.
+        </p>
+      </section>
+    );
+  }
   return (
     <section className="section project-funding">
-      <details open={activeRoutes.length === 0}>
+      <details>
         <summary>Fund this project</summary>
         <p>
           Funding: {project.reward.fundingState} · Committed:{" "}
           {formatMicroUsdc(project.reward.committedMinor)} · Payments:{" "}
           {project.reward.paymentMode}
         </p>
-        {activeRoutes.length === 0 ? (
-          <p>
-            Not accepting direct funding yet. The steward publishes an address
-            through a reviewed manifest change.
-          </p>
-        ) : null}
         <p>{project.funding.disclosure}</p>
         {activeRoutes.length > 0 ? (
           <p>
@@ -1335,7 +1368,9 @@ function ProjectPage({
           <div className="project-hero-grid">
             <div>
               <h1>
-                {headlineAction ? (
+                {project.status === "paused" ? (
+                  project.name
+                ) : headlineAction ? (
                   <>
                     Make money{" "}
                     <span className="project-headline-action">
@@ -1347,6 +1382,15 @@ function ProjectPage({
                 )}
               </h1>
               <p className="hero-copy">{project.description}</p>
+              {project.status === "paused" ? (
+                <ProjectParticipation
+                  project={project}
+                  displayCycleId={view?.cycle.id ?? null}
+                  cycles={
+                    state.status === "ready" ? state.cycleIndex.cycles : null
+                  }
+                />
+              ) : null}
               <p className="project-terms-line">
                 By{" "}
                 <ExternalLinkAnchor href={project.steward.github.profileUrl}>
@@ -1360,8 +1404,14 @@ function ProjectPage({
                 {project.steward.github.type === "User" ? (
                   <PublicXLink actorId={project.steward.github.nodeId} />
                 ) : null}
-                {" · "}
-                <a href="/points#people">Meet contributors and maintainers</a>
+                {view ? (
+                  <>
+                    {" · "}
+                    <Link href={`/projects/${project.slug}#contributors`}>
+                      Contributors
+                    </Link>
+                  </>
+                ) : null}
               </p>
               {project.terms.externalPrize ? (
                 <p className="project-policy-warning">
@@ -1369,7 +1419,18 @@ function ProjectPage({
                 </p>
               ) : null}
             </div>
-            {promotionEligible ? (
+            {project.status === "paused" ? null : state.status !== "ready" ? (
+              <aside className="reward-card">
+                <strong>
+                  {state.status === "loading"
+                    ? "Loading funding history…"
+                    : "Funding history unavailable"}
+                </strong>
+                <p>
+                  Funding promotion cannot be determined until the records load.
+                </p>
+              </aside>
+            ) : promotionEligible ? (
               <aside className="reward-card">
                 <strong
                   className={
@@ -1412,12 +1473,10 @@ function ProjectPage({
               </aside>
             ) : (
               <aside className="reward-card">
-                <span>FUNDING PROMOTION PAUSED</span>
-                <strong>$0</strong>
+                <strong>Funding promotion paused</strong>
                 <p>
-                  {project.status === "paused"
-                    ? "Project activation requires a reviewed manifest change on GitHub."
-                    : "Accepted work and cycle history remain available."}
+                  Accepted work and cycle history remain available. No payment
+                  is enabled.
                 </p>
               </aside>
             )}
@@ -1425,11 +1484,13 @@ function ProjectPage({
         </div>
       </section>
       <div className="shell">
-        <ProjectParticipation
-          project={project}
-          displayCycleId={view?.cycle.id ?? null}
-          cycles={state.status === "ready" ? state.cycleIndex.cycles : null}
-        />
+        {project.status !== "paused" && state.status === "ready" ? (
+          <ProjectParticipation
+            project={project}
+            displayCycleId={view?.cycle.id ?? null}
+            cycles={state.cycleIndex.cycles}
+          />
+        ) : null}
         {state.status === "ready" &&
         project.repositories.some(
           (repository) =>

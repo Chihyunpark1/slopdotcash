@@ -110,5 +110,8 @@
     "creator": "https://github.com/awidearray",
     "repository": "https://github.com/heirlabs/elements-sdk",
     "issues": "https://github.com/heirlabs/elements-sdk/issues"
+  },
+  "participation": {
+    "state": "permission-required"
   }
 }

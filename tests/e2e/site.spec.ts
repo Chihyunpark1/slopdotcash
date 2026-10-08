@@ -1187,6 +1187,13 @@ test("shows an explicit error for invalid data and retries", async ({
   await expect(page.getByRole("alert")).toContainText(
     "Live totals unavailable",
   );
+  await expect(page.locator(".reward-card")).toContainText(
+    "Funding history unavailable",
+  );
+  await expect(page.locator(".reward-card")).not.toContainText("$0");
+  await expect(page.locator(".reward-card")).not.toContainText(
+    "Funding promotion paused",
+  );
   const errorAccessibility = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
     .analyze();
@@ -1402,10 +1409,32 @@ for (const route of [
     );
     if (project?.status === "paused") {
       await expect(
-        page.getByRole("heading", { name: "Project paused" }),
+        page.getByRole("heading", {
+          name:
+            project.participation?.state === "archived"
+              ? "Archived"
+              : project.participation?.state === "permission-required"
+                ? "Permission required"
+                : "Project paused",
+          exact: true,
+        }),
       ).toBeVisible();
       await expect(page.getByText(/after two unfunded cycles/u)).toHaveCount(0);
       await expect(page.getByLabel("Manual install command")).toHaveCount(0);
+      await expect(page.locator(".reward-card")).toHaveCount(0);
+      if (project.participation?.state === "archived") {
+        const successorId = project.participation.successorProjectId;
+        const successor = PROJECTS.find((entry) => entry.id === successorId);
+        await expect(
+          page
+            .locator("#start")
+            .getByRole("link", { name: successor?.name, exact: true }),
+        ).toHaveAttribute(
+          "href",
+          `/projects/${project.participation.successorProjectId}`,
+        );
+      }
+
       await test.info().attach(`${project.id}-paused-project`, {
         body: await page.screenshot({ fullPage: true }),
         contentType: "image/png",
