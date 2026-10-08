@@ -18,7 +18,9 @@ function run(command, args, env = childEnvironment()) {
     cwd: packageRoot,
     env,
     stdio: "inherit",
-    timeout: 25 * 60_000,
+    // Playwright owns a 35-minute global deadline. Allow it to finish and
+    // write diagnostics before this outer process guard terminates it.
+    timeout: 40 * 60_000,
     killSignal: "SIGKILL",
   });
   if (result.error) throw result.error;
