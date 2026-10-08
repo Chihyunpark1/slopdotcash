@@ -100,9 +100,7 @@ textarea:focus-visible {
   font-weight: 800;
   letter-spacing: -0.04em;
 }
-
-.funding-kind,
-.cycle-archive-card dt {
+.funding-kind {
   color: var(--orange-dark);
   font-size: 13px;
   font-weight: 800;
@@ -115,22 +113,16 @@ textarea:focus-visible {
   font-size: 13px;
   font-weight: 600;
 }
-
-.equation-card dd,
-.cycle-archive-card dd {
+.equation-card dd {
   margin: 4px 0 0;
   font-family: var(--brand-font-data);
   font-variant-numeric: tabular-nums;
 }
-
-.cycle-archive-card,
 .worked-example,
 .custody-proof {
   border: 1px solid var(--line);
   background: var(--white);
 }
-
-.cycle-archive-card dl div,
 .equation-card div {
   display: flex;
   align-items: baseline;
@@ -139,9 +131,7 @@ textarea:focus-visible {
   padding-bottom: 9px;
   border-bottom: 1px solid var(--line);
 }
-
-.audience-grid a,
-.cycle-archive-card > a {
+.audience-grid a {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -149,10 +139,6 @@ textarea:focus-visible {
   color: var(--orange-dark);
   font-size: 15px;
   font-weight: 700;
-}
-
-.cycle-archive-card > a svg {
-  width: 15px;
 }
 
 .funding-kind {
@@ -366,48 +352,6 @@ textarea:focus-visible {
   font-weight: 700;
 }
 
-.cycle-archive-list {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 18px;
-}
-
-.cycle-archive-card {
-  padding: 28px;
-}
-
-.cycle-archive-card dl {
-  display: grid;
-  gap: 11px;
-  margin: 0;
-}
-
-.cycle-archive-card dd {
-  max-width: 62%;
-  overflow-wrap: anywhere;
-  text-align: right;
-  font-size: 14px;
-}
-
-.cycle-archive-card {
-  min-height: 300px;
-  display: flex;
-  flex-direction: column;
-}
-
-.cycle-archive-card > div:first-child > span {
-  color: var(--orange-dark);
-  font-size: 13px;
-  font-weight: 800;
-  text-transform: uppercase;
-}
-
-.cycle-archive-card h2 {
-  margin: 8px 0 28px;
-  font-size: 30px;
-  letter-spacing: -0.04em;
-}
-
 @media (max-width: 900px) {
   .mechanism-flow {
     grid-template-columns: 1fr 1fr;
@@ -425,7 +369,6 @@ textarea:focus-visible {
 @media (max-width: 680px) {
   .mechanism-flow,
   .worked-example,
-  .cycle-archive-list,
   .custody-proof ul,
   .money-states dl {
     grid-template-columns: 1fr;
@@ -1732,6 +1675,10 @@ small {
 .cycle-number strong {
   font-size: 35px;
   letter-spacing: -0.05em;
+}
+
+.cycle-number p {
+  color: inherit;
 }
 
 .cycle-number span {
@@ -3841,4 +3788,49 @@ small {
 }
 .how-details > summary {
   font-weight: 600;
+}
+
+.cycle-record {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 20px 0;
+  border-bottom: 1px solid var(--line);
+}
+.cycle-record h2 {
+  margin: 0;
+  font-size: 20px;
+}
+.cycle-record p {
+  margin: 6px 0 0;
+  color: var(--muted);
+}
+.cycle-record dl {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  margin: 0;
+}
+.cycle-record dt {
+  color: var(--muted);
+  font-size: 13px;
+}
+.cycle-record dd {
+  margin: 6px 0 0;
+  font-family: var(--brand-font-data);
+}
+.cycle-status-grid li[aria-current="step"] {
+  border-top: 3px solid var(--orange-dark);
+}
+.cycle-artifacts summary {
+  margin-bottom: 20px;
+}
+.cycle-artifacts .artifact-links small {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 680px) {
+  .cycle-record {
+    flex-direction: column;
+    gap: 16px;
+  }
 }
