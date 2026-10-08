@@ -9,7 +9,6 @@ import {
   useState,
 } from "react";
 import { identityPublicOrigin } from "../workers/identity/contracts";
-import { browserDeployment } from "./lib/browser-deployment";
 import { readBoundedJson, readBoundedText } from "./lib/browser-json";
 import type { CycleIndex } from "./lib/cycle-index";
 import { deploymentTier } from "./lib/deployment";
