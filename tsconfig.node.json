@@ -65,6 +65,7 @@
     "src/lib/solana-settlement.ts",
     "src/lib/wallets.ts",
     "src/lib/leaderboard-types.ts",
-    "src/lib/profiles.ts"
+    "src/lib/profiles.ts",
+    "src/lib/deployment.ts"
   ]
 }

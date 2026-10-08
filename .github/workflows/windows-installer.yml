@@ -2,7 +2,7 @@ name: Windows installer contract
 
 on:
   pull_request:
-    branches: [develop]
+    branches: [develop, development, main]
     paths:
       - ".github/workflows/windows-installer.yml"
       - "skills/contribute-to-*/scripts/run-receipt.mjs"

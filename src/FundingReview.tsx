@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ContributionQualityReview } from "./ContributionQualityReview";
+import { browserDeployment } from "./lib/browser-deployment";
 import { readBoundedJson } from "./lib/browser-json";
 import type { CycleIndex } from "./lib/cycle-index";
 import type { ProjectFundingIndex } from "./lib/funding";
@@ -260,7 +261,7 @@ export function FundingReview({
     setVaultObservation(null);
     try {
       const response = await fetch(
-        `https://api.slop.cash/api/v1/projects/${encodeURIComponent(project.id)}/funding/${cycleId}`,
+        `${browserDeployment.api}/api/v1/projects/${encodeURIComponent(project.id)}/funding/${cycleId}`,
         { cache: "no-store", signal: AbortSignal.timeout(35000) },
       );
       if (!response.ok)

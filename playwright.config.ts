@@ -22,6 +22,11 @@ if (!/^[0-9]{4,5}$/u.test(localPort)) {
 }
 const localOrigin = `http://127.0.0.1:${localPort}`;
 
+const localPort = Number(process.env.SLOP_E2E_PORT ?? 4466);
+if (!Number.isInteger(localPort) || localPort < 1024 || localPort > 65535)
+  throw new Error("SLOP_E2E_PORT must be an unprivileged TCP port");
+const localOrigin = `http://127.0.0.1:${localPort}`;
+
 const localServerCommand =
   localServer === "preview"
     ? `node node_modules/vite/bin/vite.js preview --host 127.0.0.1 --port ${localPort} --strictPort`

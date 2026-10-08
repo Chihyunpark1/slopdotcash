@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
+import { browserDeployment } from "./lib/browser-deployment";
 import {
   prepareWalletRegistration,
   type RegisteredWalletClaim,
@@ -342,7 +343,7 @@ export function WalletRegistration() {
             <code className="wallet-address">{registered.recordDigest}</code>
           </p>
           <a
-            href={`https://api.slop.cash/api/v1/wallet-claims/${registered.claimId}`}
+            href={`${browserDeployment.api}/api/v1/wallet-claims/${registered.claimId}`}
             target="_blank"
             rel="noreferrer"
           >

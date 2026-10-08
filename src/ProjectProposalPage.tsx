@@ -15,7 +15,7 @@ import {
 } from "./lib/project-proposal";
 import { SOURCE_REPOSITORY } from "./lib/source-repository";
 
-const PROJECT_PROPOSAL_ROOT = `${SOURCE_REPOSITORY}/new/develop`;
+const PROJECT_PROPOSAL_ROOT = `${SOURCE_REPOSITORY}/new/development`;
 export default function ProjectProposalPage() {
   const [name, setName] = useState("");
   const [repository, setRepository] = useState("");

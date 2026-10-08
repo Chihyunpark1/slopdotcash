@@ -1,5 +1,5 @@
 import { readPaymentSignerHistory } from "./payment-signer-history";
-/** Phase-two authenticated input loader. Only protected origin/develop is authoritative.
+/** Phase-two authenticated input loader. Only protected origin/main is authoritative.
  * This returns fixed reserved inputs, NOT payment readiness or releasable output:
  * prepare-settlement-plan runs live configuration/balance and the
  * complete authenticated signer ledger before releasing these exact bytes.
@@ -67,7 +67,7 @@ export async function loadCanonicalPaymentReservation(
   );
   if (!reservation)
     throw new TypeError(
-      "No reservation merged on protected canonical develop; branch/local plans are not releasable",
+      "No reservation merged on protected canonical main; branch/local plans are not releasable",
     );
   const project = assertProjectDefinition(
     reservationJson(

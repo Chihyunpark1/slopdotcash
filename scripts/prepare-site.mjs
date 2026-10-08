@@ -510,9 +510,9 @@ const manifest = {
     canonicalPath: skillRepositoryPath,
     releaseCandidateLabel: "slop-release-candidate",
     acceptedRevisions: [
-      "current develop head",
-      "develop ancestor whose complete canonical skill tree is byte-identical to current develop",
-      "open non-draft same-repository PR head into develop, zero behind current develop, with a release-candidate label event after the exact current-head event",
+      "current main head",
+      "main ancestor whose complete canonical skill tree is byte-identical to current main",
+      "open non-draft same-repository PR head into main, zero behind current main, with a release-candidate label event after the exact current-head event",
     ],
   },
   provenance: {

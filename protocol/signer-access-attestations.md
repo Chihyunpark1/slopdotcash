@@ -13,7 +13,7 @@ attesters are the instrument's numeric `funderActorId` and its independently
 reviewed `stewardGithub.actorId` plus immutable node ID, not a display login,
 commit author email, model judgment, or project owner substituted for a signer.
 Each role binds its exact reviewed Solana member key. The manifest revision must
-already be an ancestor of the operator's fetched `origin/develop`; proposed
+already be an ancestor of the operator's fetched `origin/main`; proposed
 head manifests do not establish authority. Fetch current GitHub before use.
 
 Reports bind project, manifest SHA, monthly cycle, complete instrument identity,
@@ -77,7 +77,7 @@ GitHub-signed commit with the exact report message. Only the final public report
 and public proof are supplied to Slop. Never include private keys, seed phrases,
 credentials, private wallet metadata, or private repository contents.
 
-After fetching trusted `develop`, run from the repository root:
+After fetching trusted `main`, run from the repository root:
 
 ```bash
 bun install --frozen-lockfile --ignore-scripts
@@ -101,7 +101,7 @@ noncanonical bytes, and missing GitHub authority fail the whole read. Working
 tree bytes cannot replace committed evidence. `funding:check` performs offline
 structural validation only; it is not proof of signer authentication.
 Trusted publication reauthenticates the committed history. Before preparing a
-new Squads-backed settlement plan, the command fetches current `develop`, reads
+new Squads-backed settlement plan, the command fetches current `main`, reads
 its complete history, and requires both current member proofs. This check uses
 the actual evaluation time, not the caller's plan timestamp. Lost or expired
 capability blocks new plans, but this necessary check does not activate payment,
