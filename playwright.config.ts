@@ -16,12 +16,6 @@ if (!new Set(["pages", "preview"]).has(localServer)) {
 }
 // scripts/run-e2e.mjs runs the preview and Pages phases at the same time, so
 // each phase binds its own port.
-const localPort = process.env.SLOP_E2E_PORT ?? "4466";
-if (!/^[0-9]{4,5}$/u.test(localPort)) {
-  throw new TypeError(`Invalid SLOP_E2E_PORT: ${localPort}`);
-}
-const localOrigin = `http://127.0.0.1:${localPort}`;
-
 const localPort = Number(process.env.SLOP_E2E_PORT ?? 4466);
 if (!Number.isInteger(localPort) || localPort < 1024 || localPort > 65535)
   throw new Error("SLOP_E2E_PORT must be an unprivileged TCP port");
