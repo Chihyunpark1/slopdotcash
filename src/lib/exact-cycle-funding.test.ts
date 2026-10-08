@@ -254,6 +254,7 @@ describe("exact-cycle reviewed funding", () => {
               kind: "reward-allocation",
               projectId: "eliza",
               cycleId,
+              chain: "solana",
               fundingBasis: basis,
             }),
           ],

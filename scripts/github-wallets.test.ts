@@ -90,6 +90,52 @@ describe("GitHub wallet observation", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("reads only the Base claim lineage for a Base cycle", async () => {
+    const baseAddress = `0x${"ab".repeat(20)}`;
+    const claim = {
+      schemaVersion: 1,
+      claimId: "wallet_claim_base",
+      githubActorId: "123456",
+      githubLogin: "finish-line",
+      chain: "base",
+      address: baseAddress,
+      source: "d1_registry",
+      sourceBodySha256: "a".repeat(64),
+      observedAt: "2026-08-01T12:00:00.000Z",
+      recordDigest: "b".repeat(64),
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(IDENTITY))
+      .mockResolvedValueOnce(jsonResponse(claim));
+    await expect(
+      fetchPublishedGithubWallet(
+        ACTOR_ID,
+        "finish-line",
+        "2026-08-02T00:00:00.000Z",
+        { chain: "base", fetch: fetchMock },
+      ),
+    ).resolves.toMatchObject({ address: baseAddress, chain: "base" });
+    expect(fetchMock.mock.calls[1][0]).toBe(
+      "https://api.slop.cash/api/v1/wallet-claims/actors/123456/current?chain=base",
+    );
+    // A Solana claim never answers for a Base cycle.
+    const wrongChain = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(IDENTITY))
+      .mockResolvedValueOnce(
+        jsonResponse({ ...claim, chain: "solana", address: ADDRESS }),
+      );
+    await expect(
+      fetchPublishedGithubWallet(
+        ACTOR_ID,
+        "finish-line",
+        "2026-08-02T00:00:00.000Z",
+        { chain: "base", fetch: wrongChain },
+      ),
+    ).rejects.toThrow(/registry claim is invalid/u);
+  });
+
   it("fails closed when the live GitHub actor identity changes", async () => {
     await expect(
       fetchPublishedGithubWallet(

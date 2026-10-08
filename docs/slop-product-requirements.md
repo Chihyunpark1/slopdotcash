@@ -68,7 +68,7 @@ Suggested pilot targets are product targets, not observed performance: at least 
 | Points | Durable journal, membership, X, contribution and recipient payout points | MVP: explicit setup and maintainer recognition without changing cash scores |
 | Leaderboards | Current project cycles, cumulative score, points standings, archive | MVP: Slop Score by default, points and money-received sorting, issue/PR outcome ratios and negative events |
 | Funding | Direct funding records and Squads/Sablier commitment verification | MVP: third-party vault funding and clearly defined withdrawal rights |
-| Payouts | Deterministic allocations, unsigned Solana plans, finalized verification; Base transfer verifier | MVP: complete Base/Solana reserve, approval, execution, and reconciliation paths |
+| Payouts | Deterministic allocations, unsigned Solana or Base plans per project network, finalized or quorum-confirmed verification | MVP: complete Base/Solana reserve, approval, execution, and reconciliation paths |
 | Private traces | Dedicated R2 storage and scoped metadata/authorization | Retain applicable protocol; do not reuse as a private bounty case system |
 | Security bounty business | No complete private program workflow established by this review | Future: opt-in private programs and 50/50 researcher split |
 | Other networks/products | Existing Ethereum/Bitcoin funding readers and external prize records | Preserve history; new Ethereum settlement and Robinhood are future |
@@ -273,6 +273,19 @@ The Base/Solana architecture proposal covers protected walletless awards, sponso
 | Merkle distributor | Potential lower cost at scale | Proof availability, root accounting, and late wallet binding add complexity |
 
 Squads separates proposal, vote, and execution permissions; that is useful governance but not evidence that a treasury enforces Slop's reserved obligations. Sablier's documented stream cancellation illustrates why a funding instrument's actual withdrawal rights must be inspected. The preference for obligation vaults is a product design inference, not a claim that third-party systems are insecure. [Squads permissions](https://docs.squads.so/main/development/reference/permissions), [Sablier FAQ](https://docs.sablier.com/support/faq)
+
+### Monthly-pool settlement network (approved)
+
+**PAY-09 — One settlement network per project.** On 8 October 2026 the repository owner (GitHub `lalalune`) approved [RFC #472](https://github.com/SlopDotCash/slopdotcash/issues/472). This rule applies to the current 1% monthly-pool settlement path, not to the protected vaults above.
+
+1. `reward.chain` in `projects/<id>/project.json` is the project's settlement network. The value is `solana` (default) or `base`. A pull request changes it. The trusted transition gate requires a new proposal to use the network of the reviewed base commit, so a change takes effect between cycles.
+2. A proposal freezes the network for its cycle. Its allocation, plan and settlement keep that network after a later project change. History is not rewritten.
+3. A contributor has one wallet claim per network. Only a claim on the cycle network is payable. A row without one stays `unclaimed`, as a missing wallet does today.
+4. A Base plan is an unsigned list of Base mainnet USDC transfers with EIP-681 requests. The source is the recipient of the frozen Base Sablier stream. The 1% fee stays a separate transfer that the creator sends. A Squads basis can only produce a Solana plan; a Base Sablier basis can only produce a Base plan.
+5. `paid` on Base requires the same exact reconciliation as on Solana: the read-only verifier from #470, a 2-of-3 RPC quorum and 12 confirmations prove the source debit and every recipient credit for every intent and the fee. A Base transaction must be confirmed after its plan was created, because an EIP-681 request has no memo.
+6. Slop holds no key and does not sign or broadcast. Ethereum mainnet settlement, Merkle claims and migration of existing cycles stay out of scope.
+
+Activation gates remain: the owner must publish the Base fee-recipient address, a reviewed Base payment policy, reservation and live-readiness path must exist, and the spare Base RPC authority issue (#471) needs a decision. Until then no Base project can enable payments.
 
 ### Lifecycle
 
@@ -729,6 +742,7 @@ For implementation, retain all required repository checks, lockfile/toolchain pi
 | Account versus project authority | Backend for private accounts; GitHub manifests for active project policy | Product and backend owners |
 | Trace and score conflicts | Reconcile local instructions with upstream protocols; publish one effective rule | Maintainers and protocol owner |
 | Payout execution authority | No Slop-held key originates, routes or redirects a payment: project-operated or permissionless execution; actor-binding proof and recovery authority remain blocked under PAY-05; a wallet signature alone is insufficient; counsel review before any change | Security, financial-protocol and legal owners |
+| Monthly-pool settlement network | **Approved 8 October 2026 (RFC #472):** one network per project in `reward.chain`, Solana or Base; frozen per cycle; fee is a separate transfer on the same network (PAY-09). Base fee recipient and Base payment activation remain open | Repository owner |
 | Payout fee | Maintainer-approved 2% deduction from new gross awards; show net contributor earnings, reserve gross as net principal plus fee, charge once and freeze per obligation; preserve legacy policy | Product and finance owners |
 | Withdrawal fee | 10% remains a proposal; validate sponsor demand and retain clear net-refund preview | Product and finance owners |
 | Public donation rights | Nonrefundable reward-restricted class, contract-enforced | Product, protocol and legal owners |

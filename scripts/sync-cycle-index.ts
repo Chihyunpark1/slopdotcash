@@ -40,8 +40,8 @@ import {
   type RewardSettlementManifest,
 } from "../src/lib/rewards";
 import {
-  assertSettlementExecutionPlan,
-  type SettlementExecutionPlan,
+  assertNetworkSettlementExecutionPlan,
+  type NetworkSettlementExecutionPlan,
 } from "../src/lib/settlement-plan";
 import { verifyRewardSettlementOnchain } from "../src/lib/solana-settlement";
 import { assertEscrowDecisions } from "./escrow-review";
@@ -51,6 +51,7 @@ import {
   DEFAULT_SOLANA_RPC_URL,
   fetchFinalizedSolanaTransaction,
 } from "./solana-rpc";
+import { verifyBaseSettlementTransaction } from "./verify-settlement-evm";
 
 const REPOSITORY_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export const CYCLES_ROOT = resolve(REPOSITORY_ROOT, "cycles");
@@ -81,7 +82,7 @@ interface CycleBuild {
   entry: CycleIndexEntry;
   files: Map<string, Buffer>;
   allocation: RewardAllocationManifest | null;
-  plan: SettlementExecutionPlan | null;
+  plan: NetworkSettlementExecutionPlan | null;
   settlement: RewardSettlementManifest | null;
 }
 
@@ -396,12 +397,12 @@ async function buildCycle(
   }
 
   const planFile = loaded.get("execution-plan.json") ?? null;
-  let plan: SettlementExecutionPlan | null = null;
+  let plan: NetworkSettlementExecutionPlan | null = null;
   if (planFile) {
     if (!allocation || !allocationFile) {
       throw new TypeError("Settlement plan has no approved allocation");
     }
-    plan = assertSettlementExecutionPlan(planFile.value, allocation);
+    plan = assertNetworkSettlementExecutionPlan(planFile.value, allocation);
     if (plan.allocationSha256 !== allocationFile.digest) {
       throw new TypeError("Settlement plan does not bind to allocation bytes");
     }
@@ -754,6 +755,7 @@ export async function syncCycleIndex(
             fetchFinalizedSolanaTransaction(rpc.toString(), signature),
           plan: build.plan,
           settlement: build.settlement,
+          verifyBaseTransaction: verifyBaseSettlementTransaction,
         });
       }
     }

@@ -891,7 +891,11 @@ function validateReward(
     if (
       hasExternal ||
       reward.currency !== "USDC" ||
-      reward.chain !== (escrow?.chain ?? "solana") ||
+      // `reward.chain` is the project's one settlement network (RFC #472).
+      // An escrow project settles on its escrow chain.
+      (escrow
+        ? reward.chain !== escrow.chain
+        : reward.chain !== "solana" && reward.chain !== "base") ||
       reward.unusedFunds !== "rollover-without-cap-increase" ||
       (paymentsDisabled
         ? !(
