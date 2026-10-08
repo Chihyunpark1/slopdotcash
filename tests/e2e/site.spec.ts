@@ -1568,6 +1568,18 @@ test("lands direct hash links on their section", async ({ page }) => {
 test("derives Solana addresses on the settlement verification page", async ({
   page,
 }, testInfo) => {
+  await page.goto("/how-it-works", { waitUntil: "networkidle" });
+  const verification = page.getByRole("heading", {
+    exact: true,
+    name: "Settlement verification",
+  });
+  await expect(verification).not.toBeVisible();
+  await page
+    .getByRole("link", { name: "Verification", exact: true })
+    .first()
+    .focus();
+  await page.keyboard.press("Enter");
+  await expect(verification).toBeVisible();
   await page.goto("/how-it-works#verification", { waitUntil: "networkidle" });
   await expect(
     page.getByRole("heading", { exact: true, name: "Settlement verification" }),
@@ -1578,6 +1590,7 @@ test("derives Solana addresses on the settlement verification page", async ({
     page.getByText("No execution has been bound yet.", { exact: false }),
   ).toBeVisible();
 
+  await page.getByText("Advanced verification", { exact: true }).click();
   // A real August 2026 recipient. Its canonical USDC associated token account
   // is fixed by the Solana address derivation, so the value below is checkable
   // against any explorer and pins the in-repo derivation to mainnet reality.
