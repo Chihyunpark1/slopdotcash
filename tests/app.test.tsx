@@ -594,10 +594,15 @@ describe("discovery", () => {
       .closest("a");
     expect(elizaCard).not.toBeNull();
     if (!elizaCard) throw new Error("Eliza project card is missing");
-    // A pledged pool headlines its state; the cap is small print only.
-    expect(within(elizaCard).getByText("Not funded yet")).toBeInTheDocument();
-    expect(within(elizaCard).queryByText("$5k")).not.toBeInTheDocument();
-    expect(within(elizaCard).getByText("Target $5k/mo")).toBeInTheDocument();
+    // The monthly amount stays prominent regardless of vault funding.
+    expect(
+      within(elizaCard).queryByText("Not funded yet"),
+    ).not.toBeInTheDocument();
+    expect(within(elizaCard).getByText("$5k")).toBeInTheDocument();
+    expect(within(elizaCard).getByText("/mo target")).toBeInTheDocument();
+    expect(
+      within(elizaCard).getByText("Vault: Unavailable"),
+    ).toBeInTheDocument();
     expect(
       screen.queryByText("The proof is the product."),
     ).not.toBeInTheDocument();
