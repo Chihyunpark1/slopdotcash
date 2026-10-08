@@ -236,6 +236,9 @@ jobs:
             echo "::warning::Playwright Chromium installation stalled or failed; retrying once."
           done
 
+      - name: Run installer lifecycle end-to-end checks
+        run: bun run test:installer:e2e
+
       - name: Run desktop and mobile browser tests
         env:
           SLOP_E2E_PREBUILT: "1"
