@@ -1,4 +1,5 @@
 /** Synthetic fixtures only: no production identity, key, or wallet claim. */
+import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import eliza from "../../projects/eliza/project.json";
 import {
@@ -209,19 +210,45 @@ describe("squads-project-vault instrument (RFC #500)", () => {
     ).toThrow(/Slop and independent members must differ/u);
   });
 
-  it("refuses payment activation on a project vault until the three-member protocol is reviewed", () => {
+  it("activates payments on a project vault only with its exact reviewed fresh-cycle policy", () => {
+    const [instrument] = assertFundingCommitments([projectVault()]);
+    const policy = {
+      schemaVersion: "1",
+      kind: "fresh-cycle-payment-policy",
+      projectId: "eliza",
+      cycleId: "2026-08",
+      effectiveAt: "2026-07-31T00:00:00.000Z",
+      planningExpiresAt: "2026-10-01T00:00:00.000Z",
+      instrumentSha256: createHash("sha256")
+        .update(JSON.stringify(instrument))
+        .digest("hex"),
+      feeRecipient: "ComputeBudget111111111111111111111111111111",
+    };
+    const enabled = project([projectVault()], { paymentMode: "enabled" });
+    expect(() => assertProjectDefinition(enabled)).toThrow(
+      /accessibility is unknown/u,
+    );
+    const withPolicy = {
+      ...enabled,
+      funding: { ...enabled.funding, freshCyclePaymentPolicy: policy },
+    };
+    expect(() => assertProjectDefinition(withPolicy)).not.toThrow();
     expect(() =>
       assertMonthlyCommitmentPolicy(
-        project([projectVault()], {
-          paymentMode: "enabled",
-        }) as unknown as Parameters<typeof assertMonthlyCommitmentPolicy>[0],
+        withPolicy as unknown as Parameters<
+          typeof assertMonthlyCommitmentPolicy
+        >[0],
       ),
-    ).toThrow(/project vault payment activation requires/u);
+    ).not.toThrow();
     expect(() =>
-      assertProjectDefinition(
-        project([projectVault()], { paymentMode: "enabled" }),
-      ),
-    ).toThrow();
+      assertProjectDefinition({
+        ...withPolicy,
+        funding: {
+          ...withPolicy.funding,
+          freshCyclePaymentPolicy: { ...policy, cycleId: "2026-09" },
+        },
+      }),
+    ).toThrow(/exact active/u);
   });
 
   it("binds commitment records to the three reviewed members and the project vault verifier", () => {

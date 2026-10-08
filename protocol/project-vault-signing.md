@@ -3,9 +3,9 @@
 This is the procedure the holder of Slop's project vault key follows. It
 applies only to the 2-of-3 `squads-project-vault` instrument from RFC #500,
 described in [`funding/README.md`](../funding/README.md). It is not in force
-for any project today: no manifest declares a project vault, project vaults
-cannot activate payments, and the first vault waits on the written opinion of
-Slop's US counsel. Publishing the rule before the first vault exists lets
+for any project today: no manifest declares a project vault, and the first
+vault waits on the written opinion of Slop's US counsel and on Shaw's sign-off
+on RFC #500 sections 2 and 3. Publishing the rule before the first vault exists lets
 creators, contributors, the independent signer, and counsel review it as a
 fixed text.
 
@@ -31,6 +31,11 @@ Slop any authority it does not already lack on chain.
   threshold is two and the key cannot write or execute a transfer.
 - The same person may hold Slop's key on several project vaults. The key on
   each vault is distinct, so a compromise is contained to one vault.
+- Slop's key files no signer-capability report. The capability protocol
+  (`protocol/signer-access-attestations.md`) covers the creator and the
+  independent signer, the two members a release depends on. A standing
+  statement that Slop can vote would read as a promise to approve, and this
+  procedure makes no such promise: every vote follows the six checks below.
 
 ## 2. Before every vote on a payout
 
