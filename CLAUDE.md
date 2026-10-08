@@ -404,3 +404,17 @@ only when genuinely inapplicable. Captured evidence is not committed.
 A local test is not proof of merge. A merge is not proof of deployment. A
 deployment is not proof of provider, device, identity, wallet, or settlement
 availability. Report each boundary precisely.
+
+
+## Escrow payout migration
+
+The maintainer-authorized escrow MVP is defined in `docs/payouts-mvp.md` and
+`docs/base-solana-payout-plan.md`. Its scoped contract, identity attestation and
+relayer services may execute isolated test-chain transactions under those rules.
+This supersedes the legacy unsigned-only model for that protocol only. Never
+use production credentials or move mainnet funds during testnet qualification.
+New gross awards deduct 2% before contributor earnings are displayed or paid.
+Unused-fund withdrawals deduct 10%; funded obligations cannot be withdrawn.
+Historical v1 records retain their original fee and authority rules. No project
+activates escrow merely because the new code is present. Keep project deployment
+bindings in the canonical manifest, never in a second project inventory.

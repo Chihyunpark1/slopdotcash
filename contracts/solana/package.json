@@ -1,0 +1,12 @@
+{
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "bash scripts/test-local.sh"
+  },
+  "dependencies": {
+    "@coral-xyz/anchor": "0.32.1",
+    "@solana/spl-token": "0.4.14",
+    "@solana/web3.js": "1.98.4"
+  }
+}

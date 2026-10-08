@@ -38,6 +38,7 @@ async function proof(
   };
   return {
     ...canonical,
+    chain: "solana",
     claimId: "claim_test",
     recordDigest: await digest(canonical),
   };
@@ -202,7 +203,7 @@ describe("wallet registration browser protocol", () => {
     const current = await proof();
     const h = harness({ current });
     const session = await preview(h);
-    expect(await session.confirm()).toEqual(current);
+    expect(await session.confirm()).toEqual({ ...current, chain: "solana" });
     expect(h.calls.some((call) => call.url.endsWith("/wallet-claims"))).toBe(
       false,
     );
