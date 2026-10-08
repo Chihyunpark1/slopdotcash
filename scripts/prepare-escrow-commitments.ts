@@ -1,7 +1,10 @@
 /** Produce unsigned owner requests from an exact source-bound, review-complete proposal. */
-import { createHash } from "node:crypto";
 import { resolve } from "node:path";
-import { buildCommitAwardCalldata } from "../contracts/evm/adapter";
+import {
+  baseAwardId,
+  buildCommitAwardCalldata,
+} from "../contracts/evm/adapter";
+import { solanaAwardId } from "../contracts/solana/adapter";
 import { ESCROW_NETWORKS } from "../src/lib/escrow-policy.mjs";
 import { findProject } from "../src/lib/projects.mjs";
 import {
@@ -71,16 +74,16 @@ export async function prepareEscrowCommitments(
           0n,
     )
     .map((award) => ({
-      awardId: createHash("sha256")
-        .update(
-          JSON.stringify([
-            "slop-escrow-award-v2",
-            digest,
-            review.decisionsSha256,
-            award.sourceDigest,
-          ]),
-        )
-        .digest("hex"),
+      // The escrow accepts only this vault-bound ID, so no other project can
+      // reserve it first.
+      awardId:
+        project.escrow?.chain === "base"
+          ? baseAwardId(
+              BigInt(ESCROW_NETWORKS[deployment.network].chainId ?? "0"),
+              deployment.vault,
+              `0x${award.sourceDigest}`,
+            ).slice(2)
+          : solanaAwardId(deployment.projectPda ?? "", award.sourceDigest),
       sourceDigest: award.sourceDigest,
       githubUserId: award.githubUserId,
       grossMicro: decisions.get(award.githubUserId)?.approvedGrossMicro ?? "0",

@@ -47,9 +47,21 @@ also has a separate Anvil integration workflow in `contracts/evm`.
 finalized Base logs and Solana signature history, then reconciles submitted or
 uncertain attempts and dispatches ready obligations. Cursors advance only after
 every recognized event is verified and indexed. Base starts from the reviewed
-deployment transaction. Solana paginates project-account signature history.
-A failed or unavailable RPC never advances coverage. Queue ingestion remains
-available for faster event delivery and uses the same verification.
+deployment transaction. Solana paginates project-account signature history,
+indexes only this project's escrow instructions, handles at most 100
+transactions per run, and saves its position after each one. A failed or
+unavailable RPC never advances coverage. A failure in one deployment or step is
+reported but does not stop the other deployments, recovery, reconciliation, or
+dispatch. Queue ingestion remains available for faster event delivery and uses
+the same verification.
+
+The ledger records `paid` only when the payout destination is one of the
+contributor's authorized wallets. Any other destination means the identity
+authority was misused, so indexing fails closed for investigation. Executors
+never sign a payment for a pending, cancelled, or vetoed binding. A successor
+wallet waits 24 hours even where the escrow has no earlier binding for that
+contributor. A reverted Base bind transaction is retired so a fresh bind can
+replace it.
 
 Derive `PAYMENT_DEPLOYMENTS` from reviewed project manifests. Resolve private
 RPC URLs through `PAYMENT_RPC_URLS`, keyed by network; do not publish them in

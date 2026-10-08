@@ -6,6 +6,8 @@ import type {
 } from "../../backend/payments/dispatch";
 import type { D1Database } from "../../backend/trace/cloudflare-persistence";
 import {
+  BINDING_SIZE,
+  PROJECT_SIZE,
   type SolanaEscrowConfig,
   solanaAccount,
   solanaBase58,
@@ -19,6 +21,7 @@ import { decodeBase58Bytes } from "../../src/lib/squads-funding";
 import {
   authorizeRegistry,
   authorizeWalletRotation,
+  holdSuccessorClaim,
   type JournalStore,
 } from "./core";
 
@@ -89,6 +92,11 @@ function pda(program: string, seeds: Uint8Array[]): string {
   }
   throw new Error("No program address");
 }
+const int64 = (value: Uint8Array, offset: number) =>
+  new DataView(value.buffer, value.byteOffset, value.byteLength).getBigInt64(
+    offset,
+    true,
+  );
 const instructionData = (name: string, ...args: Uint8Array[]) =>
   concat(sha256(encoder.encode(`global:${name}`)).slice(0, 8), ...args);
 interface Meta {
@@ -255,7 +263,7 @@ async function authorized(
   const project = await read(
     config,
     config.projectPda,
-    249,
+    PROJECT_SIZE,
     "cda8bdcab5f78e13",
   );
   if (
@@ -295,7 +303,12 @@ async function authorized(
     project.slice(72, 104),
     le(BigInt(input.githubUserId)),
   ]);
-  const binding = await read(config, bindingAddress, 152, "33d3ccb9a84434b0");
+  const binding = await read(
+    config,
+    bindingAddress,
+    BINDING_SIZE,
+    "33d3ccb9a84434b0",
+  );
   return { config, project, obligation, awardAddress, bindingAddress, binding };
 }
 interface Attempt {
@@ -459,6 +472,7 @@ export function createSolanaAttester(
           input,
           hex(ctx.binding.slice(8, 40)),
         );
+      if (!ctx.binding) await holdSuccessorClaim(env, input);
       const version = ctx.binding ? solanaUint(ctx.binding, 144) : 0n;
       const ix: Instruction = {
         program: ctx.config.programId,
@@ -497,6 +511,26 @@ export function createSolanaExecutor(
         await env.ATTESTER.submit(input);
         throw new Error("Destination binding awaiting finality");
       }
+      const version = solanaUint(ctx.binding, 144);
+      const activatesAt = int64(ctx.binding, 152) + int64(ctx.project, 249);
+      if (BigInt(Math.floor(Date.now() / 1000)) < activatesAt)
+        throw new Error(
+          `Destination binding activates at ${new Date(Number(activatesAt) * 1000).toISOString()}; retry after activation`,
+        );
+      const veto = pda(ctx.config.programId, [
+        encoder.encode("veto"),
+        bytes(ctx.config.projectPda),
+        le(BigInt(input.githubUserId)),
+        le(version),
+      ]);
+      const vetoed = (await solanaRpc(ctx.config, "getAccountInfo", [
+        veto,
+        { commitment: "finalized", encoding: "base64" },
+      ])) as { value: { owner: string } | null };
+      if (vetoed.value && vetoed.value.owner !== SYSTEM)
+        throw new Error(
+          "Project owner vetoed this destination binding; identity review required",
+        );
       if (env.SOLANA_SIGNER.address === solanaPubkey(ctx.project, 8))
         throw new Error("Gas payer must be separate from project owner");
       if (env.SOLANA_SIGNER.address === solanaPubkey(ctx.project, 104))
@@ -513,8 +547,9 @@ export function createSolanaExecutor(
           { key: ata(ctx.config.mint, input.destination), write: true },
           { key: ata(ctx.config.mint, feeOwner), write: true },
           { key: TOKEN, write: false },
+          { key: veto, write: false },
         ],
-        data: instructionData("pay", le(solanaUint(ctx.binding, 144))),
+        data: instructionData("pay", le(version)),
       };
       return send(env, ctx, input, "relayer", [
         createAta(

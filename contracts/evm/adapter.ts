@@ -10,6 +10,8 @@ export interface BaseEscrowConfig {
   identityAuthority: string;
   feeRecipient: string;
   codeSha256: string;
+  /** Reviewed delay, in seconds, before a destination binding can pay. */
+  bindingDelaySeconds: string;
 }
 
 export interface FinalizedEscrowEvent {
@@ -91,7 +93,9 @@ export async function verifyBaseDeployment(
       config.identityAuthority,
       config.feeRecipient,
     ].every((value) => ADDRESS.test(value)) ||
-    !/^[0-9a-f]{64}$/.test(config.codeSha256)
+    !/^[0-9a-f]{64}$/.test(config.codeSha256) ||
+    !/^(0|[1-9][0-9]*)$/.test(config.bindingDelaySeconds) ||
+    BigInt(config.bindingDelaySeconds) > U64
   )
     throw new Error("Reviewed deployment identity is incomplete");
   if (quantity(await rpc(config, "eth_chainId", [])) !== config.chainId)
@@ -133,6 +137,34 @@ export async function verifyBaseDeployment(
         "Escrow asset or authority does not match reviewed deployment",
       );
   }
+  const delay = await rpc(config, "eth_call", [
+    { to: config.vault, data: "0x7b5290e8" },
+    blockTag,
+  ]);
+  if (
+    typeof delay !== "string" ||
+    !/^0x[0-9a-fA-F]{64}$/.test(delay) ||
+    BigInt(delay) !== BigInt(config.bindingDelaySeconds)
+  )
+    throw new Error("Escrow binding delay does not match reviewed deployment");
+}
+
+/** The only award ID ProjectEscrow accepts: keccak256(abi.encode(chainId, vault, sourceDigest)). */
+export function baseAwardId(
+  chainId: bigint,
+  vault: string,
+  sourceDigest: string,
+): string {
+  if (!ADDRESS.test(vault) || chainId <= 0n || chainId > U64)
+    throw new Error("Invalid award domain");
+  const source = hash(sourceDigest);
+  const encoded = `${chainId.toString(16).padStart(64, "0")}${vault.slice(2).toLowerCase().padStart(64, "0")}${source.slice(2)}`;
+  const bytes = Uint8Array.from(encoded.match(/../g) ?? [], (pair) =>
+    Number.parseInt(pair, 16),
+  );
+  return `0x${Array.from(keccak_256(bytes), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("")}`;
 }
 
 async function finalizedLog(
@@ -302,14 +334,14 @@ export async function verifyBinding(
     !Array.isArray(log.topics) ||
     log.topics.length !== 3 ||
     typeof log.data !== "string" ||
-    !/^0x[0-9a-fA-F]{128}$/.test(log.data)
+    !/^0x[0-9a-fA-F]{192}$/.test(log.data)
   ) {
     throw new Error("Wrong binding event encoding");
   }
   const topics = log.topics.map(hash);
   if (
     topics[0] !==
-      "0x65c84dc86f977815635094abfc5670766dfe980ba9376a804b2ed413997cfb03" ||
+      "0xa228a74ce6410fbd6c2c835cf0114180aa30e657287b2f9d47a1ed6c06a2b4b4" ||
     !/^0x0{24}[0-9a-f]{40}$/.test(topics[2])
   ) {
     throw new Error("Wrong binding event");
@@ -317,7 +349,8 @@ export async function verifyBinding(
   const actor = uint64(topics[1].slice(2));
   const version = uint64(log.data.slice(2, 66));
   const destination = `0x${topics[2].slice(-40)}`;
-  const claimDigest = `0x${log.data.slice(66).toLowerCase()}`;
+  const claimDigest = `0x${log.data.slice(66, 130).toLowerCase()}`;
+  const activatesAt = uint64(log.data.slice(130, 194));
   if (
     actor === 0n ||
     actor.toString() !== githubUserId ||
@@ -335,6 +368,7 @@ export async function verifyBinding(
     destination,
     bindingVersion: version.toString(),
     claimDigest,
+    activatesAt: activatesAt.toString(),
   };
 }
 
@@ -390,6 +424,19 @@ export function buildCommitAwardCalldata(input: {
   )
     throw new Error("Invalid award input");
   return `0x126db652${hash(input.obligationId).slice(2)}${word(input.githubUserId)}${word(input.grossMicro)}${hash(input.sourceDigest).slice(2)}`;
+}
+/** Owner-only: stops a pending binding before it can pay. */
+export function buildCancelBindingCalldata(
+  githubUserId: string,
+  bindingVersion: string,
+) {
+  if (githubUserId === "0" || bindingVersion === "0")
+    throw new Error("Invalid binding cancellation");
+  return `0x92be84fc${word(githubUserId)}${word(bindingVersion)}`;
+}
+/** Permissionless: moves accrued fees to the immutable fee recipient. */
+export function buildClaimFeesCalldata() {
+  return "0xd294f093";
 }
 export function buildWithdrawCalldata(grossMicro: string) {
   if (grossMicro === "0") throw new Error("Withdrawal must be positive");

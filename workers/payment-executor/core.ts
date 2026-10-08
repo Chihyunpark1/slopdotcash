@@ -57,6 +57,7 @@ interface Deployment {
   identityAuthority: string;
   feeRecipient: string;
   codeSha256: string;
+  bindingDelaySeconds: string;
 }
 export interface Authorization extends DispatchPayment {
   projectId: string;
@@ -256,13 +257,51 @@ async function obligation(config: Deployment, authorization: Authorization) {
     throw new Error("Finalized award differs from approved ledger");
   return BigInt(`0x${state[4]}`) !== 0n;
 }
+const CANCELLED = (1n << 64n) - 1n;
 async function binding(config: Deployment, actor: string) {
-  const state = await call(config, `0xa45d1232${word(actor)}`, 3);
+  const state = await call(config, `0xa45d1232${word(actor)}`, 4);
   return {
     destination: `0x${state[0].slice(24)}`,
     version: BigInt(`0x${state[1]}`).toString(),
     claimDigest: state[2],
+    activatesAt: BigInt(`0x${state[3]}`),
   };
+}
+/** Pending and owner-cancelled bindings cannot pay; never sign a transaction that must revert. */
+async function assertBindingActive(config: Deployment, activatesAt: bigint) {
+  if (activatesAt === CANCELLED)
+    throw new Error(
+      "Project owner cancelled this destination binding; identity review required",
+    );
+  // The contract compares block time, not this worker's clock.
+  const latest = (await rpc(config, "eth_getBlockByNumber", [
+    "latest",
+    false,
+  ])) as { timestamp: string };
+  if (BigInt(latest.timestamp) < activatesAt)
+    throw new Error(
+      `Destination binding activates at ${new Date(Number(activatesAt) * 1000).toISOString()}; retry after activation`,
+    );
+}
+/** A reverted bind changed nothing on-chain, so a fresh bind may replace it. */
+async function retireRevertedBind(
+  env: ExecutorEnvironment,
+  config: Deployment,
+  key: string,
+  attempt: Attempt,
+): Promise<boolean> {
+  const receipt = (await rpc(config, "eth_getTransactionReceipt", [
+    attempt.transactionId,
+  ])) as { status: string } | null;
+  if (!receipt || receipt.status === "0x1") return false;
+  return env.JOURNAL.transaction(async (store) => {
+    const current = await store.get<Attempt | null>(key);
+    if (!current || current.transactionId !== attempt.transactionId)
+      return false;
+    await store.put(`${key}:reverted:${attempt.transactionId}`, current);
+    await store.put(key, null);
+    return true;
+  });
 }
 
 async function signAndSubmit(
@@ -387,14 +426,18 @@ export function createBaseAttester(env: ExecutorEnvironment): PaymentExecutor {
           input.idempotencyKey,
         ]),
       );
-      const existing = await env.JOURNAL.get<Attempt>(key);
-      if (existing)
+      const existing = await env.JOURNAL.get<Attempt | null>(key);
+      if (
+        existing &&
+        !(await retireRevertedBind(env, deployment, key, existing))
+      )
         return signAndSubmit(env, deployment, key, fingerprint, "", input);
       if (await obligation(deployment, authorization))
         throw new Error("Award already paid");
       const current = await binding(deployment, input.githubUserId);
       if (current.version !== "0")
         await authorizeWalletRotation(env, input, current.claimDigest);
+      else await holdSuccessorClaim(env, input);
       return signAndSubmit(
         env,
         deployment,
@@ -452,6 +495,7 @@ export function createBaseExecutor(env: ExecutorEnvironment): PaymentExecutor {
           "Destination binding awaits finality; retry the same attempt",
         );
       }
+      await assertBindingActive(deployment, current.activatesAt);
       // Re-read registry authorization before signing. The contract resolves any subsequent rotation race.
       await authorize(env, input);
       return signAndSubmit(
@@ -498,6 +542,37 @@ export async function lookupAttempt(
   return { transactionId: attempt.transactionId };
 }
 
+const ROTATION_HOLD_MS = 24 * 60 * 60 * 1000;
+function assertRotationHoldElapsed(createdAt: string, authorizedAt: string) {
+  const activatedAt = Math.max(Date.parse(createdAt), Date.parse(authorizedAt));
+  if (
+    !Number.isFinite(activatedAt) ||
+    Date.now() < activatedAt + ROTATION_HOLD_MS
+  )
+    throw new Error(
+      "Wallet rotation held for 24 hours after registration and authorization",
+    );
+}
+
+/** A successor wallet waits out the rotation hold even where no binding exists yet. */
+export async function holdSuccessorClaim(
+  env: { PAYMENTS_DB: D1Database },
+  input: Input,
+): Promise<void> {
+  const claim = await env.PAYMENTS_DB.prepare(
+    "SELECT w.supersedes_claim_id supersedes,w.created_at createdAt,a.authorized_at authorizedAt FROM wallet_claims w JOIN payment_wallet_authorizations a ON a.claim_id=w.id AND a.github_user_id=w.github_user_id WHERE w.id=? AND w.github_user_id=?",
+  )
+    .bind(input.claimId, input.githubUserId)
+    .first<{
+      supersedes: string | null;
+      createdAt: string;
+      authorizedAt: string;
+    }>();
+  if (!claim) throw new Error("Wallet authorization missing");
+  if (claim.supersedes !== null)
+    assertRotationHoldElapsed(claim.createdAt, claim.authorizedAt);
+}
+
 /** Delayed user-authorized successor activation; never an administrator override. */
 export async function authorizeWalletRotation(
   env: { PAYMENTS_DB: D1Database },
@@ -516,17 +591,7 @@ export async function authorizeWalletRotation(
   if (!current || !["base", "solana"].includes(current.chain))
     throw new Error("Wallet rotation authorization missing");
   await authorizeRegistry(env, input, current.chain);
-  const activatedAt = Math.max(
-    Date.parse(current.createdAt),
-    Date.parse(current.authorizedAt),
-  );
-  if (
-    !Number.isFinite(activatedAt) ||
-    Date.now() < activatedAt + 24 * 60 * 60 * 1000
-  )
-    throw new Error(
-      "Wallet rotation held for 24 hours after registration and authorization",
-    );
+  assertRotationHoldElapsed(current.createdAt, current.authorizedAt);
   const lineage =
     "WITH RECURSIVE lineage(id,supersedes_claim_id,record_sha256,depth) AS (SELECT id,supersedes_claim_id,record_sha256,0 FROM wallet_claims WHERE id=? AND github_user_id=? AND chain=? UNION ALL SELECT w.id,w.supersedes_claim_id,w.record_sha256,l.depth+1 FROM wallet_claims w JOIN lineage l ON l.supersedes_claim_id=w.id WHERE w.github_user_id=? AND w.chain=? AND l.depth<100) ";
   const args = [

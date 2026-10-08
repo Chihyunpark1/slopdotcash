@@ -1,4 +1,5 @@
 import type { D1Database } from "../../backend/trace/cloudflare-persistence";
+import { escrowInvocations } from "../../contracts/solana/adapter";
 export interface ScanDeployment {
   projectId: string;
   network: string;
@@ -113,13 +114,21 @@ export async function scanBasePayments(
     )
     .run();
 }
+const SOLANA_SIGNATURE_PAGES = 20;
+const SOLANA_TRANSACTIONS_PER_RUN = 100;
+/**
+ * Indexes this project's escrow instructions oldest first. Anyone can mention
+ * the project account in a transaction, so other projects' instructions are
+ * skipped, work per run is bounded, and the cursor advances per transaction.
+ */
 export async function scanSolanaPayments(
   db: D1Database,
   deployment: ScanDeployment,
   rpcUrl: string,
   index: (event: ScanEvent) => Promise<void>,
 ): Promise<void> {
-  if (!deployment.projectPda || !deployment.programId)
+  const { projectPda, programId } = deployment;
+  if (!projectPda || !programId)
     throw new Error("Solana project deployment missing");
   const cursor = await db
     .prepare(
@@ -129,9 +138,11 @@ export async function scanSolanaPayments(
     .first<{ position: string }>();
   const signatures: { signature: string; err: unknown }[] = [];
   let before: string | undefined;
-  while (true) {
-    const page = (await rpc(rpcUrl, "getSignaturesForAddress", [
-      deployment.projectPda,
+  for (let page = 0; ; page++) {
+    if (page === SOLANA_SIGNATURE_PAGES)
+      throw new Error("Solana scanner backlog exceeds one run");
+    const result = (await rpc(rpcUrl, "getSignaturesForAddress", [
+      projectPda,
       {
         commitment: "finalized",
         limit: 1000,
@@ -139,62 +150,71 @@ export async function scanSolanaPayments(
         ...(cursor ? { until: cursor.position } : {}),
       },
     ])) as { signature: string; err: unknown }[];
-    if (!Array.isArray(page)) throw new Error("Invalid Solana signature page");
-    signatures.push(...page);
-    if (page.length < 1000) break;
-    before = page[page.length - 1].signature;
+    if (!Array.isArray(result))
+      throw new Error("Invalid Solana signature page");
+    signatures.push(...result);
+    if (result.length < 1000) break;
+    before = result[result.length - 1].signature;
   }
-  const latest = signatures[0]?.signature;
-  for (const item of signatures.reverse()) {
-    if (item.err) continue;
-    const tx = (await rpc(rpcUrl, "getTransaction", [
-      item.signature,
-      { commitment: "finalized", maxSupportedTransactionVersion: 0 },
-    ])) as { meta: { err: unknown; logMessages: string[] } } | null;
-    if (!tx?.meta || tx.meta.err)
-      throw new Error("Finalized transaction unavailable");
-    const stack: string[] = [];
-    for (const [eventIndex, line] of tx.meta.logMessages.entries()) {
-      const invoke = /^Program (\w+) invoke \[\d+\]$/.exec(line);
-      if (invoke) stack.push(invoke[1]);
-      if (
-        line.startsWith("Program data: ") &&
-        stack.at(-1) === deployment.programId
-      ) {
-        const bytes = Uint8Array.from(atob(line.slice(14)), (c) =>
-          c.charCodeAt(0),
-        );
-        const hex = (value: Uint8Array) =>
-          Array.from(value, (b) => b.toString(16).padStart(2, "0")).join("");
-        const tag = hex(bytes.slice(0, 8));
-        if (tag === "140fcba476acd0cb" || tag === "8e7aeab516affa91") {
-          const kind = tag === "140fcba476acd0cb" ? "reserved" : "paid";
-          const offset = kind === "reserved" ? 80 : 48;
-          await index({
-            projectId: deployment.projectId,
-            network: deployment.network,
-            transactionId: item.signature,
-            eventIndex,
-            kind,
-            obligationId: hex(bytes.slice(offset, offset + 32)),
-          });
-        }
-      }
-      const end = /^Program (\w+) (?:success|failed:.*)$/.exec(line);
-      if (end && stack.pop() !== end[1])
-        throw new Error("Invalid program invocation stack");
-    }
-  }
-  if (latest)
-    await db
+  const save = (signature: string) =>
+    db
       .prepare(
         "INSERT INTO payment_chain_cursors VALUES(?,?,?,?) ON CONFLICT(project_id,network) DO UPDATE SET position=excluded.position,synced_at=excluded.synced_at",
       )
       .bind(
         deployment.projectId,
         deployment.network,
-        latest,
+        signature,
         new Date().toISOString(),
       )
       .run();
+  for (const item of signatures
+    .reverse()
+    .slice(0, SOLANA_TRANSACTIONS_PER_RUN)) {
+    if (!item.err) {
+      const tx = (await rpc(rpcUrl, "getTransaction", [
+        item.signature,
+        {
+          commitment: "finalized",
+          encoding: "jsonParsed",
+          maxSupportedTransactionVersion: 0,
+        },
+      ])) as Record<string, unknown> | null;
+      const meta = tx?.meta as { err: unknown } | undefined;
+      if (!tx || !meta || meta.err)
+        throw new Error("Finalized transaction unavailable");
+      for (const invocation of escrowInvocations(tx, programId)) {
+        const project =
+          invocation.kind === "reserved"
+            ? invocation.accounts[1]
+            : invocation.accounts[0];
+        if (project !== projectPda) continue;
+        let obligationId: string;
+        if (invocation.kind === "reserved")
+          obligationId = hex(invocation.data.slice(8, 40));
+        else {
+          const award = (await rpc(rpcUrl, "getAccountInfo", [
+            invocation.accounts[1],
+            { commitment: "finalized", encoding: "base64" },
+          ])) as { value: { data: [string, string] } | null };
+          if (!award?.value) throw new Error("Paid award account missing");
+          const bytes = Uint8Array.from(atob(award.value.data[0]), (c) =>
+            c.charCodeAt(0),
+          );
+          obligationId = hex(bytes.slice(80, 112));
+        }
+        await index({
+          projectId: deployment.projectId,
+          network: deployment.network,
+          transactionId: item.signature,
+          eventIndex: invocation.index,
+          kind: invocation.kind,
+          obligationId,
+        });
+      }
+    }
+    await save(item.signature);
+  }
 }
+const hex = (value: Uint8Array) =>
+  Array.from(value, (b) => b.toString(16).padStart(2, "0")).join("");

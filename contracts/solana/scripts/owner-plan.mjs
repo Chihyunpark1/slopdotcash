@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import anchor from "@coral-xyz/anchor";
 import {
+  createAssociatedTokenAccountIdempotentInstruction,
   getAssociatedTokenAddressSync,
   TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
@@ -30,6 +31,25 @@ const amount = (value) => {
     throw new Error("Expected positive u64 decimal amount");
   return new BN(value);
 };
+const delay = (value) => {
+  if (typeof value !== "string" || !/^(0|[1-9][0-9]{0,18})$/.test(value))
+    throw new Error("Expected reviewed binding delay in seconds");
+  return new BN(value);
+};
+/** The only award ID the program accepts for a source in this project. */
+export function awardIdFor(project, source) {
+  return [
+    ...createHash("sha256")
+      .update(
+        Buffer.concat([
+          Buffer.from("slop-escrow-award"),
+          project.toBuffer(),
+          Buffer.from(source),
+        ]),
+      )
+      .digest(),
+  ];
+}
 export async function ownerPlan(input, runtime) {
   const d = input.deployment,
     connection = new Connection(runtime.rpcUrl, "finalized");
@@ -109,6 +129,7 @@ export async function ownerPlan(input, runtime) {
           hash(d.networkDomain),
           new PublicKey(d.identityAuthority),
           new PublicKey(d.feeRecipient),
+          delay(d.bindingDelaySeconds),
         )
         .accountsStrict({
           owner,
@@ -127,6 +148,7 @@ export async function ownerPlan(input, runtime) {
       !state.mint.equals(mint) ||
       !state.identityAuthority.equals(new PublicKey(d.identityAuthority)) ||
       !state.feeRecipient.equals(new PublicKey(d.feeRecipient)) ||
+      !state.bindingDelay.eq(delay(d.bindingDelaySeconds)) ||
       !Buffer.from(state.network).equals(Buffer.from(hash(d.networkDomain)))
     )
       throw new Error("Reviewed project configuration mismatch");
@@ -144,8 +166,22 @@ export async function ownerPlan(input, runtime) {
           })
           .instruction(),
       );
-    else if (input.operation === "withdraw")
+    else if (input.operation === "withdraw") {
+      // The fee recipient's account may not exist yet; creating it is idempotent.
+      const feeRecipient = new PublicKey(d.feeRecipient);
       instructions.push(
+        createAssociatedTokenAccountIdempotentInstruction(
+          owner,
+          getAssociatedTokenAddressSync(mint, owner),
+          owner,
+          mint,
+        ),
+        createAssociatedTokenAccountIdempotentInstruction(
+          owner,
+          getAssociatedTokenAddressSync(mint, feeRecipient, true),
+          feeRecipient,
+          mint,
+        ),
         await program.methods
           .withdraw(amount(input.grossMicro))
           .accountsStrict({
@@ -163,7 +199,33 @@ export async function ownerPlan(input, runtime) {
           })
           .instruction(),
       );
-    else if (input.operation === "commit") {
+    } else if (input.operation === "veto") {
+      // Stops a pending wallet binding for this project before it can pay.
+      const actor = amount(input.githubUserId),
+        version = amount(input.bindingVersion);
+      instructions.push(
+        await program.methods
+          .vetoBinding(actor, version)
+          .accountsStrict({
+            owner,
+            project,
+            binding: pda(
+              Buffer.from("wallet"),
+              state.identityAuthority.toBuffer(),
+              Buffer.from(state.network),
+              actor.toArrayLike(Buffer, "le", 8),
+            ),
+            veto: pda(
+              Buffer.from("veto"),
+              project.toBuffer(),
+              actor.toArrayLike(Buffer, "le", 8),
+              version.toArrayLike(Buffer, "le", 8),
+            ),
+            systemProgram: SystemProgram.programId,
+          })
+          .instruction(),
+      );
+    } else if (input.operation === "commit") {
       if (
         !Array.isArray(input.awards) ||
         input.awards.length < 1 ||
@@ -173,6 +235,10 @@ export async function ownerPlan(input, runtime) {
       for (const award of input.awards) {
         const awardId = hash(award.awardId),
           source = hash(award.sourceDigest);
+        if (
+          !Buffer.from(awardId).equals(Buffer.from(awardIdFor(project, source)))
+        )
+          throw new Error("Award ID is not bound to this project and source");
         instructions.push(
           await program.methods
             .commit(

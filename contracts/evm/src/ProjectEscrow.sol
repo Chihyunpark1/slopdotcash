@@ -8,8 +8,11 @@ interface IERC20 {
     function decimals() external view returns (uint8);
 }
 
-/// @notice Version 2, immutable single-project, single-asset escrow.
-/// @dev The identity authority can redirect unpaid awards; it cannot change amounts.
+/// @notice Version 3, immutable single-project, single-asset escrow.
+/// @dev The identity authority can redirect unpaid awards; it cannot change amounts. Every binding waits
+/// bindingDelay before it can pay, and the owner can cancel a pending binding, so a stolen authority key
+/// cannot pay itself before the sponsor can react. Fees accrue in the vault and are pulled separately, so
+/// a blocked fee recipient cannot stop payouts or refunds.
 /// Tokens must have exact transfers and six decimals (USDC). No upgrade or reserve rescue exists.
 contract ProjectEscrow {
     struct Award {
@@ -24,6 +27,7 @@ contract ProjectEscrow {
         address destination;
         uint64 version;
         bytes32 claimDigest;
+        uint64 activatesAt;
     }
 
     IERC20 public immutable token;
@@ -32,6 +36,7 @@ contract ProjectEscrow {
     address public immutable refundDestination;
     address public immutable feeRecipient;
     address public immutable identityAuthority;
+    uint64 public immutable bindingDelay;
     uint64 public freeBalance;
     uint64 public reservedPrincipal;
     uint64 public reservedFees;
@@ -40,6 +45,7 @@ contract ProjectEscrow {
     uint64 public totalPayoutFees;
     uint64 public totalGrossWithdrawn;
     uint64 public totalWithdrawalFees;
+    uint64 public accruedFees;
     mapping(bytes32 => Award) public awards;
     mapping(bytes32 => bool) public consumedSources;
     mapping(uint64 => Binding) public bindings;
@@ -55,7 +61,11 @@ contract ProjectEscrow {
 
     event Deposited(address indexed sponsor, uint256 amount);
     event AwardCommitted(bytes32 indexed id, uint64 indexed actorId, uint64 gross, uint64 fee, bytes32 sourceDigest);
-    event DestinationBound(uint64 indexed actorId, address indexed destination, uint64 version, bytes32 claimDigest);
+    event DestinationBound(
+        uint64 indexed actorId, address indexed destination, uint64 version, bytes32 claimDigest, uint64 activatesAt
+    );
+    event BindingCancelled(uint64 indexed actorId, uint64 version);
+    event FeesClaimed(address indexed feeRecipient, uint256 amount);
     event Paid(
         bytes32 indexed id,
         uint64 indexed actorId,
@@ -84,13 +94,14 @@ contract ProjectEscrow {
         address owner_,
         address refundDestination_,
         address feeRecipient_,
-        address identityAuthority_
+        address identityAuthority_,
+        uint64 bindingDelay_
     ) {
+        // Refunds go only to the sponsor that deposited them.
         if (
             projectId_ == bytes32(0) || address(token_).code.length == 0 || token_.decimals() != 6
-                || owner_ == address(0) || refundDestination_ == address(0) || feeRecipient_ == address(0)
-                || identityAuthority_ == address(0) || owner_ == identityAuthority_
-                || refundDestination_ == address(this) || feeRecipient_ == address(this)
+                || owner_ == address(0) || refundDestination_ != owner_ || feeRecipient_ == address(0)
+                || identityAuthority_ == address(0) || owner_ == identityAuthority_ || feeRecipient_ == address(this)
         ) revert InvalidInput();
         projectId = projectId_;
         token = token_;
@@ -98,6 +109,13 @@ contract ProjectEscrow {
         refundDestination = refundDestination_;
         feeRecipient = feeRecipient_;
         identityAuthority = identityAuthority_;
+        bindingDelay = bindingDelay_;
+    }
+
+    /// @notice The only valid award ID for a source. Binding the chain and vault stops another vault from
+    /// claiming the same ID first.
+    function awardId(bytes32 sourceDigest) public view returns (bytes32) {
+        return keccak256(abi.encode(block.chainid, address(this), sourceDigest));
     }
 
     function payoutFee(uint64 gross) public pure returns (uint64) {
@@ -117,7 +135,9 @@ contract ProjectEscrow {
 
     /// @param sourceDigest Unique per award origin (project/cycle/actor/allocation), not a whole-cycle digest.
     function commitAward(bytes32 id, uint64 actorId, uint64 gross, bytes32 sourceDigest) external onlyOwner {
-        if (id == bytes32(0) || actorId == 0 || gross == 0 || sourceDigest == bytes32(0)) revert InvalidInput();
+        if (actorId == 0 || gross == 0 || sourceDigest == bytes32(0) || id != awardId(sourceDigest)) {
+            revert InvalidInput();
+        }
         if (awards[id].actorId != 0 || consumedSources[sourceDigest]) revert DuplicateAward();
         uint64 fee = payoutFee(gross);
         if (gross > freeBalance) revert InsufficientFreeBalance();
@@ -145,23 +165,34 @@ contract ProjectEscrow {
                 || expiresAt < block.timestamp || bindings[actorId].version != expectedVersion
         ) revert InvalidBinding();
         uint64 version = expectedVersion + 1;
-        bindings[actorId] = Binding(destination, version, claimDigest);
-        emit DestinationBound(actorId, destination, version, claimDigest);
+        uint64 activatesAt = uint64(block.timestamp) + bindingDelay;
+        bindings[actorId] = Binding(destination, version, claimDigest, activatesAt);
+        emit DestinationBound(actorId, destination, version, claimDigest, activatesAt);
+    }
+
+    /// @notice The sponsor can stop a pending binding before it pays. Only a new authority binding can follow.
+    function cancelBinding(uint64 actorId, uint64 expectedVersion) external onlyOwner {
+        Binding storage binding = bindings[actorId];
+        if (binding.version == 0 || binding.version != expectedVersion || block.timestamp >= binding.activatesAt) {
+            revert InvalidBinding();
+        }
+        binding.activatesAt = type(uint64).max;
+        emit BindingCancelled(actorId, expectedVersion);
     }
 
     function pay(bytes32 id, uint64 expectedBindingVersion) external nonReentrant {
         Award storage award = awards[id];
         Binding memory binding = bindings[award.actorId];
         if (award.actorId == 0 || award.paid) revert InvalidInput();
-        if (binding.version == 0 || binding.version != expectedBindingVersion) revert InvalidBinding();
+        if (binding.version == 0 || binding.version != expectedBindingVersion || block.timestamp < binding.activatesAt) revert InvalidBinding();
         uint64 net = award.gross - award.fee;
         award.paid = true;
         reservedPrincipal -= net;
         reservedFees -= award.fee;
         totalPaid += net;
         totalPayoutFees += award.fee;
+        accruedFees += award.fee;
         sendExact(binding.destination, net);
-        sendExact(feeRecipient, award.fee);
         emit Paid(id, award.actorId, binding.destination, binding.version, award.gross, net, award.fee);
     }
 
@@ -175,9 +206,18 @@ contract ProjectEscrow {
         freeBalance -= gross;
         totalGrossWithdrawn = cumulative;
         totalWithdrawalFees = nextFee;
+        accruedFees += fee;
         sendExact(refundDestination, gross - fee);
-        sendExact(feeRecipient, fee);
         emit UnusedWithdrawn(refundDestination, gross, gross - fee, fee);
+    }
+
+    /// @notice Anyone can move accrued fees to the fee recipient. Only this call depends on that address.
+    function claimFees() external nonReentrant {
+        uint64 amount = accruedFees;
+        if (amount == 0) revert InvalidInput();
+        accruedFees = 0;
+        sendExact(feeRecipient, amount);
+        emit FeesClaimed(feeRecipient, amount);
     }
 
     function sendExact(address destination, uint256 amount) private {
@@ -206,12 +246,13 @@ contract EscrowFactory {
     IERC20 public immutable token;
     address public immutable feeRecipient;
     address public immutable identityAuthority;
+    uint64 public immutable bindingDelay;
     mapping(bytes32 => address) public vaults;
     event VaultCreated(
         bytes32 indexed projectId, address indexed vault, address indexed owner, address refundDestination
     );
 
-    constructor(IERC20 token_, address feeRecipient_, address identityAuthority_) {
+    constructor(IERC20 token_, address feeRecipient_, address identityAuthority_, uint64 bindingDelay_) {
         if (
             address(token_).code.length == 0 || token_.decimals() != 6 || feeRecipient_ == address(0)
                 || identityAuthority_ == address(0)
@@ -220,6 +261,7 @@ contract EscrowFactory {
         token = token_;
         feeRecipient = feeRecipient_;
         identityAuthority = identityAuthority_;
+        bindingDelay = bindingDelay_;
     }
 
     function create(bytes32 projectId, address owner, address refundDestination) external returns (address vault) {
@@ -227,7 +269,7 @@ contract EscrowFactory {
         if (vaults[projectId] != address(0)) revert ProjectEscrow.DuplicateAward();
         vault = address(
             new ProjectEscrow{salt: projectId}(
-                projectId, token, owner, refundDestination, feeRecipient, identityAuthority
+                projectId, token, owner, refundDestination, feeRecipient, identityAuthority, bindingDelay
             )
         );
         vaults[projectId] = vault;

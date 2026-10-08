@@ -17,7 +17,15 @@ export interface SolanaEscrowConfig {
   feeRecipient: string;
   codeSha256: string;
   upgradeAuthority: string | null;
+  /** Reviewed delay, in seconds, before a wallet binding can pay in this project. */
+  bindingDelaySeconds: string;
 }
+const MAINNET_GENESIS = "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d";
+const TOKEN_PROGRAM = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+/** Project account size: 249 bytes of v2 state plus the i64 binding delay. */
+export const PROJECT_SIZE = 257;
+/** Wallet binding size: 152 bytes of v2 state plus the i64 bound_at time. */
+export const BINDING_SIZE = 160;
 type Obj = Record<string, unknown>;
 const object = (value: unknown): Obj => {
   if (!value || typeof value !== "object" || Array.isArray(value))
@@ -34,6 +42,11 @@ const list = (value: unknown): unknown[] => {
 };
 const hex = (bytes: Uint8Array) =>
   Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+const encoder = new TextEncoder();
+const anchorDiscriminator = (name: string) =>
+  hex(sha256(encoder.encode(`global:${name}`)).slice(0, 8));
+const COMMIT = anchorDiscriminator("commit"),
+  PAY = anchorDiscriminator("pay");
 const b64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
 const decode = (value: string) =>
   Uint8Array.from(atob(value), (c) => c.charCodeAt(0));
@@ -108,6 +121,18 @@ export async function verifySolanaDeployment(
     throw new Error("Missing reviewed program digest");
   if ((await rpc(config, "getGenesisHash", [])) !== config.genesisHash)
     throw new Error("Wrong Solana cluster");
+  // An upgrade key could swap the program, empty vaults, and restore the
+  // reviewed bytes before this check runs again.
+  if (
+    config.genesisHash === MAINNET_GENESIS &&
+    config.upgradeAuthority !== null
+  )
+    throw new Error("Mainnet escrow requires a revoked upgrade authority");
+  if (
+    !/^(0|[1-9][0-9]{0,18})$/.test(config.bindingDelaySeconds) ||
+    BigInt(config.bindingDelaySeconds) > (1n << 63n) - 1n
+  )
+    throw new Error("Missing reviewed binding delay");
   const response = object(
     await rpc(config, "getAccountInfo", [
       config.programId,
@@ -167,10 +192,12 @@ export async function verifySolanaDeployment(
   const project = account(
     info.value,
     config.programId,
-    249,
+    PROJECT_SIZE,
     "cda8bdcab5f78e13",
   );
   if (
+    new DataView(project.buffer, project.byteOffset).getBigInt64(249, true) !==
+      BigInt(config.bindingDelaySeconds) ||
     pubkey(project, 8) !== config.owner ||
     pubkey(project, 104) !== config.identityAuthority ||
     pubkey(project, 136) !== config.feeRecipient ||
@@ -181,17 +208,90 @@ export async function verifySolanaDeployment(
   return project;
 }
 
-/** Uses finalized RPC, exact Anchor invocation logs and actual SPL token deltas. */
+/** The only award ID the program accepts for a source in this project. */
+export function solanaAwardId(
+  projectPda: string,
+  sourceDigest: string,
+): string {
+  return hex(
+    sha256(
+      new Uint8Array([
+        ...encoder.encode("slop-escrow-award"),
+        ...decodeBase58Bytes(projectPda),
+        ...digest(sourceDigest),
+      ]),
+    ),
+  );
+}
+
+export interface EscrowInvocation {
+  /** Position in the transaction's flattened instruction list. */
+  index: number;
+  kind: "reserved" | "paid";
+  accounts: string[];
+  data: Uint8Array;
+  /** Direct child instructions of this invocation, in order. */
+  children: Obj[];
+}
+/**
+ * Flattens top-level and inner instructions in execution order and returns each
+ * escrow commit or pay, wherever it ran (including through a multisig CPI).
+ * Logs are not used: they can be truncated by unrelated instructions.
+ */
+export function escrowInvocations(
+  tx: Obj,
+  programId: string,
+): EscrowInvocation[] {
+  const meta = object(tx.meta),
+    message = object(object(tx.transaction).message);
+  const inner = new Map<number, unknown[]>();
+  for (const group of list(meta.innerInstructions ?? []).map(object))
+    inner.set(Number(group.index), list(group.instructions));
+  const flat: { ix: Obj; height: number; top: number }[] = [];
+  list(message.instructions).forEach((value, top) => {
+    flat.push({ ix: object(value), height: 1, top });
+    for (const child of inner.get(top) ?? []) {
+      const ix = object(child);
+      if (!Number.isSafeInteger(ix.stackHeight) || Number(ix.stackHeight) < 2)
+        throw new Error("Missing inner instruction stack height");
+      flat.push({ ix, height: Number(ix.stackHeight), top });
+    }
+  });
+  const found: EscrowInvocation[] = [];
+  flat.forEach((entry, index) => {
+    if (entry.ix.programId !== programId) return;
+    const data = decodeBase58Bytes(string(entry.ix.data));
+    const tag = hex(data.slice(0, 8));
+    if (tag !== COMMIT && tag !== PAY) return;
+    const children: Obj[] = [];
+    for (let next = index + 1; next < flat.length; next++) {
+      const candidate = flat[next];
+      if (candidate.top !== entry.top || candidate.height <= entry.height)
+        break;
+      if (candidate.height === entry.height + 1) children.push(candidate.ix);
+    }
+    found.push({
+      index,
+      kind: tag === COMMIT ? "reserved" : "paid",
+      accounts: list(entry.ix.accounts).map(string),
+      data,
+      children,
+    });
+  });
+  return found;
+}
+
+/** Verifies the exact escrow instruction and its own token transfers, not the whole transaction. */
 export function solanaPaymentAdapter(
   config: SolanaEscrowConfig,
 ): PaymentChainAdapter {
   return {
     async verifyFinalized(input) {
       if (!Number.isSafeInteger(input.eventIndex) || input.eventIndex < 0)
-        throw new Error("Invalid log index");
+        throw new Error("Invalid instruction index");
       if (decodeBase58Bytes(input.transactionId).length !== 64)
         throw new Error("Invalid signature");
-      const reviewedProject = await verifySolanaDeployment(config);
+      const project = await verifySolanaDeployment(config);
       const status = object(
         await rpc(config, "getSignatureStatuses", [
           [input.transactionId],
@@ -222,37 +322,12 @@ export function solanaPaymentAdapter(
         tx.slot !== statusValue.slot
       )
         throw new Error("Transaction mismatch");
-      const logs = list(meta.logMessages).map(string);
-      const stack: string[] = [];
-      let payload: Uint8Array | undefined;
-      for (let i = 0; i < logs.length; i++) {
-        const line = logs[i],
-          invoke = /^Program (\S+) invoke \[\d+\]$/.exec(line),
-          end = /^Program (\S+) (?:success|failed:.*)$/.exec(line);
-        if (invoke) stack.push(invoke[1]);
-        if (
-          i === input.eventIndex &&
-          stack.at(-1) === config.programId &&
-          line.startsWith("Program data: ")
-        )
-          payload = decode(line.slice(14));
-        if (end) {
-          if (stack.pop() !== end[1])
-            throw new Error("Invalid invocation stack");
-        }
-      }
-      const discriminator =
-        input.kind === "reserved" ? "140fcba476acd0cb" : "8e7aeab516affa91";
-      if (payload?.length !== 136 || hex(payload.slice(0, 8)) !== discriminator)
-        throw new Error("Exact escrow event missing");
-      const award = digest(input.obligationId),
-        projectOffset = input.kind === "reserved" ? 48 : 16,
-        awardOffset = input.kind === "reserved" ? 80 : 48;
-      if (
-        pubkey(payload, projectOffset) !== config.projectPda ||
-        hex(payload.slice(awardOffset, awardOffset + 32)) !== hex(award)
-      )
-        throw new Error("Wrong event project or award");
+      const invocation = escrowInvocations(tx, config.programId).find(
+        (entry) => entry.index === input.eventIndex,
+      );
+      if (!invocation || invocation.kind !== input.kind)
+        throw new Error("Exact escrow instruction missing");
+      const award = digest(input.obligationId);
       const found = list(
         await rpc(config, "getProgramAccounts", [
           config.programId,
@@ -269,6 +344,7 @@ export function solanaPaymentAdapter(
       );
       if (found.length !== 1)
         throw new Error("Ambiguous or missing durable award");
+      const awardAddress = string(object(found[0]).pubkey);
       const obligation = account(
         object(found[0]).account,
         config.programId,
@@ -285,75 +361,71 @@ export function solanaPaymentAdapter(
         actor === 0n ||
         gross !== net + fee ||
         fee !== gross / 50n ||
-        uint(payload, 8) !== gross
+        solanaAwardId(config.projectPda, source) !== hex(award)
       )
         throw new Error("Invalid award accounting");
-      if (
-        input.kind === "reserved" &&
-        (hex(payload.slice(16, 48)) !== source ||
-          uint(payload, 112) !== actor ||
-          uint(payload, 120) !== net ||
-          uint(payload, 128) !== fee)
-      )
-        throw new Error("Reservation differs from award");
-      const project = reviewedProject;
+      const { accounts, data, children } = invocation;
       let destination: string | undefined;
-      if (input.kind === "paid") {
+      if (input.kind === "reserved") {
+        // commit(award_id, source_digest, actor_id, gross); accounts: owner, project, vault, origin, obligation.
         if (
+          data.length !== 88 ||
+          accounts[1] !== config.projectPda ||
+          accounts[4] !== awardAddress ||
+          hex(data.slice(8, 40)) !== hex(award) ||
+          hex(data.slice(40, 72)) !== source ||
+          uint(data, 72) !== actor ||
+          uint(data, 80) !== gross
+        )
+          throw new Error("Reservation differs from award");
+      } else {
+        // pay(expected_version); accounts: project, obligation, binding, mint, vault, destination, fee_account.
+        if (
+          data.length !== 16 ||
           obligation[136] !== 1 ||
-          uint(payload, 80) !== net ||
-          uint(payload, 88) !== fee ||
-          uint(payload, 128) === 0n
+          accounts[0] !== config.projectPda ||
+          accounts[1] !== awardAddress ||
+          accounts[3] !== config.mint ||
+          accounts[4] !== config.vault
         )
-          throw new Error("Paid event differs from obligation");
-        destination = pubkey(payload, 96);
-        const feeOwner = pubkey(project, 136),
-          keys = list(object(transaction.message).accountKeys).map((entry) =>
-            string(object(entry).pubkey),
-          );
-        const before = list(meta.preTokenBalances).map(object),
-          after = list(meta.postTokenBalances).map(object);
-        const expected = new Map<string, bigint>();
-        expected.set(destination, net);
-        expected.set(feeOwner, (expected.get(feeOwner) ?? 0n) + fee);
-        let vaultSeen = false;
-        for (const post of after) {
-          const pre = before.find(
-            (item) => item.accountIndex === post.accountIndex,
-          );
-          const a = pre
-              ? object(pre.uiTokenAmount)
-              : { amount: "0", decimals: 6 },
-            b = object(post.uiTokenAmount),
-            delta = BigInt(string(b.amount)) - BigInt(string(a.amount));
-          if (delta === 0n) continue;
+          throw new Error("Payment differs from award");
+        const expected = [
+          { to: accounts[5], amount: net },
+          { to: accounts[6], amount: fee },
+        ];
+        if (children.length !== expected.length)
+          throw new Error("Unexpected payout instructions");
+        children.forEach((child, i) => {
+          const parsed = object(child.parsed),
+            info = object(parsed.info),
+            amount = object(info.tokenAmount);
           if (
-            (pre !== undefined && pre.mint !== config.mint) ||
-            post.mint !== config.mint ||
-            a.decimals !== 6 ||
-            b.decimals !== 6 ||
-            (pre !== undefined && pre.owner !== post.owner)
+            child.programId !== TOKEN_PROGRAM ||
+            parsed.type !== "transferChecked" ||
+            info.source !== config.vault ||
+            info.mint !== config.mint ||
+            info.authority !== config.projectPda ||
+            info.destination !== expected[i].to ||
+            amount.decimals !== 6 ||
+            amount.amount !== expected[i].amount.toString()
           )
-            throw new Error("Wrong token movement");
-          const index = post.accountIndex;
-          if (typeof index !== "number" || !Number.isSafeInteger(index))
-            throw new Error("Invalid account index");
-          if (keys[index] === config.vault) {
-            if (delta !== -gross || post.owner !== config.projectPda)
-              throw new Error("Wrong vault debit");
-            vaultSeen = true;
-          } else {
-            const owner = string(post.owner);
-            if (delta < 0n || !expected.has(owner))
-              throw new Error("Unexpected token recipient");
-            expected.set(owner, (expected.get(owner) ?? 0n) - delta);
-          }
-        }
-        if (
-          !vaultSeen ||
-          [...expected.values()].some((amount) => amount !== 0n)
-        )
-          throw new Error("Unreconciled payout deltas");
+            throw new Error("Payout transfer differs from award");
+        });
+        const keys = list(object(transaction.message).accountKeys).map(
+          (entry) => string(object(entry).pubkey),
+        );
+        const ownerOf = (address: string) => {
+          const index = keys.indexOf(address);
+          const balance = list(meta.postTokenBalances)
+            .map(object)
+            .find((item) => item.accountIndex === index);
+          if (index < 0 || !balance || balance.mint !== config.mint)
+            throw new Error("Payout account balance missing");
+          return string(balance.owner);
+        };
+        destination = ownerOf(accounts[5]);
+        if (ownerOf(accounts[6]) !== pubkey(project, 136))
+          throw new Error("Fee account is not owned by the fee recipient");
       }
       const block = object(
         await rpc(config, "getBlock", [

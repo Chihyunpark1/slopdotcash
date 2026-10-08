@@ -12,8 +12,18 @@ import {
   TOKEN_PROGRAM_ID,
   thawAccount,
 } from "@solana/spl-token";
-import { Keypair, PublicKey, SystemProgram } from "@solana/web3.js";
-import { solanaPaymentAdapter } from "../.local/adapter.mjs";
+import {
+  Keypair,
+  PublicKey,
+  SystemProgram,
+  sendAndConfirmTransaction,
+  Transaction,
+} from "@solana/web3.js";
+import {
+  escrowInvocations,
+  solanaAwardId,
+  solanaPaymentAdapter,
+} from "../.local/adapter.mjs";
 
 const { AnchorProvider, Program, BN } = anchor;
 const provider = AnchorProvider.env();
@@ -30,6 +40,10 @@ const pda = (...seeds) =>
 const key = (x) => x.toBuffer();
 const seed = (s) => Buffer.from(s);
 const actorSeed = (id) => bn(id).toArrayLike(Buffer, "le", 8);
+const DELAY = 5;
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+// The validator clock follows wall time; wait past the binding delay.
+const activate = () => sleep((DELAY + 2) * 1000);
 const authority = Keypair.generate();
 const feeOwner = Keypair.generate();
 const recipient = Keypair.generate();
@@ -42,16 +56,29 @@ const binding = (id) =>
     Buffer.from(network),
     actorSeed(id),
   );
-const obligation = (id) =>
-  pda(seed("award"), key(project), Buffer.from(hash(id)));
-async function commit(id, actor, principal, origin = id) {
+const awardOf = (origin) =>
+  Buffer.from(
+    solanaAwardId(
+      project.toBase58(),
+      Buffer.from(hash(`source:${origin}`)).toString("hex"),
+    ),
+    "hex",
+  );
+const obligation = (id) => pda(seed("award"), key(project), awardOf(id));
+async function commit(
+  id,
+  actor,
+  principal,
+  origin = id,
+  awardId = awardOf(origin),
+) {
   return program.methods
-    .commit(hash(id), hash(`source:${origin}`), bn(actor), bn(principal))
+    .commit([...awardId], hash(`source:${origin}`), bn(actor), bn(principal))
     .accountsStrict({
       owner: payer.publicKey,
       project,
       vault,
-      obligation: obligation(id),
+      obligation: pda(seed("award"), key(project), awardId),
       origin: pda(
         seed("origin"),
         key(project),
@@ -80,20 +107,56 @@ async function bind(actor, address, expected = 0, domain = network) {
     .signers([authority])
     .rpc();
 }
+const veto = (actor, version) =>
+  pda(seed("veto"), key(project), actorSeed(actor), actorSeed(version));
+function payInstruction(id, actor, address, version = 1) {
+  return program.methods.pay(bn(version)).accountsStrict({
+    project,
+    obligation: obligation(id),
+    binding: binding(actor),
+    mint,
+    vault,
+    destination: address,
+    feeAccount,
+    tokenProgram: TOKEN_PROGRAM_ID,
+    veto: veto(actor, version),
+  });
+}
 function pay(id, actor, address, version = 1) {
+  return payInstruction(id, actor, address, version).rpc();
+}
+function vetoBinding(actor, version, signer = payer) {
   return program.methods
-    .pay(bn(version))
+    .vetoBinding(bn(actor), bn(version))
     .accountsStrict({
+      owner: signer.publicKey,
       project,
-      obligation: obligation(id),
       binding: binding(actor),
-      mint,
-      vault,
-      destination: address,
-      feeAccount,
-      tokenProgram: TOKEN_PROGRAM_ID,
+      veto: veto(actor, version),
+      systemProgram: SystemProgram.programId,
     })
+    .signers(signer === payer ? [] : [signer])
     .rpc();
+}
+async function parsedTransaction(signature) {
+  const response = await fetch(provider.connection.rpcEndpoint, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "getTransaction",
+      params: [
+        signature,
+        {
+          commitment: "finalized",
+          encoding: "jsonParsed",
+          maxSupportedTransactionVersion: 0,
+        },
+      ],
+    }),
+  });
+  return (await response.json()).result;
 }
 function withdraw(amount) {
   return program.methods
@@ -156,6 +219,7 @@ test("actual SPL escrow lifecycle, late wallet claim, reserve and authority atta
       network,
       authority.publicKey,
       feeOwner.publicKey,
+      bn(DELAY),
     )
     .accountsStrict({
       owner: payer.publicKey,
@@ -193,9 +257,15 @@ test("actual SPL escrow lifecycle, late wallet claim, reserve and authority atta
     /AccountNotInitialized/,
   );
   await bind(101, recipient.publicKey);
+  await assert.rejects(pay("first", 101, destination), /BindingPending/);
+  await activate();
+  await assert.rejects(vetoBinding(101, 1), /BindingActive/);
   await assert.rejects(bind(101, late.publicKey), /StaleBinding/);
   await assert.rejects(bind(102, late.publicKey, 0, hash("different-network")));
-  await assert.rejects(pay("first", 101, lateDestination), /ConstraintRaw/);
+  await assert.rejects(
+    pay("first", 101, lateDestination),
+    /ConstraintRaw|WrongDestination/,
+  );
   await assert.rejects(
     program.methods
       .bindWallet(bn(101), network, bn(1), late.publicKey, hash("bad-claim"))
@@ -221,7 +291,11 @@ test("actual SPL escrow lifecycle, late wallet claim, reserve and authority atta
   assert.equal(await balance(feeAccount), 2_000_000n);
   await assert.rejects(pay("first", 101, destination), /AlreadyPaid/);
   await assert.rejects(commit("first", 101, 100_000_000));
-  await assert.rejects(commit("changed-award-id", 101, 100_000_000, "first"));
+  // An award ID that is not bound to this project and source is rejected.
+  await assert.rejects(
+    commit("forged", 101, 1, "forged", Buffer.from(hash("forged-id"))),
+    /InvalidAward/,
+  );
   await assert.rejects(
     program.methods
       .withdraw(bn(1))
@@ -252,9 +326,10 @@ test("actual SPL escrow lifecycle, late wallet claim, reserve and authority atta
     late.publicKey,
   );
   await bind(102, late.publicKey);
+  await activate();
   await assert.rejects(
     pay("late", 102, wrongDestination),
-    /ConstraintTokenMint/,
+    /ConstraintTokenMint|WrongDestination/,
   );
   // Split withdrawals cannot avoid the cumulative 10% charge.
   await withdraw(1);
@@ -262,13 +337,55 @@ test("actual SPL escrow lifecycle, late wallet claim, reserve and authority atta
   assert.equal(await balance(source), 765_000_000n);
   assert.equal(await balance(feeAccount), 87_000_000n);
   await assert.rejects(withdraw(1), /InsufficientFreeBalance/);
-  await bind(102, recipient.publicKey, 1);
-  await assert.rejects(
-    pay("late", 102, lateDestination, 1),
-    /StaleBinding|ConstraintRaw/,
+  // A stolen authority key rebinds actor 102 to a thief. Only the owner can
+  // veto it, and only while it is pending; the vetoed version never pays.
+  const thief = Keypair.generate();
+  const thiefDestination = await createAccount(
+    provider.connection,
+    payer,
+    mint,
+    thief.publicKey,
   );
-  await pay("late", 102, destination, 2);
-  assert.equal(await balance(destination), 147_000_000n);
+  await bind(102, thief.publicKey, 1);
+  // Fund the identity key so the owner check, not rent, rejects its veto.
+  await sendAndConfirmTransaction(
+    provider.connection,
+    new Transaction().add(
+      SystemProgram.transfer({
+        fromPubkey: payer.publicKey,
+        toPubkey: authority.publicKey,
+        lamports: 100_000_000,
+      }),
+    ),
+    [payer],
+  );
+  await assert.rejects(vetoBinding(102, 2, authority), /ConstraintHasOne/);
+  await vetoBinding(102, 2);
+  await activate();
+  await assert.rejects(pay("late", 102, thiefDestination, 2), /BindingVetoed/);
+  assert.equal(await balance(thiefDestination), 0n);
+  await bind(102, recipient.publicKey, 2);
+  await assert.rejects(
+    pay("late", 102, lateDestination, 2),
+    /StaleBinding|ConstraintRaw|ConstraintSeeds/,
+  );
+  await activate();
+  // A third party pays with unrelated token movements in the same transaction.
+  // The adapter must still verify this payment from its own instruction.
+  const polluted = await sendAndConfirmTransaction(
+    provider.connection,
+    new Transaction().add(
+      await payInstruction("late", 102, destination, 3).instruction(),
+      (await import("@solana/spl-token")).createTransferInstruction(
+        source,
+        destination,
+        payer.publicKey,
+        1n,
+      ),
+    ),
+    [payer],
+  );
+  assert.equal(await balance(destination), 147_000_001n);
   assert.equal(await balance(feeAccount), 88_000_000n);
   assert.equal(await balance(vault), 0n);
   const state = await program.account.project.fetch(project);
@@ -284,12 +401,13 @@ test("actual SPL escrow lifecycle, late wallet claim, reserve and authority atta
     1_000_000_000n,
   );
   await provider.connection.confirmTransaction(firstPayment, "finalized");
+  await provider.connection.confirmTransaction(polluted, "finalized");
   const evidence = {
     programId: program.programId.toBase58(),
     genesisHash: await provider.connection.getGenesisHash(),
     signature: firstPayment,
     project: project.toBase58(),
-    awardId: Buffer.from(hash("first")).toString("hex"),
+    awardId: awardOf("first").toString("hex"),
     sourceDigest: Buffer.from(hash("source:first")).toString("hex"),
     actorId: 101,
     gross: "100000000",
@@ -320,25 +438,19 @@ test("actual SPL escrow lifecycle, late wallet claim, reserve and authority atta
       .update(readFileSync("target/deploy/slop_escrow.so"))
       .digest("hex"),
     upgradeAuthority: "11111111111111111111111111111111",
+    bindingDelaySeconds: String(DELAY),
   });
-  for (const [signature, kind, disc] of [
-    [firstCommit, "reserved", [20, 15, 203, 164, 118, 172, 208, 203]],
-    [firstPayment, "paid", [142, 122, 234, 181, 22, 175, 250, 145]],
+  for (const [signature, kind] of [
+    [firstCommit, "reserved"],
+    [firstPayment, "paid"],
   ]) {
-    const receipt = await provider.connection.getTransaction(signature, {
-      commitment: "finalized",
-      maxSupportedTransactionVersion: 0,
-    });
-    const eventIndex = receipt.meta.logMessages.findIndex(
-      (line) =>
-        line.startsWith("Program data: ") &&
-        Buffer.from(line.slice(14), "base64")
-          .subarray(0, 8)
-          .equals(Buffer.from(disc)),
+    const [invocation] = escrowInvocations(
+      await parsedTransaction(signature),
+      evidence.programId,
     );
     const input = {
       transactionId: signature,
-      eventIndex,
+      eventIndex: invocation.index,
       kind,
       obligationId: evidence.awardId,
     };
@@ -346,11 +458,28 @@ test("actual SPL escrow lifecycle, late wallet claim, reserve and authority atta
     assert.equal(normalized.grossMicro, "100000000");
     assert.equal(normalized.netMicro, "98000000");
     assert.equal(normalized.githubUserId, "101");
+    if (kind === "paid")
+      assert.equal(normalized.destination, recipient.publicKey.toBase58());
     await assert.rejects(
-      workerAdapter.verifyFinalized({ ...input, eventIndex: 0 }),
-      /Exact escrow event/,
+      workerAdapter.verifyFinalized({
+        ...input,
+        eventIndex: invocation.index + 1,
+      }),
+      /Exact escrow instruction/,
     );
   }
+  const [pollutedPay] = escrowInvocations(
+    await parsedTransaction(polluted),
+    evidence.programId,
+  );
+  const pollutedEvidence = await workerAdapter.verifyFinalized({
+    transactionId: polluted,
+    eventIndex: pollutedPay.index,
+    kind: "paid",
+    obligationId: awardOf("late").toString("hex"),
+  });
+  assert.equal(pollutedEvidence.netMicro, "49000000");
+  assert.equal(pollutedEvidence.destination, recipient.publicKey.toBase58());
   await mintTo(provider.connection, payer, mint, vault, payer, 1_000_000n);
   await assert.rejects(withdraw(1), /InsufficientFreeBalance/);
   await assert.rejects(

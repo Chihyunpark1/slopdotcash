@@ -4,7 +4,10 @@ import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import {
+  baseAwardId,
   buildBindCalldata,
+  buildCancelBindingCalldata,
+  buildClaimFeesCalldata,
   buildCommitAwardCalldata,
   buildDepositCalldata,
   buildPayCalldata,
@@ -23,8 +26,9 @@ const owner = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
 const attester = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8";
 const recipient = "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC";
 const fee = "0x0000000000000000000000000000000000000fee";
-const id = `0x${"1".padStart(64, "0")}`;
+const projectId = `0x${"1".padStart(64, "0")}`;
 const source = `0x${"2".padStart(64, "0")}`;
+const delay = "3600";
 async function rpc(method: string, params: unknown[]) {
   const response = await fetch(rpcUrl, {
     method: "POST",
@@ -87,13 +91,15 @@ try {
   assert(ready, "Anvil startup");
   const token = deploy("integration/TestDollar.sol:TestDollar");
   const vault = deploy("src/ProjectEscrow.sol:ProjectEscrow", [
-    id,
+    projectId,
     token,
     owner,
     owner,
     fee,
     attester,
+    delay,
   ]);
+  const id = baseAwardId(31337n, vault, source);
   await send(token, "mint(address,uint256)", [owner, "110000000"]);
   await send(token, "approve(address,uint256)", [vault, "110000000"]);
   await rpc("eth_sendTransaction", [
@@ -131,6 +137,7 @@ try {
     codeSha256: createHash("sha256")
       .update(Buffer.from(runtimeCode.slice(2), "hex"))
       .digest("hex"),
+    bindingDelaySeconds: delay,
   };
   await assert.rejects(
     verifyReserve(config, reserveTx, 0, id),
@@ -144,6 +151,10 @@ try {
   await assert.rejects(
     verifyReserve({ ...config, codeSha256: "f".repeat(64) }, reserveTx, 0, id),
     /runtime code/,
+  );
+  await assert.rejects(
+    verifyReserve({ ...config, bindingDelaySeconds: "0" }, reserveTx, 0, id),
+    /binding delay/,
   );
   const reservation = await verifyReserve(config, reserveTx, 0, id);
   assert.equal(reservation.githubUserId, "101");
@@ -187,13 +198,59 @@ try {
   assert.equal(binding.destination, recipient.toLowerCase());
   assert.equal(binding.bindingVersion, "1");
   assert.equal(binding.claimDigest, source);
+  assert.ok(BigInt(binding.activatesAt) > 0n);
   await assert.rejects(verifyBinding(config, bindingTx, 0, "202"), /identity/);
-  const paymentTx = await rpc("eth_sendTransaction", [
+  // A pending binding cannot pay; the owner can still cancel it.
+  const early = await rpc("eth_sendTransaction", [
     {
       from: recipient,
       to: vault,
       gas: "0x7a1200",
       data: buildPayCalldata(id, binding.bindingVersion),
+    },
+  ]);
+  await rpc("anvil_mine", ["0x1"]);
+  assert.equal(
+    ((await rpc("eth_getTransactionReceipt", [early])) as { status: string })
+      .status,
+    "0x0",
+  );
+  const cancelTx = await rpc("eth_sendTransaction", [
+    {
+      from: owner,
+      to: vault,
+      gas: "0x7a1200",
+      data: buildCancelBindingCalldata("101", "1"),
+    },
+  ]);
+  await rpc("anvil_mine", ["0x1"]);
+  assert.equal(
+    ((await rpc("eth_getTransactionReceipt", [cancelTx])) as { status: string })
+      .status,
+    "0x1",
+  );
+  await rpc("eth_sendTransaction", [
+    {
+      from: attester,
+      to: vault,
+      gas: "0x7a1200",
+      data: buildBindCalldata({
+        githubUserId: "101",
+        destination: recipient,
+        expectedVersion: "1",
+        claimDigest: source,
+        expiresAt: "18446744073709551615",
+      }),
+    },
+  ]);
+  await rpc("evm_increaseTime", [Number(delay)]);
+  await rpc("anvil_mine", ["0x1"]);
+  const paymentTx = await rpc("eth_sendTransaction", [
+    {
+      from: recipient,
+      to: vault,
+      gas: "0x7a1200",
+      data: buildPayCalldata(id, "2"),
     },
   ]);
   await rpc("anvil_mine", ["0x1"]);
@@ -219,7 +276,7 @@ try {
   assert.equal(refunded.split(" ")[0], "9000000");
   const payment = await verifyPayment(config, paymentTx, 0, id);
   assert.equal(payment.destination, recipient.toLowerCase());
-  assert.equal(payment.bindingVersion, "1");
+  assert.equal(payment.bindingVersion, "2");
   assert.equal(payment.grossMicro, "100000000");
   assert.equal(payment.feeMicro, "2000000");
   assert.equal(payment.netMicro, "98000000");
@@ -236,12 +293,28 @@ try {
     { encoding: "utf8" },
   ).trim();
   assert.equal(recipientBalance.split(" ")[0], "98000000");
+  // Fees accrue in the vault and anyone can move them to the fee recipient.
+  await rpc("eth_sendTransaction", [
+    {
+      from: recipient,
+      to: vault,
+      gas: "0x7a1200",
+      data: buildClaimFeesCalldata(),
+    },
+  ]);
+  await rpc("anvil_mine", ["0x1"]);
+  const feeBalance = execFileSync(
+    "cast",
+    ["call", token, "balanceOf(address)(uint256)", fee, "--rpc-url", rpcUrl],
+    { encoding: "utf8" },
+  ).trim();
+  assert.equal(feeBalance.split(" ")[0], "3000000");
   await assert.rejects(
     verifyReserve(config, paymentTx, 0, id),
     /Wrong event topics/,
   );
   console.log(
-    "Base adapter integration passed: real deployment, reservation, binding, payment, finalized gating, wrong chain/vault/award/index rejection.",
+    "Base adapter integration passed: real deployment, vault-bound award, delayed and cancellable binding, payment, fee claim, finalized gating, wrong chain/vault/award/index/delay rejection.",
   );
 } finally {
   anvil.kill("SIGTERM");

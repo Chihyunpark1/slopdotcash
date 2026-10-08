@@ -302,6 +302,10 @@
         {
           "name": "fee_recipient",
           "type": "pubkey"
+        },
+        {
+          "name": "binding_delay",
+          "type": "i64"
         }
       ]
     },
@@ -352,11 +356,92 @@
         {
           "name": "token_program",
           "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "veto",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [118, 101, 116, 111]
+              },
+              {
+                "kind": "account",
+                "path": "project"
+              },
+              {
+                "kind": "account",
+                "path": "obligation.actor_id",
+                "account": "Obligation"
+              },
+              {
+                "kind": "account",
+                "path": "binding.version",
+                "account": "WalletBinding"
+              }
+            ]
+          }
         }
       ],
       "args": [
         {
           "name": "expected_version",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "veto_binding",
+      "discriminator": [229, 13, 188, 173, 4, 57, 14, 0],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true,
+          "relations": ["project"]
+        },
+        {
+          "name": "project"
+        },
+        {
+          "name": "binding"
+        },
+        {
+          "name": "veto",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [118, 101, 116, 111]
+              },
+              {
+                "kind": "account",
+                "path": "project"
+              },
+              {
+                "kind": "arg",
+                "path": "actor_id"
+              },
+              {
+                "kind": "arg",
+                "path": "version"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "actor_id",
+          "type": "u64"
+        },
+        {
+          "name": "version",
           "type": "u64"
         }
       ]
@@ -417,6 +502,10 @@
   ],
   "accounts": [
     {
+      "name": "BindingVeto",
+      "discriminator": [32, 181, 30, 14, 10, 91, 29, 158]
+    },
+    {
       "name": "Obligation",
       "discriminator": [168, 206, 141, 106, 88, 76, 172, 167]
     },
@@ -441,6 +530,10 @@
     {
       "name": "AwardPaid",
       "discriminator": [142, 122, 234, 181, 22, 175, 250, 145]
+    },
+    {
+      "name": "BindingVetoed",
+      "discriminator": [218, 122, 70, 149, 6, 123, 80, 103]
     },
     {
       "name": "UnusedWithdrawn",
@@ -491,6 +584,31 @@
       "code": 6007,
       "name": "WrongMint",
       "msg": "Only six decimal classic SPL tokens are supported"
+    },
+    {
+      "code": 6008,
+      "name": "InvalidAward",
+      "msg": "Award ID is not bound to this project and source"
+    },
+    {
+      "code": 6009,
+      "name": "BindingPending",
+      "msg": "Wallet binding is still in its activation delay"
+    },
+    {
+      "code": 6010,
+      "name": "BindingVetoed",
+      "msg": "Project owner vetoed this wallet binding"
+    },
+    {
+      "code": 6011,
+      "name": "BindingActive",
+      "msg": "Wallet binding is already active"
+    },
+    {
+      "code": 6012,
+      "name": "WrongDestination",
+      "msg": "Destination must be the bound wallet's associated token account"
     }
   ],
   "types": [
@@ -567,6 +685,33 @@
           },
           {
             "name": "wallet_version",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "BindingVeto",
+      "type": {
+        "kind": "struct",
+        "fields": []
+      }
+    },
+    {
+      "name": "BindingVetoed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "project",
+            "type": "pubkey"
+          },
+          {
+            "name": "actor_id",
+            "type": "u64"
+          },
+          {
+            "name": "version",
             "type": "u64"
           }
         ]
@@ -688,6 +833,10 @@
           {
             "name": "bump",
             "type": "u8"
+          },
+          {
+            "name": "binding_delay",
+            "type": "i64"
           }
         ]
       }
@@ -748,6 +897,10 @@
           {
             "name": "version",
             "type": "u64"
+          },
+          {
+            "name": "bound_at",
+            "type": "i64"
           }
         ]
       }
@@ -774,6 +927,10 @@
           {
             "name": "version",
             "type": "u64"
+          },
+          {
+            "name": "bound_at",
+            "type": "i64"
           }
         ]
       }

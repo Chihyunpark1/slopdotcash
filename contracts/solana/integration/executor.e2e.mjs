@@ -19,7 +19,11 @@ import {
   sendAndConfirmTransaction,
   Transaction,
 } from "@solana/web3.js";
-import { solanaPaymentAdapter } from "../.local/adapter.mjs";
+import {
+  escrowInvocations,
+  solanaAwardId,
+  solanaPaymentAdapter,
+} from "../.local/adapter.mjs";
 import {
   createSolanaAttester,
   createSolanaExecutor,
@@ -56,6 +60,26 @@ function signer(key) {
 }
 async function finalized(signature) {
   await provider.connection.confirmTransaction(signature, "finalized");
+}
+async function parsedTransaction(signature) {
+  const response = await fetch(provider.connection.rpcEndpoint, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "getTransaction",
+      params: [
+        signature,
+        {
+          commitment: "finalized",
+          encoding: "jsonParsed",
+          maxSupportedTransactionVersion: 0,
+        },
+      ],
+    }),
+  });
+  return (await response.json()).result;
 }
 test("durable executor verifies SQLite consent, binds, creates ATAs, pays and retries exact signature", {
   timeout: 300000,
@@ -97,7 +121,6 @@ test("durable executor verifies SQLite consent, binds, creates ATAs, pays and re
   await mintTo(provider.connection, payer, mint, source, payer, 100_000_000n);
   const domain = hash("executor:solana-localnet"),
     projectId = hash("executor-project"),
-    awardId = hash("executor-award"),
     origin = hash("executor-source");
   const project = pda(
       Buffer.from("project"),
@@ -105,9 +128,19 @@ test("durable executor verifies SQLite consent, binds, creates ATAs, pays and re
       projectId,
     ),
     vault = pda(Buffer.from("vault"), project.toBuffer()),
+    awardId = Buffer.from(
+      solanaAwardId(project.toBase58(), origin.toString("hex")),
+      "hex",
+    ),
     award = pda(Buffer.from("award"), project.toBuffer(), awardId);
   await program.methods
-    .initialize([...projectId], [...domain], identity.publicKey, fee.publicKey)
+    .initialize(
+      [...projectId],
+      [...domain],
+      identity.publicKey,
+      fee.publicKey,
+      bn(2),
+    )
     .accountsStrict({
       owner: payer.publicKey,
       project,
@@ -287,6 +320,7 @@ test("durable executor verifies SQLite consent, binds, creates ATAs, pays and re
       "hex",
     ),
     upgradeAuthority: "11111111111111111111111111111111",
+    bindingDelaySeconds: "2",
   };
   const common = {
     PAYMENTS_DB: db,
@@ -459,16 +493,9 @@ test("durable executor verifies SQLite consent, binds, creates ATAs, pays and re
     ).amount,
     2_000_000n,
   );
-  const tx = await provider.connection.getTransaction(sent.transactionId, {
-    commitment: "finalized",
-    maxSupportedTransactionVersion: 0,
-  });
-  const eventIndex = tx.meta.logMessages.findIndex(
-    (line) =>
-      line.startsWith("Program data: ") &&
-      Buffer.from(line.slice(14), "base64")
-        .subarray(0, 8)
-        .equals(Buffer.from([142, 122, 234, 181, 22, 175, 250, 145])),
+  const [{ index: eventIndex }] = escrowInvocations(
+    await parsedTransaction(sent.transactionId),
+    config.programId,
   );
   const adapter = solanaPaymentAdapter({
     ...config,
@@ -490,6 +517,65 @@ test("durable executor verifies SQLite consent, binds, creates ATAs, pays and re
   assert.equal(
     sql.prepare("SELECT count(*) n FROM test_executor_journal").get().n,
     3,
+  );
+  // Another project's commit that merely mentions this project account must
+  // not stop this project's scanner.
+  const foreignId = hash("foreign-project"),
+    foreignOrigin = hash("foreign-source");
+  const foreign = pda(
+      Buffer.from("project"),
+      payer.publicKey.toBuffer(),
+      foreignId,
+    ),
+    foreignVault = pda(Buffer.from("vault"), foreign.toBuffer()),
+    foreignAward = Buffer.from(
+      solanaAwardId(foreign.toBase58(), foreignOrigin.toString("hex")),
+      "hex",
+    );
+  await program.methods
+    .initialize(
+      [...foreignId],
+      [...domain],
+      identity.publicKey,
+      fee.publicKey,
+      bn(2),
+    )
+    .accountsStrict({
+      owner: payer.publicKey,
+      project: foreign,
+      mint,
+      vault: foreignVault,
+      tokenProgram: TOKEN_PROGRAM_ID,
+      systemProgram: SystemProgram.programId,
+    })
+    .rpc();
+  await mintTo(provider.connection, payer, mint, source, payer, 1_000_000n);
+  await program.methods
+    .deposit(bn(1_000_000))
+    .accountsStrict({
+      owner: payer.publicKey,
+      project: foreign,
+      mint,
+      source,
+      vault: foreignVault,
+      tokenProgram: TOKEN_PROGRAM_ID,
+    })
+    .rpc();
+  await finalized(
+    await program.methods
+      .commit([...foreignAward], [...foreignOrigin], bn(103), bn(1_000_000))
+      .accountsStrict({
+        owner: payer.publicKey,
+        project: foreign,
+        vault: foreignVault,
+        obligation: pda(Buffer.from("award"), foreign.toBuffer(), foreignAward),
+        origin: pda(Buffer.from("origin"), foreign.toBuffer(), foreignOrigin),
+        systemProgram: SystemProgram.programId,
+      })
+      .remainingAccounts([
+        { pubkey: project, isWritable: false, isSigner: false },
+      ])
+      .rpc(),
   );
   const index = (event) =>
     indexPaymentEvent(db, adapter, event, new Date().toISOString());

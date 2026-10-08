@@ -24,6 +24,7 @@ export interface PaymentDeployment {
   identityAuthority: string;
   feeRecipient: string;
   codeSha256: string;
+  bindingDelaySeconds: string;
   upgradeAuthority: string | null;
   networkDomain?: string;
   chainId?: string;
@@ -263,30 +264,50 @@ export default {
       env.PAYMENT_DEPLOYMENTS,
     ) as PaymentDeployment[];
     const rpcUrls = JSON.parse(env.PAYMENT_RPC_URLS) as Record<string, string>;
+    // One failing deployment or step must not stop scanning or payouts elsewhere.
+    const failures: unknown[] = [];
     for (const deployment of deployments) {
-      if (deployment.chain === "base")
-        await scanBasePayments(
-          env.PAYMENTS_DB,
-          deployment,
-          rpcUrls[deployment.network],
-          (event) => ingestPaymentEvent(env, event),
-        );
-      else
-        await scanSolanaPayments(
-          env.PAYMENTS_DB,
-          deployment,
-          rpcUrls[deployment.network],
-          (event) => ingestPaymentEvent(env, event),
-        );
+      try {
+        if (deployment.chain === "base")
+          await scanBasePayments(
+            env.PAYMENTS_DB,
+            deployment,
+            rpcUrls[deployment.network],
+            (event) => ingestPaymentEvent(env, event),
+          );
+        else
+          await scanSolanaPayments(
+            env.PAYMENTS_DB,
+            deployment,
+            rpcUrls[deployment.network],
+            (event) => ingestPaymentEvent(env, event),
+          );
+      } catch (error) {
+        failures.push(error);
+      }
     }
-    await recoverUncertainAttempts(env);
-    await reconcileFailedAttempts(
-      env.PAYMENTS_DB,
-      deployments,
-      rpcUrls,
-      JSON.parse(env.PAYMENT_SOLANA_GENESIS ?? "{}") as Record<string, string>,
-    );
-    await runPaymentDispatch(env);
+    for (const step of [
+      () => recoverUncertainAttempts(env),
+      () =>
+        reconcileFailedAttempts(
+          env.PAYMENTS_DB,
+          deployments,
+          rpcUrls,
+          JSON.parse(env.PAYMENT_SOLANA_GENESIS ?? "{}") as Record<
+            string,
+            string
+          >,
+        ),
+      () => runPaymentDispatch(env),
+    ]) {
+      try {
+        await step();
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    if (failures.length)
+      throw new AggregateError(failures, "Payment worker failures");
   },
   async queue(
     batch: {
