@@ -47,9 +47,14 @@ also has a separate Anvil integration workflow in `contracts/evm`.
 finalized Base logs and Solana signature history, then reconciles submitted or
 uncertain attempts and dispatches ready obligations. Cursors advance only after
 every recognized event is verified and indexed. Base starts from the reviewed
-deployment transaction. Solana paginates project-account signature history,
-indexes only this project's escrow instructions, handles at most 100
-transactions per run, and saves its position after each one. A failed or
+deployment transaction. Solana stores one finalized signature page per run in a durable discovery
+interval. After it reaches the preceding cursor, it indexes that interval
+oldest first, at most 100 transactions per run. Migration `0012` adds the pending
+pages and generation/revision checkpoints. Indexing verifies only this project's
+escrow instructions. Cursor advancement and removal of verified page entries
+share an atomic checkpoint; stale overlapping runs cannot rewind it. Restarted
+runs may reverify an event through the existing idempotent ledger. New arrivals
+wait for the next interval, and verified pages are removed. A failed or
 unavailable RPC never advances coverage. A failure in one deployment or step is
 reported but does not stop the other deployments, recovery, reconciliation, or
 dispatch. Queue ingestion remains available for faster event delivery and uses

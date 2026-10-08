@@ -106,7 +106,9 @@ fee to the fee recipient's account. Logs are not used, because unrelated
 instructions in the same transaction can truncate them. Unrelated instructions
 in the same transaction cannot make a valid payment unverifiable. The scanner
 uses the same instruction list, skips other projects' instructions, processes
-at most 100 transactions per run, and saves its position after each one. Each reviewed configuration includes owner, identity authority,
+at most 100 transactions per run, and atomically checkpoints each verified chunk.
+Backward discovery pages persist across runs, so a large backlog does not reset
+discovery to the newest signature. Each reviewed configuration includes owner, identity authority,
 fee recipient, token mint, network domain, program loader and code digest.
 For the upgradeable loader, `codeSha256` hashes every byte after the fixed
 45-byte ProgramData header, including allocation padding. `upgradeAuthority`

@@ -82,7 +82,7 @@ async function parsedTransaction(signature) {
   return (await response.json()).result;
 }
 test("durable executor verifies SQLite consent, binds, creates ATAs, pays and retries exact signature", {
-  timeout: 300000,
+  timeout: 480000,
 }, async () => {
   const identity = Keypair.generate(),
     gas = Keypair.generate(),
@@ -174,7 +174,7 @@ test("durable executor verifies SQLite consent, binds, creates ATAs, pays and re
     .rpc();
   await finalized(approval);
   rmSync(".local/executor.sqlite", { force: true });
-  const sql = new DatabaseSync(".local/executor.sqlite");
+  let sql = new DatabaseSync(".local/executor.sqlite");
   for (const migration of readdirSync("../../migrations")
     .filter((x) => x.endsWith(".sql"))
     .sort())
@@ -577,14 +577,144 @@ test("durable executor verifies SQLite consent, binds, creates ATAs, pays and re
       ])
       .rpc(),
   );
+  // Real finalized account mentions span more than one RPC page. They must
+  // not make every cron run repeat discovery from the newest signature.
+  const mentions = [];
+  for (let first = 0; first < 1001; first += 25) {
+    const { blockhash } = await provider.connection.getLatestBlockhash();
+    const batch = await Promise.all(
+      Array.from({ length: Math.min(25, 1001 - first) }, async (_, offset) => {
+        const instruction = SystemProgram.transfer({
+          fromPubkey: payer.publicKey,
+          toPubkey: payer.publicKey,
+          lamports: first + offset + 1,
+        });
+        instruction.keys.push({
+          pubkey: project,
+          isWritable: false,
+          isSigner: false,
+        });
+        const tx = new Transaction({
+          recentBlockhash: blockhash,
+          feePayer: payer.publicKey,
+        }).add(instruction);
+        tx.sign(payer);
+        return provider.connection.sendRawTransaction(tx.serialize());
+      }),
+    );
+    mentions.push(...batch);
+  }
+  await finalized(mentions.at(-1));
+  for (let first = 0; first < mentions.length; first += 256) {
+    const { value } = await provider.connection.getSignatureStatuses(
+      mentions.slice(first, first + 256),
+      { searchTransactionHistory: true },
+    );
+    for (const status of value) {
+      assert.equal(status?.confirmationStatus, "finalized");
+      assert.equal(status.err, null);
+    }
+  }
+  const [newest] = await provider.connection.getSignaturesForAddress(
+    project,
+    { limit: 1 },
+    "finalized",
+  );
   const index = (event) =>
     indexPaymentEvent(db, adapter, event, new Date().toISOString());
   await scanSolanaPayments(db, config, provider.connection.rpcEndpoint, index);
+  const discovery = sql.prepare("SELECT * FROM payment_solana_scans").get();
+  assert.equal(discovery.ready, 0);
+  assert.equal(discovery.next_page, 1);
+  assert.equal(sql.prepare("SELECT count(*) n FROM payment_events").get().n, 0);
+  sql.close();
+  sql = new DatabaseSync(".local/executor.sqlite");
+  await scanSolanaPayments(db, config, provider.connection.rpcEndpoint, index);
+  assert.equal(
+    sql.prepare("SELECT ready FROM payment_solana_scans").get().ready,
+    1,
+  );
+  // Stop after a real reservation is indexed but before its later payment.
+  // A reopened database must replay safely and then finish the frozen interval.
+  await assert.rejects(
+    scanSolanaPayments(
+      db,
+      config,
+      provider.connection.rpcEndpoint,
+      async (event) => {
+        if (event.kind === "paid")
+          throw new Error("scanner restart checkpoint");
+        await index(event);
+      },
+    ),
+    /scanner restart checkpoint/,
+  );
+  assert.equal(sql.prepare("SELECT count(*) n FROM payment_events").get().n, 1);
+  sql.close();
+  sql = new DatabaseSync(".local/executor.sqlite");
+  let resumeOldRun, signalPaused;
+  const paused = new Promise((resolve) => {
+    signalPaused = resolve;
+  });
+  const resume = new Promise((resolve) => {
+    resumeOldRun = resolve;
+  });
+  const oldRun = scanSolanaPayments(
+    db,
+    config,
+    provider.connection.rpcEndpoint,
+    async (event) => {
+      await index(event);
+      if (event.kind === "reserved") {
+        signalPaused();
+        await resume;
+      }
+    },
+  );
+  await paused;
+  await scanSolanaPayments(db, config, provider.connection.rpcEndpoint, index);
+  await scanSolanaPayments(db, config, provider.connection.rpcEndpoint, index);
+  const advancedCursor = sql
+    .prepare("SELECT position FROM payment_chain_cursors")
+    .get().position;
+  const advancedScan = sql.prepare("SELECT * FROM payment_solana_scans").get();
+  resumeOldRun();
+  await oldRun;
+  assert.equal(
+    sql.prepare("SELECT position FROM payment_chain_cursors").get().position,
+    advancedCursor,
+  );
+  assert.deepEqual(
+    sql.prepare("SELECT * FROM payment_solana_scans").get(),
+    advancedScan,
+  );
+  for (let run = 0; run < 20; run++) {
+    await scanSolanaPayments(
+      db,
+      config,
+      provider.connection.rpcEndpoint,
+      index,
+    );
+    if (!sql.prepare("SELECT 1 FROM payment_solana_scans").get()) break;
+  }
+  assert.equal(
+    sql.prepare("SELECT count(*) n FROM payment_solana_scans").get().n,
+    0,
+  );
+  assert.equal(
+    sql.prepare("SELECT count(*) n FROM payment_solana_scan_pages").get().n,
+    0,
+  );
   assert.equal(sql.prepare("SELECT count(*) n FROM payment_events").get().n, 2);
   assert.equal(
     sql.prepare("SELECT state FROM payment_obligations").get().state,
     "paid",
   );
+  assert.equal(
+    sql.prepare("SELECT position FROM payment_chain_cursors").get().position,
+    newest.signature,
+  );
+  await scanSolanaPayments(db, config, provider.connection.rpcEndpoint, index);
   await scanSolanaPayments(db, config, provider.connection.rpcEndpoint, index);
   assert.equal(sql.prepare("SELECT count(*) n FROM payment_events").get().n, 2);
   sql.close();

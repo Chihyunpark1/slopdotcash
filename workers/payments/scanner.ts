@@ -114,12 +114,12 @@ export async function scanBasePayments(
     )
     .run();
 }
-const SOLANA_SIGNATURE_PAGES = 20;
+const SOLANA_SIGNATURE_PAGE_SIZE = 1000;
 const SOLANA_TRANSACTIONS_PER_RUN = 100;
 /**
  * Indexes this project's escrow instructions oldest first. Anyone can mention
  * the project account in a transaction, so other projects' instructions are
- * skipped, work per run is bounded, and the cursor advances per transaction.
+ * skipped, work per run is bounded, and the cursor advances per verified chunk.
  */
 export async function scanSolanaPayments(
   db: D1Database,
@@ -130,47 +130,104 @@ export async function scanSolanaPayments(
   const { projectPda, programId } = deployment;
   if (!projectPda || !programId)
     throw new Error("Solana project deployment missing");
-  const cursor = await db
+  // Freeze a discovery interval. A later run resumes its oldest fetched page;
+  // newly arriving transactions belong to the next interval.
+  await db
     .prepare(
-      "SELECT position FROM payment_chain_cursors WHERE project_id=? AND network=?",
+      "INSERT OR IGNORE INTO payment_solana_scans(project_id,network,generation,until_signature) VALUES(?,?,?,(SELECT position FROM payment_chain_cursors WHERE project_id=? AND network=?))",
+    )
+    .bind(
+      deployment.projectId,
+      deployment.network,
+      crypto.randomUUID(),
+      deployment.projectId,
+      deployment.network,
+    )
+    .run();
+  const scan = await db
+    .prepare(
+      "SELECT * FROM payment_solana_scans WHERE project_id=? AND network=?",
     )
     .bind(deployment.projectId, deployment.network)
-    .first<{ position: string }>();
-  const signatures: { signature: string; err: unknown }[] = [];
-  let before: string | undefined;
-  for (let page = 0; ; page++) {
-    if (page === SOLANA_SIGNATURE_PAGES)
-      throw new Error("Solana scanner backlog exceeds one run");
+    .first<{
+      generation: string;
+      until_signature: string | null;
+      before_signature: string | null;
+      next_page: number;
+      ready: number;
+      revision: number;
+    }>();
+  if (!scan) return;
+  // Every checkpoint is one atomic compare-and-swap batch. An overlapping or
+  // resumed stale run may reverify events, but cannot rewind or delete progress.
+  const fence =
+    "EXISTS(SELECT 1 FROM payment_solana_scans WHERE project_id=? AND network=? AND generation=? AND revision=?)";
+  const keys = [deployment.projectId, deployment.network, scan.generation];
+  const expected = [...keys, scan.revision];
+  if (!scan.ready) {
     const result = (await rpc(rpcUrl, "getSignaturesForAddress", [
       projectPda,
       {
         commitment: "finalized",
-        limit: 1000,
-        ...(before ? { before } : {}),
-        ...(cursor ? { until: cursor.position } : {}),
+        limit: SOLANA_SIGNATURE_PAGE_SIZE,
+        ...(scan.before_signature ? { before: scan.before_signature } : {}),
+        ...(scan.until_signature ? { until: scan.until_signature } : {}),
       },
     ])) as { signature: string; err: unknown }[];
     if (!Array.isArray(result))
       throw new Error("Invalid Solana signature page");
-    signatures.push(...result);
-    if (result.length < 1000) break;
-    before = result[result.length - 1].signature;
+    const ready = result.length < SOLANA_SIGNATURE_PAGE_SIZE ? 1 : 0;
+    await db.batch([
+      ...(result.length
+        ? [
+            db
+              .prepare(
+                `INSERT INTO payment_solana_scan_pages SELECT ?,?,?,?,? WHERE ${fence}`,
+              )
+              .bind(
+                ...keys,
+                scan.next_page,
+                JSON.stringify(result.reverse()),
+                ...expected,
+              ),
+          ]
+        : []),
+      db
+        .prepare(
+          "UPDATE payment_solana_scans SET before_signature=?,next_page=next_page+?,ready=?,revision=revision+1 WHERE project_id=? AND network=? AND generation=? AND revision=?",
+        )
+        .bind(
+          result[0]?.signature ?? scan.before_signature,
+          result.length ? 1 : 0,
+          ready,
+          ...expected,
+        ),
+    ]);
+    // One discovery page per run keeps RPC and D1 writes bounded. Processing
+    // starts only after the old cursor is reached, preserving reserve/pay order.
+    return;
   }
-  const save = (signature: string) =>
-    db
+  const page = await db
+    .prepare(
+      "SELECT page,signatures_json FROM payment_solana_scan_pages WHERE project_id=? AND network=? AND generation=? ORDER BY page DESC LIMIT 1",
+    )
+    .bind(...keys)
+    .first<{ page: number; signatures_json: string }>();
+  if (!page) {
+    await db
       .prepare(
-        "INSERT INTO payment_chain_cursors VALUES(?,?,?,?) ON CONFLICT(project_id,network) DO UPDATE SET position=excluded.position,synced_at=excluded.synced_at",
+        "DELETE FROM payment_solana_scans WHERE project_id=? AND network=? AND generation=? AND revision=?",
       )
-      .bind(
-        deployment.projectId,
-        deployment.network,
-        signature,
-        new Date().toISOString(),
-      )
+      .bind(...expected)
       .run();
-  for (const item of signatures
-    .reverse()
-    .slice(0, SOLANA_TRANSACTIONS_PER_RUN)) {
+    return;
+  }
+  const signatures = JSON.parse(page.signatures_json) as {
+    signature: string;
+    err: unknown;
+  }[];
+  const chunk = signatures.slice(0, SOLANA_TRANSACTIONS_PER_RUN);
+  for (const item of chunk) {
     if (!item.err) {
       const tx = (await rpc(rpcUrl, "getTransaction", [
         item.signature,
@@ -213,8 +270,37 @@ export async function scanSolanaPayments(
         });
       }
     }
-    await save(item.signature);
   }
+  const remaining = signatures.slice(chunk.length);
+  await db.batch([
+    db
+      .prepare(
+        `INSERT INTO payment_chain_cursors SELECT ?,?,?,? WHERE ${fence} ON CONFLICT(project_id,network) DO UPDATE SET position=excluded.position,synced_at=excluded.synced_at`,
+      )
+      .bind(
+        deployment.projectId,
+        deployment.network,
+        chunk[chunk.length - 1].signature,
+        new Date().toISOString(),
+        ...expected,
+      ),
+    remaining.length
+      ? db
+          .prepare(
+            `UPDATE payment_solana_scan_pages SET signatures_json=? WHERE project_id=? AND network=? AND generation=? AND page=? AND ${fence}`,
+          )
+          .bind(JSON.stringify(remaining), ...keys, page.page, ...expected)
+      : db
+          .prepare(
+            `DELETE FROM payment_solana_scan_pages WHERE project_id=? AND network=? AND generation=? AND page=? AND ${fence}`,
+          )
+          .bind(...keys, page.page, ...expected),
+    db
+      .prepare(
+        "UPDATE payment_solana_scans SET revision=revision+1 WHERE project_id=? AND network=? AND generation=? AND revision=?",
+      )
+      .bind(...expected),
+  ]);
 }
 const hex = (value: Uint8Array) =>
   Array.from(value, (b) => b.toString(16).padStart(2, "0")).join("");
