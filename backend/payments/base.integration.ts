@@ -398,9 +398,24 @@ try {
     }),
     ALLOW_LOCAL_TEST_CHAIN: true,
   };
+  let rejectFirstBinding = true;
   const attesterEngine = createBaseAttester({
     ...shared,
-    SIGNER: attesterAccount,
+    SIGNER: {
+      address: attesterAccount.address,
+      async signTransaction(transaction) {
+        // The local signer emits one invalid actor ID. Anvil must mine the
+        // real contract revert; no receipt or finality response is simulated.
+        if (rejectFirstBinding) {
+          rejectFirstBinding = false;
+          return attesterAccount.signTransaction({
+            ...transaction,
+            data: `${transaction.data.slice(0, 10)}${"0".repeat(64)}${transaction.data.slice(74)}` as `0x${string}`,
+          });
+        }
+        return attesterAccount.signTransaction(transaction);
+      },
+    },
     JOURNAL: attesterJournal,
   });
   const makeExecutor = () =>
@@ -413,6 +428,50 @@ try {
   await assert.rejects(
     dispatchPayment(db, makeExecutor(), award, new Date()),
     /awaits finality/,
+  );
+  const bindingAttempt = sql
+    .query<{ id: string }, []>("SELECT id FROM payment_attempts LIMIT 1")
+    .get();
+  assert(bindingAttempt);
+  const rejectedBinding = await attesterJournal.get<{ transactionId: string }>(
+    `bind:${bindingAttempt.id}`,
+  );
+  assert(rejectedBinding);
+  const rejectedReceipt = (await rpc("eth_getTransactionReceipt", [
+    rejectedBinding.transactionId,
+  ])) as { status: string };
+  assert.equal(rejectedReceipt.status, "0x0");
+  await assert.rejects(
+    dispatchPayment(db, makeExecutor(), award, new Date()),
+    /Recorded transaction reverted/,
+  );
+  assert.equal(
+    rawBroadcasts,
+    1,
+    "Unfinalized revert must not create a new signed bind",
+  );
+  assert.deepEqual(
+    await attesterJournal.get(`bind:${bindingAttempt.id}`),
+    rejectedBinding,
+    "The original signed journal entry stays intact until finality",
+  );
+  await rpc("anvil_mine", ["0x40"]);
+  await assert.rejects(
+    dispatchPayment(db, makeExecutor(), award, new Date()),
+    /awaits finality/,
+  );
+  const replacementBinding = await attesterJournal.get<{
+    transactionId: string;
+  }>(`bind:${bindingAttempt.id}`);
+  assert(replacementBinding);
+  assert.notEqual(
+    replacementBinding.transactionId,
+    rejectedBinding.transactionId,
+  );
+  assert.equal(
+    rawBroadcasts,
+    2,
+    "Finalized revert permits one replacement bind",
   );
   await rpc("anvil_mine", ["0x40"]);
   // A pending binding never reaches signing; it pays only after the delay.
@@ -440,8 +499,8 @@ try {
   const paidTx = prepared.transaction_id;
   assert.equal(
     rawBroadcasts,
-    2,
-    "Exactly one attestation and one payment broadcast across restart",
+    3,
+    "One rejected bind, one replacement and one payment across restart",
   );
   await assert.rejects(
     makeExecutor().submit({
@@ -622,7 +681,7 @@ try {
   await assert.rejects(inFlightOld, /retired before signing/);
   assert.equal(
     rawBroadcasts,
-    2,
+    3,
     "Retirement blocks the in-flight old signer before broadcast",
   );
   sql
@@ -873,7 +932,7 @@ try {
     await new Promise(() => {});
   }
   console.log(
-    "Local Base workflow passed: escrow, signed consent, separate signed execution, durable ambiguous-send recovery, finalized scanner replay, safe unsigned retirement, delayed successor rotation, and exact net balances.",
+    "Local Base workflow passed: escrow, signed consent, separate signed execution, durable ambiguous-send recovery, finalized binding retry, finalized scanner replay, safe unsigned retirement, delayed successor rotation, and exact net balances.",
   );
 } finally {
   sql.close();

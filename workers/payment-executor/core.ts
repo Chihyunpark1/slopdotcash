@@ -13,6 +13,7 @@ import {
   buildPayCalldata,
   verifyBaseDeployment,
 } from "../../contracts/evm/adapter";
+import { finalizedBaseRevert } from "../payments/reconcile";
 
 type Hex = `0x${string}`;
 export interface Signer {
@@ -290,15 +291,20 @@ async function retireRevertedBind(
   key: string,
   attempt: Attempt,
 ): Promise<boolean> {
-  const receipt = (await rpc(config, "eth_getTransactionReceipt", [
+  const proof = await finalizedBaseRevert(
+    config.rpcUrl,
+    config.chainId,
     attempt.transactionId,
-  ])) as { status: string } | null;
-  if (!receipt || receipt.status === "0x1") return false;
+  );
+  if (!proof) return false;
   return env.JOURNAL.transaction(async (store) => {
     const current = await store.get<Attempt | null>(key);
     if (!current || current.transactionId !== attempt.transactionId)
       return false;
-    await store.put(`${key}:reverted:${attempt.transactionId}`, current);
+    await store.put(`${key}:reverted:${attempt.transactionId}`, {
+      ...current,
+      revert: proof,
+    });
     await store.put(key, null);
     return true;
   });

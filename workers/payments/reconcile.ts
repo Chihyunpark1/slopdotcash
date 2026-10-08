@@ -17,6 +17,51 @@ async function rpc(
     throw new Error("Reconciliation RPC failed");
   return body.result;
 }
+/** Reuse the same canonical finalized-revert proof for payout and binding retries. */
+export async function finalizedBaseRevert(
+  url: string,
+  chainId: string | undefined,
+  transactionId: string,
+) {
+  if (
+    !chainId ||
+    BigInt((await rpc(url, "eth_chainId", [])) as string) !== BigInt(chainId)
+  )
+    throw new Error("Reconciliation chain mismatch");
+  const receipt = (await rpc(url, "eth_getTransactionReceipt", [
+    transactionId,
+  ])) as {
+    status: string;
+    transactionHash: string;
+    blockHash: string;
+    blockNumber: string;
+  } | null;
+  if (receipt?.status !== "0x0") return null;
+  const head = (await rpc(url, "eth_getBlockByNumber", [
+    "finalized",
+    false,
+  ])) as { number: string } | null;
+  const block = (await rpc(url, "eth_getBlockByNumber", [
+    receipt.blockNumber,
+    false,
+  ])) as { hash: string } | null;
+  if (
+    !head ||
+    !block ||
+    BigInt(receipt.blockNumber) > BigInt(head.number) ||
+    receipt.transactionHash.toLowerCase() !== transactionId.toLowerCase() ||
+    receipt.blockHash !== block.hash
+  )
+    return null;
+  return {
+    chain: "base",
+    transactionId,
+    blockHash: block.hash,
+    status: "reverted",
+    finality: "finalized",
+  };
+}
+
 /** Finalized reverted transactions are safe to retry with a fresh attempt. Missing
  * receipts and uncertain submissions remain held; absence is not failure proof. */
 export async function reconcileFailedAttempts(
@@ -47,45 +92,12 @@ export async function reconcileFailedAttempts(
       url = rpcUrls[deployment.network];
     let proof: unknown;
     if (deployment.chain === "base") {
-      if (
-        !deployment.chainId ||
-        BigInt((await rpc(url, "eth_chainId", [])) as string) !==
-          BigInt(deployment.chainId)
-      )
-        throw new Error("Reconciliation chain mismatch");
-      const receipt = (await rpc(url, "eth_getTransactionReceipt", [
+      proof = await finalizedBaseRevert(
+        url,
+        deployment.chainId,
         attempt.transactionId,
-      ])) as {
-        status: string;
-        transactionHash: string;
-        blockHash: string;
-        blockNumber: string;
-      } | null;
-      if (receipt?.status !== "0x0") continue;
-      const head = (await rpc(url, "eth_getBlockByNumber", [
-        "finalized",
-        false,
-      ])) as { number: string } | null;
-      const block = (await rpc(url, "eth_getBlockByNumber", [
-        receipt.blockNumber,
-        false,
-      ])) as { hash: string } | null;
-      if (
-        !head ||
-        !block ||
-        BigInt(receipt.blockNumber) > BigInt(head.number) ||
-        receipt.transactionHash.toLowerCase() !==
-          attempt.transactionId.toLowerCase() ||
-        receipt.blockHash !== block.hash
-      )
-        continue;
-      proof = {
-        chain: "base",
-        transactionId: attempt.transactionId,
-        blockHash: block.hash,
-        status: "reverted",
-        finality: "finalized",
-      };
+      );
+      if (!proof) continue;
     } else {
       if (
         !genesisHashes[deployment.network] ||

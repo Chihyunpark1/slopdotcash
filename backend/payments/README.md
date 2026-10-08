@@ -60,8 +60,9 @@ contributor's authorized wallets. Any other destination means the identity
 authority was misused, so indexing fails closed for investigation. Executors
 never sign a payment for a pending, cancelled, or vetoed binding. A successor
 wallet waits 24 hours even where the escrow has no earlier binding for that
-contributor. A reverted Base bind transaction is retired so a fresh bind can
-replace it.
+contributor. A Base bind transaction can be retired only after its revert is finalized
+and its receipt matches the canonical block. The journal keeps that proof
+before a fresh bind can replace it. Pending and ambiguous results remain held.
 
 Derive `PAYMENT_DEPLOYMENTS` from reviewed project manifests. Resolve private
 RPC URLs through `PAYMENT_RPC_URLS`, keyed by network; do not publish them in
