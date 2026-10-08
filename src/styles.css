@@ -4304,3 +4304,8 @@ small {
   text-decoration: underline;
   text-underline-offset: 4px;
 }
+
+.recipient-table thead th,
+.recipient-table td:first-of-type {
+  white-space: nowrap;
+}
