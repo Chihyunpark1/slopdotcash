@@ -136,10 +136,17 @@ test("public funding records and the payout workspace are separate tabs", async 
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto("/projects/eliza");
-  await page.getByRole("link", { name: "View transactions" }).click();
-  await expect(page).toHaveURL(/\/projects\/eliza\/funding$/u);
+  await page.getByRole("link", { name: "Manage payouts" }).click();
+  await expect(page).toHaveURL(/\/projects\/eliza\/funding#payouts$/u);
+  const payouts = page.getByRole("tab", { name: "Manage payouts" });
+  await expect(payouts).toHaveAttribute("aria-selected", "true");
+  await expect(page.locator(".funding-workbench")).toBeVisible();
+  await payouts.focus();
+  await page.keyboard.press("ArrowLeft");
   const records = page.getByRole("tab", { name: "Funding records" });
+  await expect(records).toBeFocused();
   await expect(records).toHaveAttribute("aria-selected", "true");
+  await expect(page).toHaveURL(/\/projects\/eliza\/funding$/u);
   const panel = page.getByRole("tabpanel", { name: "Funding records" });
   await expect(panel).toContainText("Pledged, not committed");
   await expect(panel).toContainText("Not deployed");
@@ -147,16 +154,10 @@ test("public funding records and the payout workspace are separate tabs", async 
     "No reviewed public funding transactions have been published yet.",
   );
   await expect(page.locator(".funding-workbench")).toHaveCount(0);
-  await records.focus();
-  await page.keyboard.press("ArrowRight");
-  const payouts = page.getByRole("tab", { name: "Manage payouts" });
-  await expect(payouts).toBeFocused();
-  await expect(payouts).toHaveAttribute("aria-selected", "true");
-  await expect(page).toHaveURL(/\/projects\/eliza\/funding#payouts$/u);
-  await expect(page.locator(".funding-workbench")).toBeVisible();
   await page.reload();
+  await expect(records).toHaveAttribute("aria-selected", "true");
+  await page.goto("/projects/eliza/funding#payouts");
   await expect(payouts).toHaveAttribute("aria-selected", "true");
-  await page.keyboard.press("Tab");
   expect(errors).toEqual([]);
   expect(
     (
