@@ -1967,8 +1967,7 @@ function HowItWorksPage() {
           <p>
             Maintainers ratify effort tiers for accepted work. Related or split
             PRs share one work unit. Score is separate from{" "}
-            <Link href="/points#rules">participation Points</Link> and money
-            received.
+            <Link href="/points">participation Points</Link> and money received.
           </p>
           <details>
             <summary>Scoring rules and evidence</summary>
