@@ -60,9 +60,10 @@ is run from a clean checkout of `develop`, and its output is kept.
    refund or windup transfer goes to the creator's declared funder wallet. A
    project vault proposal carries no fee transfer: the 1% fee is a separate
    transfer the creator sends from the creator's own wallet, never from the
-   vault (RFC #500 section 8). A plan or proposal that contains a transfer to
-   Slop's fee recipient or to any other Slop address ends the procedure. Slop
-   never votes on a transfer to a Slop address.
+   vault (RFC #500 section 8), so `totals.platformFeeMinor` in the plan is
+   `0`. A plan or proposal that contains a transfer to Slop's fee recipient or
+   to any other Slop address ends the procedure. Slop never votes on a
+   transfer to a Slop address.
 4. **The vault still has the reviewed shape.** Run the shape verifier in
    `state` mode with the three members from the manifest:
 
