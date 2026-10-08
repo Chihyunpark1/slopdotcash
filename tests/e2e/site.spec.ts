@@ -565,6 +565,14 @@ test("never presents Delta Star's external prize as platform money", async ({
 test("renders contributor and cycle records from validated public data", {
   tag: ["@pages"],
 }, async ({ page, request }) => {
+  await page.goto("/cycles/eliza/2026-99", { waitUntil: "networkidle" });
+  await expect(
+    page.getByRole("heading", { name: "Cycle unavailable", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("link", { name: "See open projects", exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/$/u);
   const snapshot = await loadSnapshot(request);
   const cycles = await loadCycles(request);
   const actor =
@@ -664,24 +672,60 @@ test("renders contributor and cycle records from validated public data", {
     cycle.contributors.some((entry) => entry.actor.id === actor.id),
   );
   if (archived) {
-    await page.goto(`/cycles/${archived.projectId}/${archived.cycleId}`, {
-      waitUntil: "networkidle",
-    });
+    await page.goto("/cycles", { waitUntil: "networkidle" });
+    await expect(
+      page.getByRole("heading", { name: "Payment cycles", exact: true }),
+    ).toBeVisible();
+    const month = new Intl.DateTimeFormat("en-US", {
+      month: "long",
+      year: "numeric",
+      timeZone: "UTC",
+    }).format(new Date(`${archived.cycleId}-01T00:00:00Z`));
+    const project = PROJECTS.find((entry) => entry.id === archived.projectId);
+    await page
+      .getByRole("link", {
+        name: `${project?.name ?? archived.projectId} · ${month}`,
+        exact: true,
+      })
+      .click();
     await expect(
       page.getByRole("heading", {
-        name: new RegExp(`${archived.cycleId}$`, "u"),
+        name: `${project?.name ?? archived.projectId} · ${month}`,
+        exact: true,
       }),
     ).toBeVisible();
     await expect(
-      page.getByRole("heading", { name: "Public files" }),
+      page.getByRole("heading", { name: "Evidence", exact: true }),
     ).toBeVisible();
+    const records = page.getByText("Original records and checksums", {
+      exact: true,
+    });
+    await records.focus();
+    await page.keyboard.press("Enter");
+    const frozen = page.getByRole("link", {
+      name: new RegExp("Frozen source", "u"),
+    });
+    await expect(frozen).toHaveAttribute(
+      "href",
+      archived.files.sourceSnapshot.url,
+    );
+    await expect(frozen).toContainText(archived.files.sourceSnapshot.sha256);
+    const download = await request.get(archived.files.sourceSnapshot.url);
+    expect(download.ok()).toBe(true);
+    expect(
+      createHash("sha256")
+        .update(await download.body())
+        .digest("hex"),
+    ).toBe(archived.files.sourceSnapshot.sha256);
   } else {
     const view = createProjectView(snapshot, "eliza");
     await page.goto(`/cycles/eliza/${view.cycle.id}`, {
       waitUntil: "networkidle",
     });
     await expect(
-      page.getByRole("heading", { name: `Eliza · ${view.cycle.id}` }),
+      page.getByRole("heading", {
+        name: `Eliza · ${new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${view.cycle.id}-01T00:00:00Z`))}`,
+      }),
     ).toBeVisible();
     await expect(page.getByText("Review", { exact: true })).toBeVisible();
     await expect(page.getByText("Cycle evidence.")).toHaveCount(0);
