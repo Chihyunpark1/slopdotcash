@@ -176,7 +176,7 @@ and produces the static build.
 GitHub is the write-master for project work and policy. Cloudflare Pages serves
 the tested static build at [slop.cash](https://slop.cash) and
 [slop.tech](https://slop.tech). Production deploys only from the exact tested
-`develop` commit through the protected GitHub Actions environment. A merge is
+`main` commit through the protected GitHub Actions environment. A merge is
 not proof of deployment; release evidence must match the deployed bytes, DNS,
 TLS, and security headers.
 
@@ -210,10 +210,6 @@ lint and tests. Live chain verification and browser checks remain separate.
 
 - `bun run check:unused` checks application locals and parameters; review exports,
   generated entry points, CLI tools, and configuration before removing dependencies.
-- `bun run test:evidence` runs the planted evidence-verifier failure cases.
-- `bun run test:coverage` produces branch-coverage reports for core domain boundaries
-  under `coverage/`. Use uncovered behavior to investigate meaningful risks, not
-  to create shape-only tests or score-padding submissions.
 - `bun run quality:simulate -- PREPARATION EVIDENCE PROPOSAL OUTPUT` recalculates
   a saved quality proposal against its exact source and budget. It creates a new
   output file and never authorizes payments or trusts imported output amounts.
@@ -229,6 +225,12 @@ finite per-case budgets; pure domain tests run in Node, while shared publication
 fixtures remain serial. `bun run verify` remains the complete local source gate;
 run `bun run test:e2e` separately for the full browser matrix.
 
+## Release environments
+
+`development` serves [staging](https://staging.slop.cash), including an isolated
+login and write backend. `main` serves [production](https://slop.cash). See
+[release environments](docs/release-environments.md) for setup, promotion, and
+acceptance requirements.
 
 ## Base and Solana escrow migration
 

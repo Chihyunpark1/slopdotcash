@@ -2,6 +2,7 @@ import { ChevronRight, CircleAlert, ExternalLink } from "lucide-react";
 import { useEffect, useState } from "react";
 import { DonorFundingProfile, useFundingIndex } from "./FundingRecords";
 import { Link } from "./Link";
+import { browserDeployment } from "./lib/browser-deployment";
 import { readBoundedJson } from "./lib/browser-json";
 import { isFundingAddress } from "./lib/funding";
 import { createGlobalLeaders } from "./lib/global-leaderboard";
@@ -462,7 +463,7 @@ function useCurrentWallet(state: DataState, login: string): CurrentWalletState {
       WALLET_CLAIM_TIMEOUT_MS,
     );
     void fetch(
-      `https://api.slop.cash/api/v1/wallet-claims/actors/${githubActorId}/current`,
+      `${browserDeployment.api}/api/v1/wallet-claims/actors/${githubActorId}/current`,
       {
         cache: "no-store",
         headers: { Accept: "application/json" },
@@ -505,7 +506,7 @@ function useCurrentWallet(state: DataState, login: string): CurrentWalletState {
           status: "ready",
           address: claim.address,
           login: normalizedLogin,
-          sourceUrl: `https://api.slop.cash/api/v1/wallet-claims/${claim.claimId}`,
+          sourceUrl: `${browserDeployment.api}/api/v1/wallet-claims/${claim.claimId}`,
         });
       })
       .catch(() => {

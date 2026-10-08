@@ -157,7 +157,8 @@ test("ranks archived work separately from the month its payment settled", async 
   await page.route("**/data/cycles/index.json?**", (route) =>
     route.fulfill({ json: history }),
   );
-  await page.goto("/?sort=money#leaderboard");
+  // Search keeps this zero-payment actor visible after all points rows load.
+  await page.goto("/?sort=money&q=archive-only#leaderboard");
   const standings = page.getByRole("region", {
     name: "Top sloperators",
     exact: true,
@@ -174,7 +175,8 @@ test("ranks archived work separately from the month its payment settled", async 
   await expect(recipient.locator("td").nth(2)).toHaveText("7");
   await expect(recipient.locator("td").nth(4)).toHaveText("$1");
   await page.clock.setFixedTime(new Date("2026-07-31T12:00:00.000Z"));
-  await page.goto("/?sort=money#leaderboard");
+  // Search keeps this zero-payment actor visible after all points rows load.
+  await page.goto("/?sort=money&q=archive-only#leaderboard");
   await expect(recipient.locator("td").nth(2)).toHaveText("7");
   await expect(recipient.locator("td").nth(4)).toHaveText("$0");
 

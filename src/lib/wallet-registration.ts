@@ -1,3 +1,4 @@
+import { browserDeployment } from "./browser-deployment";
 /** Browser adapter for the canonical wallet-claim/run-receipt OAuth protocol. */
 import {
   type IdentityAuthorization,
@@ -5,7 +6,8 @@ import {
 } from "./identity-flow";
 import { isWalletAddress, isWalletChain, type WalletChain } from "./wallets";
 
-const API = "https://api.slop.cash";
+const IDENTITY = browserDeployment.identity;
+const API = browserDeployment.api;
 const AUDIENCE = "private-trace-api";
 export interface WalletRegistrationIdentity {
   githubActorId: string;
@@ -242,6 +244,7 @@ export async function prepareWalletRegistration(
   }
   try {
     let assertion = await requestIdentityAssertion({
+      origin: IDENTITY,
       audience: AUDIENCE,
       signal,
       now,

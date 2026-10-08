@@ -8,5 +8,3 @@ slop_escrow = "5KFQm1jLFkcS1V5PFpUFg6omNHoDQZTaxqTwwEpnenSL"
 [provider]
 cluster = "Localnet"
 wallet = "./.local/payer.json"
-[scripts]
-test = "node --test tests/escrow.test.mjs"
