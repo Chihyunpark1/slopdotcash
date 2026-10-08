@@ -6,6 +6,7 @@ import anchor from "@coral-xyz/anchor";
 import {
   createMint,
   getAccount,
+  getAssociatedTokenAddressSync,
   getOrCreateAssociatedTokenAccount,
   mintTo,
 } from "@solana/spl-token";
@@ -15,10 +16,10 @@ import {
   sendAndConfirmTransaction,
   Transaction,
 } from "@solana/web3.js";
-import { ownerPlan } from "../scripts/owner-plan.mjs";
+import { awardIdFor, ownerPlan } from "../scripts/owner-plan.mjs";
 
 const hash = (value) => createHash("sha256").update(value).digest("hex");
-test("unsigned owner plans initialize, fund, reserve and withdraw on actual SPL program", {
+test("unsigned owner plans initialize, fund, reserve, veto and withdraw on actual SPL program", {
   timeout: 120000,
 }, async () => {
   const provider = anchor.AnchorProvider.env(),
@@ -38,12 +39,10 @@ test("unsigned owner plans initialize, fund, reserve and withdraw on actual SPL 
       mint,
       owner.publicKey,
     ),
-    feeAccount = await getOrCreateAssociatedTokenAccount(
-      provider.connection,
-      owner,
-      mint,
-      fees.publicKey,
-    );
+    // The withdraw plan must create the fee recipient's account itself.
+    feeAccount = {
+      address: getAssociatedTokenAddressSync(mint, fees.publicKey),
+    };
   await mintTo(
     provider.connection,
     owner,
@@ -79,6 +78,7 @@ test("unsigned owner plans initialize, fund, reserve and withdraw on actual SPL 
     feeRecipient: fees.publicKey.toBase58(),
     codeSha256: hash(readFileSync("target/deploy/slop_escrow.so")),
     upgradeAuthority: "11111111111111111111111111111111",
+    bindingDelaySeconds: "3600",
   };
   const expectedGenesis = await provider.connection.getGenesisHash();
   async function execute(operation, extra) {
@@ -111,16 +111,74 @@ test("unsigned owner plans initialize, fund, reserve and withdraw on actual SPL 
   }
   await execute("initialize", { projectDigest });
   await execute("deposit", { grossMicro: "100000000" });
+  const sourceDigest = hash("owner-plan-source");
+  await assert.rejects(
+    execute("commit", {
+      awards: [
+        {
+          awardId: hash("owner-plan-award"),
+          sourceDigest,
+          githubUserId: "999",
+          grossMicro: "25000000",
+        },
+      ],
+    }),
+    /not bound to this project/,
+  );
   await execute("commit", {
     awards: [
       {
-        awardId: hash("owner-plan-award"),
-        sourceDigest: hash("owner-plan-source"),
+        awardId: Buffer.from(
+          awardIdFor(project, Buffer.from(sourceDigest, "hex")),
+        ).toString("hex"),
+        sourceDigest,
         githubUserId: "999",
         grossMicro: "25000000",
       },
     ],
   });
+  // The identity authority binds actor 999; the owner vetoes it while pending.
+  const program = new anchor.Program(
+    JSON.parse(readFileSync("idl/slop_escrow.json")),
+    provider,
+  );
+  const actor = new anchor.BN(999).toArrayLike(Buffer, "le", 8),
+    version = new anchor.BN(1).toArrayLike(Buffer, "le", 8);
+  await program.methods
+    .bindWallet(
+      new anchor.BN(999),
+      [...Buffer.from(deployment.networkDomain, "hex")],
+      new anchor.BN(0),
+      Keypair.generate().publicKey,
+      [...Buffer.from(hash("owner-plan-claim"), "hex")],
+    )
+    .accountsStrict({
+      payer: owner.publicKey,
+      identityAuthority: identity.publicKey,
+      project,
+      binding: PublicKey.findProgramAddressSync(
+        [
+          Buffer.from("wallet"),
+          identity.publicKey.toBuffer(),
+          Buffer.from(deployment.networkDomain, "hex"),
+          actor,
+        ],
+        programId,
+      )[0],
+      systemProgram: anchor.web3.SystemProgram.programId,
+    })
+    .signers([identity])
+    .rpc();
+  await execute("veto", { githubUserId: "999", bindingVersion: "1" });
+  assert.ok(
+    await provider.connection.getAccountInfo(
+      PublicKey.findProgramAddressSync(
+        [Buffer.from("veto"), project.toBuffer(), actor, version],
+        programId,
+      )[0],
+      "finalized",
+    ),
+  );
   await execute("withdraw", { grossMicro: "75000000" });
   assert.equal(
     (await getAccount(provider.connection, vault)).amount,

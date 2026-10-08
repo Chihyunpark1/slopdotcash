@@ -82,6 +82,26 @@ export async function indexPaymentEvent(
         existing.paid_transaction !== event.transactionId))
   )
     throw new Error("Unknown or duplicate payout");
+  // A payout to a wallet the contributor never authorized means the identity
+  // authority was misused. Fail closed so it is investigated, not recorded.
+  if (event.kind === "paid") {
+    if (!event.destination) throw new Error("Payout destination missing");
+    const authorized = await db
+      .prepare(
+        "SELECT 1 ok FROM wallet_claims w JOIN payment_wallet_authorizations a ON a.claim_id=w.id AND a.github_user_id=w.github_user_id WHERE w.github_user_id=? AND w.chain=? AND (CASE WHEN w.chain='base' THEN lower(w.wallet_address)=lower(?) ELSE w.wallet_address=? END)",
+      )
+      .bind(
+        event.githubUserId,
+        event.chain,
+        event.destination,
+        event.destination,
+      )
+      .first<{ ok: number }>();
+    if (!authorized)
+      throw new Error(
+        "Payout destination is not an authorized contributor wallet",
+      );
+  }
   const prior = await db
     .prepare(
       "SELECT evidence_json FROM payment_events WHERE network=? AND transaction_id=? AND event_index=?",

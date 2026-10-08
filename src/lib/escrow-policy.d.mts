@@ -17,6 +17,7 @@ export interface EscrowDeployment {
   deploymentTransaction: string;
   sourceCommit: string;
   codeSha256: string;
+  bindingDelaySeconds: string;
 }
 export interface EscrowPolicy {
   schemaVersion: "1";
@@ -27,6 +28,7 @@ export interface EscrowPolicy {
   feeMode: "deduct-from-gross";
   deployments: EscrowDeployment[];
 }
+export declare const MIN_PRODUCTION_BINDING_DELAY: number;
 export declare const ESCROW_NETWORKS: Readonly<
   Record<
     EscrowDeployment["network"],

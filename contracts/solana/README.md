@@ -10,6 +10,8 @@ The owner deposits and approves immutable awards. Award approval reserves princi
 and its included 2% fee before a wallet exists. The `award` PDA and separate `origin` PDA are
 permanent: no close, cancellation, rescue or reserve withdrawal instruction exists.
 The same source digest cannot be committed again under a different award ID.
+The award ID must equal `sha256("slop-escrow-award" || project PDA || source digest)`,
+so another project cannot reserve the same ID first.
 A narrow identity authority binds numeric GitHub actors to destinations with an
 expected predecessor version. Binding PDAs include authority, network, actor and
 the program deployment. Permissionless payment callers select neither amount nor
@@ -17,6 +19,24 @@ recipient; the binding and expected version select the recipient. The backend mu
 verify GitHub login and the contributor's wallet authorization before the identity
 signer submits this transaction. An identity key can redirect future unpaid awards;
 this authority must be disclosed, protected and reviewed separately from relayers.
+
+Each binding records `bound_at`. In a project, `pay` rejects a binding until
+`bound_at + binding_delay` (set once at `initialize`). While a binding is
+pending, the project owner can call `veto_binding(actor_id, version)`. It
+creates a permanent `veto` PDA for that project, actor and version, and `pay`
+rejects any binding version with a veto. Bindings are shared across projects
+with the same identity authority and network, so a veto affects only the
+vetoing project. Only a new authority binding (the next version, with a new
+delay) can follow. An active binding cannot be vetoed. An owner can delay a
+contributor's payout but never take an approved award back. Production
+deployments use a delay of at least 48 hours, and the adapter checks the
+project's delay against the reviewed manifest. `pay` also requires the
+destination to be the bound wallet's associated token account.
+
+The owner can commit an award to any GitHub actor, including an account the
+owner controls, and so move unused funds out at the 2% payout fee instead of the
+10% withdrawal fee. This is an accepted, documented risk: maintainer review of
+related-party awards enforces the policy, not the program.
 
 The 2% fee is deducted from each gross award: 100 pays 98 to the contributor
 and 2 to the fee recipient, reserving 100. Integer arithmetic floors gross/50 once
@@ -38,10 +58,15 @@ records remain permanently allocated to prevent account recreation replay.
 
 Run `npm run build` here to build the actual SBF binary and its IDL.
 Run `npm run test:e2e` to load that binary into an isolated local validator and
-execute the existing SPL payment, durable executor, and unsigned owner-plan
-workflows. These use real token accounts, transactions, finalized receipts and
-balance checks. Fixture keys and tokens have no mainnet value. CI runs these
-end-to-end workflows; a successful build alone is not payment evidence.
+execute the SPL payment, durable executor, and unsigned owner-plan workflows.
+These use real token accounts, transactions, finalized receipts and balance
+checks. They cover the canonical lifecycle, delayed wallet registration, wallet
+rotation, binding delay and owner veto, reserve protection, split withdrawals,
+frozen destination rollback, duplicate payment and forged award rejection, wrong
+destination, unauthorized binding, a third-party payment mixed with unrelated
+token transfers, and a foreign project that mentions this project's account.
+Fixture keys and tokens have no mainnet value. CI runs these end-to-end
+workflows; a successful build alone is not payment evidence.
 `cargo check --locked` verifies the host program build but does not prove SBF or
 validator execution. Use Anchor 0.32.1 and the platform tools pinned in the scripts.
 
@@ -70,13 +95,26 @@ administrative bypass.
 
 ## Deployment identity and automatic execution
 
-`adapter.ts` is Worker-compatible and verifies finalized transactions, exact
-program invocation logs, durable source/actor/gross/net fields, and actual SPL
-balance changes. Each reviewed configuration includes owner, identity authority,
+`adapter.ts` is Worker-compatible and verifies finalized transactions per
+escrow instruction, not per transaction. The event index is the instruction's
+position in the transaction's flattened instruction list (top-level
+instructions, each followed by its inner instructions). For `commit` it checks
+the instruction's project, award account and arguments against the durable
+award. For `pay` it requires exactly two inner `transferChecked` calls from the
+vault, signed by the project PDA, for the net amount to the destination and the
+fee to the fee recipient's account. Logs are not used, because unrelated
+instructions in the same transaction can truncate them. Unrelated instructions
+in the same transaction cannot make a valid payment unverifiable. The scanner
+uses the same instruction list, skips other projects' instructions, processes
+at most 100 transactions per run, and atomically checkpoints each verified chunk.
+Backward discovery pages persist across runs, so a large backlog does not reset
+discovery to the newest signature. Each reviewed configuration includes owner, identity authority,
 fee recipient, token mint, network domain, program loader and code digest.
 For the upgradeable loader, `codeSha256` hashes every byte after the fixed
 45-byte ProgramData header, including allocation padding. `upgradeAuthority`
 must match the finalized loader state, including `null` for an immutable program.
+On mainnet the adapter and manifest schema require `null`: a retained upgrade key
+could replace the program, empty vaults, and restore the reviewed bytes.
 Classic immutable BPF loader deployments hash their complete executable data.
 The deploy script prints separate compiled and deployed hashes; they need not match
 when ProgramData reserves additional zero-filled capacity.

@@ -1,9 +1,9 @@
-# Base escrow v2
+# Base escrow v3
 
 This is an immutable escrow implementation for a single project and six-decimal
 USDC. It has no proxy, owner change, token approval, arbitrary call, rescue,
-claim expiry, or cancellation entry point. An approved award remains reserved
-until it is paid. This code has local EVM execution evidence. It has not received
+claim expiry, or award cancellation entry point. An approved award remains
+reserved until it is paid. The owner can cancel only a pending wallet binding. This code has local EVM execution evidence. It has not received
 an independent security review or a public testnet deployment.
 
 ## Authority and identity
@@ -24,14 +24,26 @@ expected predecessor version, and an expiry for transaction submission. Once
 accepted, the binding persists. The authority must independently verify GitHub
 login, wallet control, and any rotation/recovery approval before submission.
 The on-chain authority can redirect unpaid funds if compromised. It cannot
-change awards or withdraw funds. Use separate test identities for the owner,
+change awards or withdraw funds. To limit that risk, every new or rotated
+binding activates `bindingDelay` seconds after it is made, and `pay` rejects a
+binding before activation. During the delay the project owner can call
+`cancelBinding(actorId, version)`. A cancelled binding never pays; only a new
+authority binding (the next version, with a new delay) can follow. An active
+binding is final and cannot be cancelled. The owner can therefore delay a
+contributor's payout, but can never take an approved award back. Production
+deployments use a delay of at least 48 hours (`MIN_PRODUCTION_BINDING_DELAY`),
+and the adapter checks the deployed `bindingDelay` against the reviewed
+manifest. Use separate test identities for the owner,
 attester, registrar, and gas sponsor.
 
 A payment carries the expected binding version. If rotation executes first,
 the old payment fails. If payment executes first, later rotation cannot repay
 the award. Every award ID and source digest is consumed permanently. Source
 digests identify a single allocation origin including project, cycle, and actor; keep it stable across amount or snapshot
-revisions. Bind the full approved allocation digest in the immutable award ID; do not supply a whole-cycle digest for each award.
+revisions; do not supply a whole-cycle digest for each award. The award ID must
+equal `awardId(sourceDigest)`, which is
+`keccak256(abi.encode(chainId, vault, sourceDigest))`. Another vault cannot
+claim the same ID first, so ledger IDs stay unique across projects.
 
 The first version uses individual commit and pay calls. Dispatchers isolate
 failed recipients by submitting separate transactions. No account can sweep
@@ -42,13 +54,19 @@ unclaimed awards. Missing destinations cause a revert and leave reserves intact.
 All values are integer USDC micro-units. Each award reserves its gross allocation. The payout fee is
 `floor(gross * 2 / 100)` and the recipient receives `gross - fee`. A 100-USDC
 award costs the project 100 USDC and sends 98 USDC to the contributor plus
-2 USDC to the fee recipient. Each unused-fund
+2 USDC of fees. Each unused-fund
 withdrawal charges the increase in `floor(cumulative gross withdrawals / 10)`.
 This prevents reduced withdrawal fees from splitting transactions. A one-unit
 award requires one unit of funding and has a zero fee; tiny award rounding is intentional.
 
-Deposits and transfers must move exact amounts. Token failures, blocked
-recipients, or fee-transfer failures revert the full payment. The accepted token
+Payout and withdrawal fees accrue in the vault as `accruedFees`. Anyone can
+call `claimFees()` to move them to the immutable fee recipient. A blocked fee
+recipient (for example, a USDC blacklist) stops only `claimFees`; payouts and
+refunds continue. Refunds go only to the owner: the constructor requires
+`refundDestination == owner`.
+
+Deposits and transfers must move exact amounts. Token failures or blocked
+recipients revert the full payment. The accepted token
 must have six decimals and ordinary exact-transfer behavior. The deployment
 script fixes Circle's Base Sepolia test USDC address; verify that asset again
 before deployment. Arbitrary tokens with dishonest `balanceOf` results are
@@ -61,7 +79,14 @@ The conservation identity is:
 ```
 totalDeposited = freeBalance + reservedPrincipal + reservedFees
                + totalPaid + totalPayoutFees + totalGrossWithdrawn
+vault balance  = freeBalance + reservedPrincipal + reservedFees + accruedFees
+accruedFees + claimed fees = totalPayoutFees + totalWithdrawalFees
 ```
+
+The owner can commit an award to any GitHub actor, including an account the
+owner controls. That moves unused funds out at the 2% payout fee instead of the
+10% withdrawal fee. This is an accepted, documented risk: maintainer review of
+related-party awards enforces the policy, not the contract.
 
 All escrow accounting counters are checked uint64 values for Solana parity;
 lifetime deposits cannot exceed uint64 maximum. `reservedPrincipal` records

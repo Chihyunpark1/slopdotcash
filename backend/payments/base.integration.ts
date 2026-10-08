@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { mnemonicToAccount } from "viem/accounts";
 import {
+  baseAwardId,
   buildBindCalldata,
   buildPayCalldata,
   verifyBinding,
@@ -123,7 +124,10 @@ const owner = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
 const attester = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8";
 const recipient = "0x7e5f4552091a69125d5dfcb7b8c2659029395bdf";
 const fee = "0x0000000000000000000000000000000000000fee";
-const award = `0x${"1".padStart(64, "0")}`;
+const projectKey = `0x${"1".padStart(64, "0")}`;
+const delay = "3600";
+// Award IDs are bound to the deployed vault; set after deployment.
+let award = "";
 const source = `0x${"2".padStart(64, "0")}`;
 const claimDigest = "c".repeat(64);
 const now = new Date().toISOString();
@@ -209,13 +213,15 @@ try {
     sql.exec(readFileSync(`${root}migrations/${file}`, "utf8"));
   const asset = deploy("integration/TestDollar.sol:TestDollar");
   const vault = deploy("src/ProjectEscrow.sol:ProjectEscrow", [
-    award,
+    projectKey,
     asset,
     owner,
     owner,
     fee,
     attester,
+    delay,
   ]);
+  award = baseAwardId(31337n, vault, source);
   await send(asset, "mint(address,uint256)", [owner, "200000000"]);
   await send(asset, "approve(address,uint256)", [vault, "200000000"]);
   await send(vault, "deposit(uint64)", ["200000000"]);
@@ -236,6 +242,7 @@ try {
     rpcUrl,
     chainId: 31337n,
     vault,
+    bindingDelaySeconds: delay,
     projectId: "integration-fixture",
     network: "anvil",
   };
@@ -391,9 +398,24 @@ try {
     }),
     ALLOW_LOCAL_TEST_CHAIN: true,
   };
+  let rejectFirstBinding = true;
   const attesterEngine = createBaseAttester({
     ...shared,
-    SIGNER: attesterAccount,
+    SIGNER: {
+      address: attesterAccount.address,
+      async signTransaction(transaction) {
+        // The local signer emits one invalid actor ID. Anvil must mine the
+        // real contract revert; no receipt or finality response is simulated.
+        if (rejectFirstBinding) {
+          rejectFirstBinding = false;
+          return attesterAccount.signTransaction({
+            ...transaction,
+            data: `${transaction.data.slice(0, 10)}${"0".repeat(64)}${transaction.data.slice(74)}` as `0x${string}`,
+          });
+        }
+        return attesterAccount.signTransaction(transaction);
+      },
+    },
     JOURNAL: attesterJournal,
   });
   const makeExecutor = () =>
@@ -407,7 +429,58 @@ try {
     dispatchPayment(db, makeExecutor(), award, new Date()),
     /awaits finality/,
   );
+  const bindingAttempt = sql
+    .query<{ id: string }, []>("SELECT id FROM payment_attempts LIMIT 1")
+    .get();
+  assert(bindingAttempt);
+  const rejectedBinding = await attesterJournal.get<{ transactionId: string }>(
+    `bind:${bindingAttempt.id}`,
+  );
+  assert(rejectedBinding);
+  const rejectedReceipt = (await rpc("eth_getTransactionReceipt", [
+    rejectedBinding.transactionId,
+  ])) as { status: string };
+  assert.equal(rejectedReceipt.status, "0x0");
+  await assert.rejects(
+    dispatchPayment(db, makeExecutor(), award, new Date()),
+    /Recorded transaction reverted/,
+  );
+  assert.equal(
+    rawBroadcasts,
+    1,
+    "Unfinalized revert must not create a new signed bind",
+  );
+  assert.deepEqual(
+    await attesterJournal.get(`bind:${bindingAttempt.id}`),
+    rejectedBinding,
+    "The original signed journal entry stays intact until finality",
+  );
   await rpc("anvil_mine", ["0x40"]);
+  await assert.rejects(
+    dispatchPayment(db, makeExecutor(), award, new Date()),
+    /awaits finality/,
+  );
+  const replacementBinding = await attesterJournal.get<{
+    transactionId: string;
+  }>(`bind:${bindingAttempt.id}`);
+  assert(replacementBinding);
+  assert.notEqual(
+    replacementBinding.transactionId,
+    rejectedBinding.transactionId,
+  );
+  assert.equal(
+    rawBroadcasts,
+    2,
+    "Finalized revert permits one replacement bind",
+  );
+  await rpc("anvil_mine", ["0x40"]);
+  // A pending binding never reaches signing; it pays only after the delay.
+  await assert.rejects(
+    dispatchPayment(db, makeExecutor(), award, new Date()),
+    /activates at/,
+  );
+  await rpc("evm_increaseTime", [Number(delay)]);
+  await rpc("anvil_mine", ["0x1"]);
   loseNextSend = true;
   await assert.rejects(
     dispatchPayment(db, makeExecutor(), award, new Date()),
@@ -426,8 +499,8 @@ try {
   const paidTx = prepared.transaction_id;
   assert.equal(
     rawBroadcasts,
-    2,
-    "Exactly one attestation and one payment broadcast across restart",
+    3,
+    "One rejected bind, one replacement and one payment across restart",
   );
   await assert.rejects(
     makeExecutor().submit({
@@ -498,6 +571,8 @@ try {
     { encoding: "utf8" },
   ).trim();
   assert.equal(balance.split(" ")[0], "98000000");
+  // Fees accrue in the vault until anyone claims them for the fee recipient.
+  await send(vault, "claimFees()", []);
   const feeBalance = execFileSync(
     "cast",
     ["call", asset, "balanceOf(address)(uint256)", fee, "--rpc-url", rpcUrl],
@@ -511,7 +586,11 @@ try {
   ).trim();
   assert.equal(refundBalance.split(" ")[0], "90000000");
   // A later award follows an authenticated successor only after the 24-hour delay.
-  const rotationAward = `0x${"9".padStart(64, "0")}`;
+  const rotationAward = baseAwardId(
+    31337n,
+    vault,
+    `0x${"a".padStart(64, "0")}`,
+  );
   await send(asset, "mint(address,uint256)", [owner, "100000000"]);
   await send(asset, "approve(address,uint256)", [vault, "100000000"]);
   await send(vault, "deposit(uint64)", ["100000000"]);
@@ -602,7 +681,7 @@ try {
   await assert.rejects(inFlightOld, /retired before signing/);
   assert.equal(
     rawBroadcasts,
-    2,
+    3,
     "Retirement blocks the in-flight old signer before broadcast",
   );
   sql
@@ -651,6 +730,8 @@ try {
     Date.now = realNow;
   }
   await rpc("anvil_mine", ["0x40"]);
+  await rpc("evm_increaseTime", [Number(delay)]);
+  await rpc("anvil_mine", ["0x1"]);
   await dispatchPayment(db, makeExecutor(), rotationAward, new Date());
   await rpc("anvil_mine", ["0x40"]);
   await scan();
@@ -685,7 +766,11 @@ try {
     "Original award is never replayed during rotation",
   );
   if (process.argv.includes("--serve")) {
-    const browserAward = `0x${"4".padStart(64, "0")}`;
+    const browserAward = baseAwardId(
+      31337n,
+      vault,
+      `0x${"5".padStart(64, "0")}`,
+    );
     await send(asset, "mint(address,uint256)", [owner, "100000000"]);
     await send(asset, "approve(address,uint256)", [vault, "100000000"]);
     await send(vault, "deposit(uint64)", ["100000000"]);
@@ -729,6 +814,10 @@ try {
           db,
           {
             async submit(input) {
+              const latest = (await rpc("eth_getBlockByNumber", [
+                "latest",
+                false,
+              ])) as { timestamp: string };
               const bindingTx = (await rpc("eth_sendTransaction", [
                 {
                   from: attester,
@@ -739,11 +828,13 @@ try {
                     destination: input.destination,
                     expectedVersion: "0",
                     claimDigest: `0x${input.claimDigest}`,
-                    expiresAt: String(Math.floor(Date.now() / 1000) + 3600),
+                    expiresAt: String(Number(BigInt(latest.timestamp)) + 3600),
                   }),
                 },
               ])) as string;
               await rpc("anvil_mine", ["0x40"]);
+              await rpc("evm_increaseTime", [Number(delay)]);
+              await rpc("anvil_mine", ["0x1"]);
               const binding = await verifyBinding(
                 config,
                 bindingTx,
@@ -845,7 +936,7 @@ try {
     await new Promise(() => {});
   }
   console.log(
-    "Local Base workflow passed: escrow, signed consent, separate signed execution, durable ambiguous-send recovery, finalized scanner replay, safe unsigned retirement, delayed successor rotation, and exact net balances.",
+    "Local Base workflow passed: escrow, signed consent, separate signed execution, durable ambiguous-send recovery, finalized binding retry, finalized scanner replay, safe unsigned retirement, delayed successor rotation, and exact net balances.",
   );
 } finally {
   sql.close();

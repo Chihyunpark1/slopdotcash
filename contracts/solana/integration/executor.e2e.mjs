@@ -19,7 +19,11 @@ import {
   sendAndConfirmTransaction,
   Transaction,
 } from "@solana/web3.js";
-import { solanaPaymentAdapter } from "../.local/adapter.mjs";
+import {
+  escrowInvocations,
+  solanaAwardId,
+  solanaPaymentAdapter,
+} from "../.local/adapter.mjs";
 import {
   createSolanaAttester,
   createSolanaExecutor,
@@ -57,8 +61,28 @@ function signer(key) {
 async function finalized(signature) {
   await provider.connection.confirmTransaction(signature, "finalized");
 }
+async function parsedTransaction(signature) {
+  const response = await fetch(provider.connection.rpcEndpoint, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "getTransaction",
+      params: [
+        signature,
+        {
+          commitment: "finalized",
+          encoding: "jsonParsed",
+          maxSupportedTransactionVersion: 0,
+        },
+      ],
+    }),
+  });
+  return (await response.json()).result;
+}
 test("durable executor verifies SQLite consent, binds, creates ATAs, pays and retries exact signature", {
-  timeout: 300000,
+  timeout: 480000,
 }, async () => {
   const identity = Keypair.generate(),
     gas = Keypair.generate(),
@@ -97,7 +121,6 @@ test("durable executor verifies SQLite consent, binds, creates ATAs, pays and re
   await mintTo(provider.connection, payer, mint, source, payer, 100_000_000n);
   const domain = hash("executor:solana-localnet"),
     projectId = hash("executor-project"),
-    awardId = hash("executor-award"),
     origin = hash("executor-source");
   const project = pda(
       Buffer.from("project"),
@@ -105,9 +128,19 @@ test("durable executor verifies SQLite consent, binds, creates ATAs, pays and re
       projectId,
     ),
     vault = pda(Buffer.from("vault"), project.toBuffer()),
+    awardId = Buffer.from(
+      solanaAwardId(project.toBase58(), origin.toString("hex")),
+      "hex",
+    ),
     award = pda(Buffer.from("award"), project.toBuffer(), awardId);
   await program.methods
-    .initialize([...projectId], [...domain], identity.publicKey, fee.publicKey)
+    .initialize(
+      [...projectId],
+      [...domain],
+      identity.publicKey,
+      fee.publicKey,
+      bn(2),
+    )
     .accountsStrict({
       owner: payer.publicKey,
       project,
@@ -141,7 +174,7 @@ test("durable executor verifies SQLite consent, binds, creates ATAs, pays and re
     .rpc();
   await finalized(approval);
   rmSync(".local/executor.sqlite", { force: true });
-  const sql = new DatabaseSync(".local/executor.sqlite");
+  let sql = new DatabaseSync(".local/executor.sqlite");
   for (const migration of readdirSync("../../migrations")
     .filter((x) => x.endsWith(".sql"))
     .sort())
@@ -287,6 +320,7 @@ test("durable executor verifies SQLite consent, binds, creates ATAs, pays and re
       "hex",
     ),
     upgradeAuthority: "11111111111111111111111111111111",
+    bindingDelaySeconds: "2",
   };
   const common = {
     PAYMENTS_DB: db,
@@ -459,16 +493,9 @@ test("durable executor verifies SQLite consent, binds, creates ATAs, pays and re
     ).amount,
     2_000_000n,
   );
-  const tx = await provider.connection.getTransaction(sent.transactionId, {
-    commitment: "finalized",
-    maxSupportedTransactionVersion: 0,
-  });
-  const eventIndex = tx.meta.logMessages.findIndex(
-    (line) =>
-      line.startsWith("Program data: ") &&
-      Buffer.from(line.slice(14), "base64")
-        .subarray(0, 8)
-        .equals(Buffer.from([142, 122, 234, 181, 22, 175, 250, 145])),
+  const [{ index: eventIndex }] = escrowInvocations(
+    await parsedTransaction(sent.transactionId),
+    config.programId,
   );
   const adapter = solanaPaymentAdapter({
     ...config,
@@ -491,14 +518,203 @@ test("durable executor verifies SQLite consent, binds, creates ATAs, pays and re
     sql.prepare("SELECT count(*) n FROM test_executor_journal").get().n,
     3,
   );
+  // Another project's commit that merely mentions this project account must
+  // not stop this project's scanner.
+  const foreignId = hash("foreign-project"),
+    foreignOrigin = hash("foreign-source");
+  const foreign = pda(
+      Buffer.from("project"),
+      payer.publicKey.toBuffer(),
+      foreignId,
+    ),
+    foreignVault = pda(Buffer.from("vault"), foreign.toBuffer()),
+    foreignAward = Buffer.from(
+      solanaAwardId(foreign.toBase58(), foreignOrigin.toString("hex")),
+      "hex",
+    );
+  await program.methods
+    .initialize(
+      [...foreignId],
+      [...domain],
+      identity.publicKey,
+      fee.publicKey,
+      bn(2),
+    )
+    .accountsStrict({
+      owner: payer.publicKey,
+      project: foreign,
+      mint,
+      vault: foreignVault,
+      tokenProgram: TOKEN_PROGRAM_ID,
+      systemProgram: SystemProgram.programId,
+    })
+    .rpc();
+  await mintTo(provider.connection, payer, mint, source, payer, 1_000_000n);
+  await program.methods
+    .deposit(bn(1_000_000))
+    .accountsStrict({
+      owner: payer.publicKey,
+      project: foreign,
+      mint,
+      source,
+      vault: foreignVault,
+      tokenProgram: TOKEN_PROGRAM_ID,
+    })
+    .rpc();
+  await finalized(
+    await program.methods
+      .commit([...foreignAward], [...foreignOrigin], bn(103), bn(1_000_000))
+      .accountsStrict({
+        owner: payer.publicKey,
+        project: foreign,
+        vault: foreignVault,
+        obligation: pda(Buffer.from("award"), foreign.toBuffer(), foreignAward),
+        origin: pda(Buffer.from("origin"), foreign.toBuffer(), foreignOrigin),
+        systemProgram: SystemProgram.programId,
+      })
+      .remainingAccounts([
+        { pubkey: project, isWritable: false, isSigner: false },
+      ])
+      .rpc(),
+  );
+  // Real finalized account mentions span more than one RPC page. They must
+  // not make every cron run repeat discovery from the newest signature.
+  const mentions = [];
+  for (let first = 0; first < 1001; first += 25) {
+    const { blockhash } = await provider.connection.getLatestBlockhash();
+    const batch = await Promise.all(
+      Array.from({ length: Math.min(25, 1001 - first) }, async (_, offset) => {
+        const instruction = SystemProgram.transfer({
+          fromPubkey: payer.publicKey,
+          toPubkey: payer.publicKey,
+          lamports: first + offset + 1,
+        });
+        instruction.keys.push({
+          pubkey: project,
+          isWritable: false,
+          isSigner: false,
+        });
+        const tx = new Transaction({
+          recentBlockhash: blockhash,
+          feePayer: payer.publicKey,
+        }).add(instruction);
+        tx.sign(payer);
+        return provider.connection.sendRawTransaction(tx.serialize());
+      }),
+    );
+    mentions.push(...batch);
+  }
+  await finalized(mentions.at(-1));
+  for (let first = 0; first < mentions.length; first += 256) {
+    const { value } = await provider.connection.getSignatureStatuses(
+      mentions.slice(first, first + 256),
+      { searchTransactionHistory: true },
+    );
+    for (const status of value) {
+      assert.equal(status?.confirmationStatus, "finalized");
+      assert.equal(status.err, null);
+    }
+  }
+  const [newest] = await provider.connection.getSignaturesForAddress(
+    project,
+    { limit: 1 },
+    "finalized",
+  );
   const index = (event) =>
     indexPaymentEvent(db, adapter, event, new Date().toISOString());
   await scanSolanaPayments(db, config, provider.connection.rpcEndpoint, index);
+  const discovery = sql.prepare("SELECT * FROM payment_solana_scans").get();
+  assert.equal(discovery.ready, 0);
+  assert.equal(discovery.next_page, 1);
+  assert.equal(sql.prepare("SELECT count(*) n FROM payment_events").get().n, 0);
+  sql.close();
+  sql = new DatabaseSync(".local/executor.sqlite");
+  await scanSolanaPayments(db, config, provider.connection.rpcEndpoint, index);
+  assert.equal(
+    sql.prepare("SELECT ready FROM payment_solana_scans").get().ready,
+    1,
+  );
+  // Stop after a real reservation is indexed but before its later payment.
+  // A reopened database must replay safely and then finish the frozen interval.
+  await assert.rejects(
+    scanSolanaPayments(
+      db,
+      config,
+      provider.connection.rpcEndpoint,
+      async (event) => {
+        if (event.kind === "paid")
+          throw new Error("scanner restart checkpoint");
+        await index(event);
+      },
+    ),
+    /scanner restart checkpoint/,
+  );
+  assert.equal(sql.prepare("SELECT count(*) n FROM payment_events").get().n, 1);
+  sql.close();
+  sql = new DatabaseSync(".local/executor.sqlite");
+  let resumeOldRun, signalPaused;
+  const paused = new Promise((resolve) => {
+    signalPaused = resolve;
+  });
+  const resume = new Promise((resolve) => {
+    resumeOldRun = resolve;
+  });
+  const oldRun = scanSolanaPayments(
+    db,
+    config,
+    provider.connection.rpcEndpoint,
+    async (event) => {
+      await index(event);
+      if (event.kind === "reserved") {
+        signalPaused();
+        await resume;
+      }
+    },
+  );
+  await paused;
+  await scanSolanaPayments(db, config, provider.connection.rpcEndpoint, index);
+  await scanSolanaPayments(db, config, provider.connection.rpcEndpoint, index);
+  const advancedCursor = sql
+    .prepare("SELECT position FROM payment_chain_cursors")
+    .get().position;
+  const advancedScan = sql.prepare("SELECT * FROM payment_solana_scans").get();
+  resumeOldRun();
+  await oldRun;
+  assert.equal(
+    sql.prepare("SELECT position FROM payment_chain_cursors").get().position,
+    advancedCursor,
+  );
+  assert.deepEqual(
+    sql.prepare("SELECT * FROM payment_solana_scans").get(),
+    advancedScan,
+  );
+  for (let run = 0; run < 20; run++) {
+    await scanSolanaPayments(
+      db,
+      config,
+      provider.connection.rpcEndpoint,
+      index,
+    );
+    if (!sql.prepare("SELECT 1 FROM payment_solana_scans").get()) break;
+  }
+  assert.equal(
+    sql.prepare("SELECT count(*) n FROM payment_solana_scans").get().n,
+    0,
+  );
+  assert.equal(
+    sql.prepare("SELECT count(*) n FROM payment_solana_scan_pages").get().n,
+    0,
+  );
   assert.equal(sql.prepare("SELECT count(*) n FROM payment_events").get().n, 2);
   assert.equal(
     sql.prepare("SELECT state FROM payment_obligations").get().state,
     "paid",
   );
+  assert.equal(
+    sql.prepare("SELECT position FROM payment_chain_cursors").get().position,
+    newest.signature,
+  );
+  await scanSolanaPayments(db, config, provider.connection.rpcEndpoint, index);
   await scanSolanaPayments(db, config, provider.connection.rpcEndpoint, index);
   assert.equal(sql.prepare("SELECT count(*) n FROM payment_events").get().n, 2);
   sql.close();

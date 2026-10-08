@@ -26,6 +26,8 @@ export const ESCROW_NETWORKS = Object.freeze({
     asset: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
   },
 });
+/** Production destination bindings activate no sooner than 48 hours. */
+export const MIN_PRODUCTION_BINDING_DELAY = 48 * 60 * 60;
 function keys(value, expected) {
   if (
     !value ||
@@ -71,6 +73,7 @@ export function assertEscrowPolicy(value) {
       "deploymentTransaction",
       "sourceCommit",
       "codeSha256",
+      "bindingDelaySeconds",
     ]);
     const network = ESCROW_NETWORKS[deployment.network];
     if (
@@ -110,6 +113,17 @@ export function assertEscrowPolicy(value) {
     )
       throw new TypeError(
         "Production Solana escrow requires revoked upgrade authority before activation",
+      );
+    // A new or rotated destination binding waits this long before it can pay,
+    // so the owner can cancel a binding made with a stolen identity key.
+    if (
+      typeof deployment.bindingDelaySeconds !== "string" ||
+      !/^(0|[1-9][0-9]{0,9})$/.test(deployment.bindingDelaySeconds) ||
+      (!network.testnet &&
+        Number(deployment.bindingDelaySeconds) < MIN_PRODUCTION_BINDING_DELAY)
+    )
+      throw new TypeError(
+        "Escrow binding delay is missing or below the production minimum",
       );
     if (
       deployment.owner === deployment.identityAuthority ||
