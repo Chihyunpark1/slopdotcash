@@ -1244,10 +1244,10 @@ function SocialConnections() {
       setBusy(false);
     }
   }
+  if (!me) return null;
   return (
     <section className="points-panel" aria-label="Connect X">
       <h2>X account</h2>
-
       {outcome === "connected" ? (
         <p role="status">X connected. Your connection points are recorded.</p>
       ) : outcome === "cancelled" ? (
@@ -1258,9 +1258,7 @@ function SocialConnections() {
           another Slop member cannot be reused.
         </p>
       ) : null}
-      {!me ? (
-        <p>Join with GitHub above, then connect X.</p>
-      ) : !data ? (
+      {!data ? (
         <>
           <p role="status">{message || "Loading connection details…"}</p>
           <button type="button" onClick={() => setVersion((v) => v + 1)}>
