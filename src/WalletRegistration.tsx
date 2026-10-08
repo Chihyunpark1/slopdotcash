@@ -288,7 +288,7 @@ export function WalletRegistration() {
       )}
       {session && phase === "preview" && (
         <div className="wallet-confirmation">
-          <h3>Confirm your public registration</h3>
+          <h3 className="wallet-heading">Confirm your public registration</h3>
           <dl>
             <div>
               <dt>GitHub</dt>
@@ -371,7 +371,7 @@ export function WalletRegistration() {
       {message && <p role="alert">{message}</p>}
       {registered && (
         <div role="status">
-          <h3>Wallet registered</h3>
+          <h3 className="wallet-heading">Wallet registered</h3>
           <dl>
             <div>
               <dt>Network</dt>

@@ -520,6 +520,10 @@ textarea:focus-visible {
   overflow-wrap: anywhere;
 }
 
+.wallet-heading {
+  margin: 28px 0 0;
+}
+
 .wallet-consequence {
   padding: 12px 14px;
   border-left: 3px solid var(--orange);
