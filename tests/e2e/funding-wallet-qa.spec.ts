@@ -126,7 +126,7 @@ test("funding and wallet keyboard flows remain accessible at 200 percent text si
   page,
 }, info) => {
   const evidence = observe(page);
-  for (const path of ["/wallet", "/projects/eliza/funding"]) {
+  for (const path of ["/wallet", "/projects/eliza/funding#payouts"]) {
     await page.goto(path, { waitUntil: "networkidle" });
     await page.evaluate(() => {
       const sizes = [...document.querySelectorAll<HTMLElement>("body *")].map(
@@ -156,7 +156,7 @@ test("funding and wallet keyboard flows remain accessible at 200 percent text si
       await panel.getByLabel("Contribution month").selectOption("2026-08");
       await keyboardTo(page, panel.getByLabel("Find contributor"));
       await page.keyboard.type("lalalune");
-      await expect(panel.locator("tbody tr")).toHaveCount(1);
+      await expect(panel.locator(".recipient-row")).toHaveCount(1);
       await audit(page, info, "funding-review-200-percent-text");
       for (const label of [
         "Prepare funding",
