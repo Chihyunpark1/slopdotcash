@@ -294,13 +294,34 @@ fact; it cannot prevent one. Squads spending limits are never used on a
 project vault, because a spending limit lets one listed key move funds with no
 vote and no time lock.
 
-**Payment activation.** A project vault can be declared and its committed
-balance disclosed, but it cannot activate payments. The readiness,
-reservation, and signer-capability protocols describe two members with zero
-time lock; extending them to three members is a separate reviewed change, and
-until it lands the manifest validator rejects `paymentMode: "enabled"` on a
-project vault. Activation of the first vault also waits on the written
-opinion of Slop's US counsel described in RFC #500.
+**Payment activation.** A project vault activates payments the same way a
+2-of-2 vault does: `paymentMode: "enabled"` with an exact
+`freshCyclePaymentPolicy` whose `instrumentSha256` is the reviewed project
+vault. Readiness, the trusted reservation gate, and the release loader accept
+the kind and prove the three-member shape at release time from one finalized
+`getMultipleAccounts` observation of the multisig, its USDC account, and the
+creator multisig: masks 7/2/6, threshold 2, no configuration authority, an
+on-chain time lock equal to `timeLockSeconds`, and a creator seat that is the
+canonical vault of the creator multisig. A plan that pays the vault, Slop's
+member, or the fee recipient is never released. Coverage is contributor
+principal only. No manifest declares a project vault today, and activation of
+the first vault waits on the written opinion of Slop's US counsel described in
+RFC #500 and on Shaw's sign-off on RFC sections 2 and 3.
+
+**Signer capability on a project vault.** The signer-access protocol
+(`protocol/signer-access-attestations.md`) has two roles on a project vault,
+`creator` and `independent`, and both must be current before a plan is
+released. The creator must be current because only the creator can write a
+proposal; the independent signer must be current so that a release never
+depends on Slop's vote. Slop's vote-only key has no role in the protocol: it is
+never necessary for a release and adds no capability to any other member, so
+it neither attests nor blocks. Loss of Slop's key is a same-day public issue
+followed by a reviewed signer replacement, not a ledger report. The creator
+seat is a program address and cannot sign, so a creator capability report is
+signed by a key the creator controls inside the creator multisig; readiness
+checks that key against the creator multisig on chain and requires the
+Initiate permission on it. A creator loss report names the seat and needs no
+key.
 
 **The fee never enters a project vault.** On the 2-of-2 instrument the
 execution plan ends with the fee transfer, readiness requires the vault to
@@ -319,9 +340,8 @@ What enforces it, all read-only:
   `allocation.totals.feeMinor`. A project vault plan that contains a fee
   transfer, however it got there, fails readback against its allocation.
 - A payment reservation drafted for a project vault binds contributor
-  principal only (`feeMinor: "0"`). The trusted reservation gate still admits
-  only the 2-of-2 instrument; admitting a project vault is part of the
-  three-member change above.
+  principal only (`feeMinor: "0"`), and the trusted reservation gate admits
+  it against the reviewed policy exactly as it admits a 2-of-2 reservation.
 - A Squads batch is compiled from the plan, so it covers contributor
   transfers only; a proposal with a fee child cannot match the plan.
 - Settlement proves the fee as a separate finalized transaction that credits
@@ -331,7 +351,8 @@ What enforces it, all read-only:
   is complete. Without that transaction the cycle cannot be recorded as
   `paid`.
 - Readiness keeps the rule in the same helper (`planCarriesPlatformFee`), so
-  the three-member extension inherits principal-only coverage.
+  the vault must cover contributor principal only and the canonical funding
+  ledger must cover the same.
 
 Slop's operating procedure for its key is
 [`protocol/project-vault-signing.md`](../protocol/project-vault-signing.md).

@@ -485,20 +485,6 @@ export function assertMonthlyCommitmentPolicy(project) {
     project.reward.paymentMode === "enabled" ||
     project.reward.reviewBudget?.paymentMode === "enabled"
   ) {
-    // RFC #500 section 3: a project vault payout is approved for payment only
-    // once the creator's on-chain batch is bound in the execution ledger. The
-    // readiness, reservation, and signer protocols still describe two members,
-    // so a project vault cannot activate payments until they are extended.
-    if (
-      instruments.some(
-        (instrument) =>
-          instrument.replacedAt === null &&
-          instrument.kind === "squads-project-vault",
-      )
-    )
-      throw new TypeError(
-        "project vault payment activation requires the reviewed three-member readiness, reservation, signer, and approval-binding protocol; payments stay disabled",
-      );
     if (!project.funding.freshCyclePaymentPolicy)
       throw new TypeError(
         "funding accessibility is unknown; payment activation requires a reviewed authenticated evidence protocol",
@@ -507,12 +493,16 @@ export function assertMonthlyCommitmentPolicy(project) {
       project.funding.freshCyclePaymentPolicy,
     );
     const active = instruments.filter((v) => v.replacedAt === null);
+    // Either reviewed Squads shape may activate: the 2-of-2 commitment vault,
+    // or the 2-of-3 project vault (RFC #500) whose readiness, reservation,
+    // signer-capability, and approval-binding rules cover three members.
     if (
       project.reward.kind !== "monthly-pool" ||
       project.reward.reviewBudget ||
       policy.projectId !== project.id ||
       active.length !== 1 ||
-      active[0].kind !== "squads-v4-vault" ||
+      (active[0].kind !== "squads-v4-vault" &&
+        active[0].kind !== "squads-project-vault") ||
       active[0].monthlyCommitment?.cycleId !== policy.cycleId
     )
       throw new TypeError(

@@ -1644,7 +1644,9 @@ export function SignerReports({
                   ? "Inaccessible"
                   : state === "both-signers-current"
                     ? "Both signers reported capability"
-                    : "Current capability unknown"}
+                    : state === "creator-and-independent-current"
+                      ? "Creator and independent signer reported capability"
+                      : "Current capability unknown"}
               </span>
             </h3>
             <p>Instrument: {group[0].instrumentId}</p>
