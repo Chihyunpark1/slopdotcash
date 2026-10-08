@@ -34,9 +34,14 @@ entire transaction, including fees and accounting. Frozen destinations do not bl
 other awards. `paid`, reserve, principal paid and fee counters are on-chain. Paid
 records remain permanently allocated to prevent account recreation replay.
 
-## Local build
+## Local build and end-to-end tests
 
-Run `npm run build` here. This builds the actual SBF binary and its IDL.
+Run `npm run build` here to build the actual SBF binary and its IDL.
+Run `npm run test:e2e` to load that binary into an isolated local validator and
+execute the existing SPL payment, durable executor, and unsigned owner-plan
+workflows. These use real token accounts, transactions, finalized receipts and
+balance checks. Fixture keys and tokens have no mainnet value. CI runs these
+end-to-end workflows; a successful build alone is not payment evidence.
 `cargo check --locked` verifies the host program build but does not prove SBF or
 validator execution. Use Anchor 0.32.1 and the platform tools pinned in the scripts.
 

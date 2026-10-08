@@ -60,7 +60,8 @@
     "test:payments": "bun backend/payments/base.integration.ts",
     "rewards:propose-escrow": "bun scripts/prepare-escrow-cycle.ts",
     "rewards:plan-escrow": "bun scripts/prepare-escrow-commitments.ts",
-    "build:contracts:solana": "bash contracts/solana/scripts/build-local.sh"
+    "build:contracts:solana": "bash contracts/solana/scripts/build-local.sh",
+    "test:contracts:solana": "bash contracts/solana/scripts/test-e2e.sh"
   },
   "dependencies": {
     "@fontsource-variable/bricolage-grotesque": "5.2.10",
