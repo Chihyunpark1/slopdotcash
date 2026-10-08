@@ -35,7 +35,9 @@ async function loadFundingIndex(signal: AbortSignal) {
   return { index: assertProjectFundingIndex(value, addresses, commitments) };
 }
 
-type FundingDataState = PublicResourceState<{ index: ProjectFundingIndex }>;
+export type FundingDataState = PublicResourceState<{
+  index: ProjectFundingIndex;
+}>;
 export function useFundingIndex(): FundingDataState {
   const [state] = usePublicResource(true, loadFundingIndex, "Invalid data");
   return state;

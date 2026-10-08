@@ -21,6 +21,7 @@ import { CycleArchivePage, CyclePage } from "./CyclePages";
 import { EarningsPage } from "./Earnings";
 import { EscrowFunding } from "./EscrowFunding";
 import {
+  type FundingDataState,
   formatFundingAmount,
   formatFundingMinor,
   fundingTransactionExplorer,
@@ -39,6 +40,7 @@ import {
   currentProjectFundingRecords,
   projectFundingTotals,
 } from "./lib/funding";
+import { commitmentVerifiedNetMinor } from "./lib/funding-commitment";
 import { homeProjects } from "./lib/home-projects";
 import { createInstallCommand } from "./lib/install-command";
 import {
@@ -354,10 +356,43 @@ function monthlyPoolCapLabel(reward: ProjectDefinition["reward"]): string {
     .replace(/K$/u, "k");
 }
 
-function ProjectCard({ project }: { project: ProjectDefinition }) {
-  const unfunded =
-    project.reward.kind === "monthly-pool" &&
-    monthlyPoolUnfunded(project.reward);
+function ProjectCard({
+  project,
+  funding,
+}: {
+  project: ProjectDefinition;
+  funding: FundingDataState;
+}) {
+  const vaults =
+    project.funding.commitments?.filter(
+      (instrument) =>
+        instrument.kind === "squads-v4-vault" && instrument.replacedAt === null,
+    ) ?? [];
+  const vaultRecords =
+    funding.status === "ready"
+      ? funding.index.commitments.filter(
+          (record) =>
+            record.projectId === project.id &&
+            "vault" in record.instrument &&
+            vaults.some(
+              (vault) =>
+                vault.kind === "squads-v4-vault" &&
+                "vault" in record.instrument &&
+                vault.vault === record.instrument.vault,
+            ),
+        )
+      : [];
+  const vaultBalance =
+    vaults.length === 0
+      ? "Unavailable"
+      : funding.status === "loading"
+        ? "Loading…"
+        : funding.status === "error" ||
+            !vaultRecords.some((record) => record.state === "verified-on-chain")
+          ? "Unavailable"
+          : formatMicroUsdc(
+              commitmentVerifiedNetMinor(vaultRecords).toString(),
+            );
   const amount =
     project.reward.kind === "monthly-pool"
       ? monthlyPoolCapLabel(project.reward)
@@ -373,25 +408,17 @@ function ProjectCard({ project }: { project: ProjectDefinition }) {
       </div>
       <div className="project-card-content">
         <p className="project-summary">{project.description}</p>
-        {unfunded ? (
-          <p className="project-bounty project-bounty-unfunded">
-            <strong>{UNFUNDED_POOL_HEADLINE}</strong>
-          </p>
-        ) : (
-          <p className="project-bounty">
-            <strong>{amount}</strong>
-            {project.reward.kind === "monthly-pool" ? <span>/mo</span> : null}
-          </p>
-        )}
-        {project.reward.kind === "monthly-pool" ? (
-          <small className="project-money-state">
-            {unfunded
-              ? `Target ${amount}/mo`
-              : "Committed balance · accessibility unknown · payments disabled"}
-          </small>
-        ) : (
-          <small className="project-money-state">External prize</small>
-        )}
+        <p className="project-bounty">
+          <strong>{amount}</strong>
+          {project.reward.kind === "monthly-pool" ? (
+            <span>/mo target</span>
+          ) : null}
+        </p>
+        <small className="project-money-state">
+          {project.reward.kind === "monthly-pool"
+            ? `Vault: ${vaultBalance}`
+            : "External prize"}
+        </small>
         {project.reward.reviewBudget ? (
           <small className="project-review-budget">
             + {reviewBudgetLabel(project.reward.reviewBudget)}
@@ -414,6 +441,7 @@ function GlobalLeaderboard() {
 }
 
 function HomePage() {
+  const funding = useFundingIndex();
   const promotedProjects = homeProjects();
   const featuredProjects = promotedProjects.filter(
     (project) => project.listingTier === "featured",
@@ -452,7 +480,11 @@ function HomePage() {
           <h3 id="featured-projects">Featured</h3>
           <div className="project-grid">
             {featuredProjects.map((project) => (
-              <ProjectCard key={project.id} project={project} />
+              <ProjectCard
+                key={project.id}
+                project={project}
+                funding={funding}
+              />
             ))}
           </div>
         </section>
@@ -461,7 +493,11 @@ function HomePage() {
             <summary>Community projects</summary>
             <div className="project-grid">
               {communityProjects.map((project) => (
-                <ProjectCard key={project.id} project={project} />
+                <ProjectCard
+                  key={project.id}
+                  project={project}
+                  funding={funding}
+                />
               ))}
             </div>
           </details>
