@@ -308,12 +308,30 @@ cover principal plus fee, and a batch must include that transfer. On a
 project vault the rule is different (RFC #500 section 8): the 1% fee is a
 separate transfer the creator sends from the creator's own wallet, the vault
 holds contributor principal only, the plan and the proposal carry no fee
-transfer, and settlement reconciles the fee from the creator's own transfer
-exactly as it does for direct payments. The plan builder, readiness,
-reservation, and batch verifier do not yet make that distinction; they are
-part of the same separate reviewed change above, and until it lands no
-project vault plan can be prepared. Slop never votes on a proposal that
-contains a transfer to a Slop address.
+transfer, and settlement reconciles the fee from the creator's own transfer.
+Slop never votes on a proposal that contains a transfer to a Slop address.
+
+What enforces it, all read-only:
+
+- The plan builder (`createSettlementExecutionPlan`) emits no fee transfer
+  for a project vault and reports `totals.platformFeeMinor: "0"`, so
+  `totals.totalMinor` is the vault outflow. The fee due stays
+  `allocation.totals.feeMinor`. A project vault plan that contains a fee
+  transfer, however it got there, fails readback against its allocation.
+- A payment reservation drafted for a project vault binds contributor
+  principal only (`feeMinor: "0"`). The trusted reservation gate still admits
+  only the 2-of-2 instrument; admitting a project vault is part of the
+  three-member change above.
+- A Squads batch is compiled from the plan, so it covers contributor
+  transfers only; a proposal with a fee child cannot match the plan.
+- Settlement proves the fee as a separate finalized transaction that credits
+  the reviewed `freshCyclePaymentPolicy.feeRecipient` exactly, moves none of
+  the vault's USDC, and is not earlier than any finalized contributor
+  transfer, because the fee becomes payable only when the contributor payout
+  is complete. Without that transaction the cycle cannot be recorded as
+  `paid`.
+- Readiness keeps the rule in the same helper (`planCarriesPlatformFee`), so
+  the three-member extension inherits principal-only coverage.
 
 Slop's operating procedure for its key is
 [`protocol/project-vault-signing.md`](../protocol/project-vault-signing.md).
