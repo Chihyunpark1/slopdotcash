@@ -1,4 +1,5 @@
 import { CircleAlert, ExternalLink } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Link } from "./Link";
 import type { CycleIndexEntry } from "./lib/cycle-index";
 import { cycleSettlementReminder } from "./lib/funding-reminders";
@@ -360,6 +361,28 @@ function CycleArtifacts({ cycle }: { cycle: CycleIndexEntry }) {
   );
 }
 
+const ARCHIVE_FILTERS = ["project", "month", "state"] as const;
+const ARCHIVE_FILTER_LABELS = {
+  project: "Project",
+  month: "Month",
+  state: "State",
+} as const;
+function readArchiveFilters(): Record<
+  (typeof ARCHIVE_FILTERS)[number],
+  string
+> {
+  const params = new URLSearchParams(window.location.search);
+  const read = (key: string, pattern: RegExp) => {
+    const value = params.get(key) ?? "";
+    return pattern.test(value) ? value : "";
+  };
+  return {
+    project: read("project", /^[a-z0-9-]{1,48}$/u),
+    month: read("month", /^\d{4}-(0[1-9]|1[0-2])$/u),
+    state: read("state", /^[a-z-]{1,40}$/u),
+  };
+}
+
 export function CycleArchivePage({
   state,
   retry,
@@ -367,12 +390,49 @@ export function CycleArchivePage({
   state: CycleIndexState;
   retry: () => void;
 }) {
-  const cycles =
+  const all =
     state.status === "ready"
-      ? [...state.cycleIndex.cycles].sort((left, right) =>
-          right.cycleId.localeCompare(left.cycleId),
+      ? [...state.cycleIndex.cycles].sort(
+          (left, right) =>
+            right.cycleId.localeCompare(left.cycleId) ||
+            left.projectId.localeCompare(right.projectId),
         )
       : [];
+  const [filters, setFilters] = useState(readArchiveFilters);
+  useEffect(() => {
+    const restore = () => setFilters(readArchiveFilters());
+    window.addEventListener("popstate", restore);
+    return () => window.removeEventListener("popstate", restore);
+  }, []);
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    for (const key of ARCHIVE_FILTERS) {
+      if (filters[key]) url.searchParams.set(key, filters[key]);
+      else url.searchParams.delete(key);
+    }
+    window.history.replaceState(window.history.state, "", url);
+  }, [filters]);
+  // A filter appears only when the published records offer a choice.
+  const options = {
+    project: [...new Set(all.map((cycle) => cycle.projectId))].map(
+      (id) => [id, findProject(id)?.name ?? id] as const,
+    ),
+    month: [...new Set(all.map((cycle) => cycle.cycleId))].map(
+      (id) => [id, formatCycleMonth(id)] as const,
+    ),
+    state: [...new Set(all.map((cycle) => cycle.state))].map(
+      (id) => [id, cycleStateLabel(id)] as const,
+    ),
+  };
+  const cycles = all.filter(
+    (cycle) =>
+      (!filters.project || cycle.projectId === filters.project) &&
+      (!filters.month || cycle.cycleId === filters.month) &&
+      (!filters.state || cycle.state === filters.state),
+  );
+  const offered = ARCHIVE_FILTERS.filter(
+    (key) => options[key].length > 1 || filters[key],
+  );
   return (
     <main className="shell evidence-page">
       <section className="evidence-page-hero">
@@ -389,7 +449,7 @@ export function CycleArchivePage({
               Retry
             </button>
           </div>
-        ) : cycles.length === 0 ? (
+        ) : all.length === 0 ? (
           <p>No published cycles yet.</p>
         ) : null}
         {state.status === "ready" && stale(state.cycleIndex) ? (
@@ -399,6 +459,47 @@ export function CycleArchivePage({
           </p>
         ) : null}
       </section>
+      {all.length > 0 ? (
+        <div className="points-controls cycle-filters">
+          {offered.map((key) => (
+            <label key={key}>
+              {ARCHIVE_FILTER_LABELS[key]}
+              <select
+                aria-label={ARCHIVE_FILTER_LABELS[key]}
+                onChange={(event) =>
+                  setFilters((current) => ({
+                    ...current,
+                    [key]: event.target.value,
+                  }))
+                }
+                value={filters[key]}
+              >
+                <option value="">All</option>
+                {options[key].map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ))}
+          <p role="status">
+            Showing {cycles.length} of {all.length} published cycles
+          </p>
+        </div>
+      ) : null}
+      {all.length > 0 && cycles.length === 0 ? (
+        <p>
+          No cycles match these filters.{" "}
+          <button
+            className="text-button"
+            onClick={() => setFilters({ project: "", month: "", state: "" })}
+            type="button"
+          >
+            Clear filters
+          </button>
+        </p>
+      ) : null}
       <div className="cycle-records">
         {cycles.map((cycle) => {
           const project = findProject(cycle.projectId);

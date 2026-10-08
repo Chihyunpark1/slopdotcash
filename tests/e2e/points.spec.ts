@@ -41,10 +41,45 @@ test(
     );
     await page.getByLabel("Sort by").selectOption("points");
     await expect(page.getByText(/Points have no monetary value/)).toBeVisible();
+    // Cohort and time window are separate, shareable controls.
+    await page.getByLabel("Cohort", { exact: true }).selectOption("new");
+    await expect(page).toHaveURL(/cohort=new/);
+    await expect(page.getByLabel("Period", { exact: true })).toHaveValue(
+      "lifetime",
+    );
+    await page.getByLabel("Period", { exact: true }).selectOption("month");
+    await expect(page.getByLabel("Cohort", { exact: true })).toHaveValue("new");
+    await page.reload();
+    await expect(page.getByLabel("Cohort", { exact: true })).toHaveValue("new");
+    await expect(page.getByLabel("Period", { exact: true })).toHaveValue(
+      "month",
+    );
+    await page.getByLabel("Cohort", { exact: true }).selectOption("all");
+    await expect(page).not.toHaveURL(/cohort=/);
+    // The earlier combined link keeps its meaning.
+    await page.goto("/points?period=new");
+    await expect(page.getByLabel("Cohort", { exact: true })).toHaveValue("new");
+    await expect(page.getByLabel("Period", { exact: true })).toHaveValue(
+      "lifetime",
+    );
+    await page.goto("/points?sort=points&period=lifetime");
+    const rules = page.getByRole("region", { name: "Point categories" });
     await expect(
-      page
-        .getByRole("region", { name: "Contributor directory" })
-        .getByText(/^[\d,]+ contributors$/),
+      rules.getByRole("row", { name: /Join with GitHub 5 once Not included/u }),
+    ).toBeVisible();
+    await expect(
+      rules.getByRole("row", {
+        name: /First X connection 10 once Not included/u,
+      }),
+    ).toBeVisible();
+    await expect(
+      page.getByText(/Points never change Slop Score/u),
+    ).toBeVisible();
+    const people = page.getByRole("region", { name: "People", exact: true });
+    await expect(people.getByText(/^[\d,]+ people$/u)).toBeVisible();
+    // People without merged work stay discoverable without a rank.
+    await expect(
+      people.getByText("No merged PRs", { exact: true }).first(),
     ).toBeVisible();
     await page.evaluate(() => document.fonts.ready);
     if ((page.viewportSize()?.width ?? 0) <= 390) {

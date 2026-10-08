@@ -136,11 +136,11 @@ test("social membership shows connection points, respects privacy and survives d
   ).toBeVisible();
   await expect(page.getByRole("table")).toHaveCount(0);
   await expect(
-    page.getByRole("region", { name: "Community members" }),
+    page.getByRole("region", { name: "People", exact: true }),
   ).toHaveCount(0);
   const social = page.getByRole("region", { name: "Connect X" });
   await expect(social.getByRole("checkbox")).toHaveCount(1);
-  const community = page.getByRole("region", { name: "Community members" });
+  const community = page.getByRole("region", { name: "People", exact: true });
   await social
     .getByLabel("Show my X account with my public membership", { exact: true })
     .click();
