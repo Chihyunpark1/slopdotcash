@@ -274,11 +274,18 @@ next cycle and never touches the current proposal. History is never edited.
 Missing wallets remain unclaimed. Related-party money requires separate
 approval.
 
-Settlement tools create unsigned Solana mainnet USDC plans only. `paid`
-requires finalized evidence whose exact source and destination deltas reconcile
-every immutable intent and fee. Reject replay, wrong mint, wrong owner, partial,
-duplicate, failed, or overpaid state. Delta Star publishes external-prize
-shares only and never enters the platform payment lifecycle.
+Each monthly-pool project has one settlement network, `reward.chain`: Solana
+(default) or Base (RFC #472). A proposal freezes that network for its cycle; a
+network change lands by PR between cycles. Only a wallet claim on the cycle
+network is payable; otherwise the row stays unclaimed. Settlement tools create
+unsigned USDC plans only: Solana mainnet transfers from the frozen Squads vault,
+or Base mainnet EIP-681 transfers from the frozen Base Sablier stream recipient.
+The fee is a separate transfer on the same network. `paid` requires finalized
+Solana evidence, or Base evidence under the 2-of-3 RPC quorum and 12
+confirmations, whose exact source and destination deltas reconcile every
+immutable intent and fee. Reject replay, wrong mint or token, wrong owner,
+partial, duplicate, failed, or overpaid state. Delta Star publishes
+external-prize shares only and never enters the platform payment lifecycle.
 
 Committed funding uses reviewed immutable third-party instruments: Squads v4
 multisig vaults on Solana and Sablier Lockup v4 streams on Base or Ethereum.

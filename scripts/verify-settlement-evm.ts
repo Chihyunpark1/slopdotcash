@@ -15,6 +15,7 @@ import {
   MAX_EVM_SETTLEMENT_TRANSFERS,
 } from "../src/lib/evm-settlement";
 import { isFundingAddress } from "../src/lib/funding-address.mjs";
+import type { VerifyBaseSettlementTransaction } from "../src/lib/solana-settlement";
 import {
   EVM_FUNDING_RPC_AUTHORITIES,
   type EvmAuthorityVerification,
@@ -183,6 +184,19 @@ export async function verifySettlementEvm(input: {
     },
   };
 }
+
+/**
+ * Cycle settlement adapter: proves one Base transaction of an execution plan
+ * and returns only the block time and hash that the cycle reconciliation needs.
+ */
+export const verifyBaseSettlementTransaction: VerifyBaseSettlementTransaction =
+  async (input) => {
+    const result = await verifySettlementEvm({ network: "base", ...input });
+    return {
+      blockTime: result.chainEvidence.blockTime,
+      transactionHash: result.chainEvidence.transactionHash,
+    };
+  };
 
 if (import.meta.main) {
   try {

@@ -284,6 +284,10 @@ export function createRewardCycleProposal(
 
   if (!fundingBasis)
     throw new TypeError("Monthly proposal needs a funding basis");
+  // The proposal freezes the project's settlement network for this cycle.
+  const chain = view.project.reward.chain;
+  if (chain === null)
+    throw new TypeError("Monthly proposal needs a settlement network");
   // A previously reviewed balance survives a quiet month, so carried-only
   // actors get their own allocation rows after the leaders.
   const leaderIds = new Set(view.leaders.map((leader) => leader.actor.id));
@@ -356,7 +360,7 @@ export function createRewardCycleProposal(
       endsAt: reviewEndsAt,
     },
     currency: "USDC",
-    chain: "solana",
+    chain,
     capMinor:
       input.legacyCapMinor ?? allocationFundingMinor(fundingBasis).toString(),
     ...(input.legacyCapMinor === undefined ? { fundingBasis } : {}),

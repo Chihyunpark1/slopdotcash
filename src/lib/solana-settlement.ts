@@ -1,10 +1,13 @@
 /**
  * Verifies finalized Solana transactions by reconciling exact raw USDC balance
- * deltas for the declared source and recipients. Transaction signatures alone
- * never count as payment evidence.
+ * deltas for the declared source and recipients, and reconciles a stored cycle
+ * settlement on the network its allocation froze. Transaction signatures and
+ * hashes alone never count as payment evidence.
  */
 
+import type { ExpectedEvmTransfer } from "./evm-settlement";
 import { isSolanaTransactionId } from "./funding-address.mjs";
+import type { FundingCommitmentInstrument } from "./funding-instruments.mjs";
 import type {
   RewardAllocationManifest,
   RewardSettlementManifest,
@@ -14,8 +17,8 @@ import {
   assertRewardSettlementManifest,
 } from "./rewards";
 import {
-  assertSettlementExecutionPlan,
-  type SettlementExecutionPlan,
+  assertNetworkSettlementExecutionPlan,
+  type NetworkSettlementExecutionPlan,
   type SettlementPlanTransfer,
   SOLANA_MAINNET_USDC_MINT,
   USDC_DECIMALS,
@@ -33,13 +36,25 @@ export interface VerifiedSolanaTransaction {
   slot: number;
 }
 
+/** One Base transaction proven under the RPC quorum and confirmation policy. */
+export interface VerifiedBaseSettlementTransaction {
+  blockTime: number;
+  transactionHash: string;
+}
+
+/** Proves one Base transaction's exact source debit and recipient credits. */
+export type VerifyBaseSettlementTransaction = (input: {
+  source: string;
+  transactionHash: string;
+  transfers: readonly ExpectedEvmTransfer[];
+}) => Promise<VerifiedBaseSettlementTransaction>;
+
 export const SOLANA_FUNDING_VERIFIER_VERSION = "funding-solana-v1" as const;
 
 /** Refuses an immutable settlement time earlier than its chain evidence. */
-export function assertSettlementChronology(
-  settledAt: string,
-  transactions: readonly VerifiedSolanaTransaction[],
-): void {
+export function assertSettlementChronology<
+  Transaction extends { blockTime: number },
+>(settledAt: string, transactions: readonly Transaction[]): void {
   const settledAtMs = Date.parse(settledAt);
   if (!Number.isFinite(settledAtMs)) {
     throw new TypeError("Settlement time is invalid");
@@ -301,7 +316,7 @@ export function assertFinalizedUsdcFundingTransfer(
 }
 
 function contributorTransferByIntent(
-  plan: SettlementExecutionPlan,
+  plan: NetworkSettlementExecutionPlan,
 ): Map<string, SettlementPlanTransfer> {
   return new Map(
     plan.transfers
@@ -310,18 +325,75 @@ function contributorTransferByIntent(
   );
 }
 
-/** Fetches and checks every finalized contributor and fee transaction. */
+/**
+ * Fetches and checks every finalized contributor and fee transaction on the
+ * allocation's network. Solana reads one finalized transaction per signature;
+ * Base proves each hash through the read-only quorum verifier. A Base request
+ * carries no memo, so a Base transaction must also be confirmed after the plan
+ * was created: an earlier transfer with equal amounts cannot be replayed.
+ */
 export async function verifyRewardSettlementOnchain(input: {
   allocation: unknown;
   expectedAllocationSha256: string;
-  getTransaction: (signature: string) => Promise<unknown>;
+  fundingInstruments?: readonly FundingCommitmentInstrument[];
+  getTransaction?: (signature: string) => Promise<unknown>;
   plan: unknown;
   settlement: unknown;
-}): Promise<VerifiedSolanaTransaction[]> {
+  verifyBaseTransaction?: VerifyBaseSettlementTransaction;
+}): Promise<
+  Array<VerifiedSolanaTransaction | VerifiedBaseSettlementTransaction>
+> {
   const allocation: RewardAllocationManifest = assertRewardAllocationManifest(
     input.allocation,
   );
-  const plan = assertSettlementExecutionPlan(input.plan, allocation);
+  const plan = assertNetworkSettlementExecutionPlan(
+    input.plan,
+    allocation,
+    input.fundingInstruments,
+  );
+  const { getTransaction, verifyBaseTransaction } = input;
+  const verifyTransaction =
+    plan.kind === "base-usdc-transfer-plan"
+      ? async (
+          transactionHash: string,
+          transfers: readonly SettlementPlanTransfer[],
+        ) => {
+          if (!verifyBaseTransaction) {
+            throw new TypeError("Base settlement needs the Base verifier");
+          }
+          const verified = await verifyBaseTransaction({
+            source: plan.sourceOwner,
+            transactionHash,
+            transfers: transfers.map((transfer) => ({
+              recipient: transfer.recipientOwner,
+              amountMinor: transfer.amountMinor,
+            })),
+          });
+          if (
+            verified.transactionHash !== transactionHash ||
+            !Number.isSafeInteger(verified.blockTime) ||
+            verified.blockTime * 1_000 < Date.parse(plan.createdAt)
+          ) {
+            throw new TypeError(
+              "Base settlement transaction predates its plan or differs from evidence",
+            );
+          }
+          return verified;
+        }
+      : async (
+          signature: string,
+          transfers: readonly SettlementPlanTransfer[],
+        ) => {
+          if (!getTransaction) {
+            throw new TypeError("Solana settlement needs the Solana reader");
+          }
+          return assertFinalizedUsdcTransfer(
+            await getTransaction(signature),
+            signature,
+            plan.sourceOwner,
+            transfers,
+          );
+        };
   const settlement: RewardSettlementManifest = assertRewardSettlementManifest(
     input.settlement,
     allocation,
@@ -335,7 +407,9 @@ export async function verifyRewardSettlementOnchain(input: {
     );
   }
   const byIntent = contributorTransferByIntent(plan);
-  const verified: VerifiedSolanaTransaction[] = [];
+  const verified: Array<
+    VerifiedSolanaTransaction | VerifiedBaseSettlementTransaction
+  > = [];
   for (const attempt of settlement.attempts) {
     if (attempt.state !== "finalized" || !attempt.signature) continue;
     const transfers = attempt.intentIds.map((intentId) => {
@@ -347,14 +421,7 @@ export async function verifyRewardSettlementOnchain(input: {
       }
       return transfer;
     });
-    verified.push(
-      assertFinalizedUsdcTransfer(
-        await input.getTransaction(attempt.signature),
-        attempt.signature,
-        plan.sourceOwner,
-        transfers,
-      ),
-    );
+    verified.push(await verifyTransaction(attempt.signature, transfers));
   }
   if (
     settlement.platformFee.state === "paid" ||
@@ -367,12 +434,7 @@ export async function verifyRewardSettlementOnchain(input: {
       throw new TypeError("Reported platform fee has no planned transaction");
     }
     verified.push(
-      assertFinalizedUsdcTransfer(
-        await input.getTransaction(settlement.platformFee.signature),
-        settlement.platformFee.signature,
-        plan.sourceOwner,
-        [transfer],
-      ),
+      await verifyTransaction(settlement.platformFee.signature, [transfer]),
     );
   }
   assertSettlementChronology(settlement.settledAt, verified);

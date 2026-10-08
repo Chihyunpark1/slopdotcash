@@ -105,6 +105,7 @@ describe("project transition gate", () => {
       kind: "reward-allocation",
       projectId: "eliza",
       cycleId: "2026-08",
+      chain: "solana",
       fundingBasis: basis,
     };
     const validate = (value: unknown, next = eliza) =>
@@ -165,6 +166,83 @@ describe("project transition gate", () => {
         ],
       ),
     ).toThrow(/historical proposal funding basis cannot change/u);
+  });
+  it("freezes the settlement network per cycle so a change lands between cycles", () => {
+    const path = "cycles/eliza/2026-08/proposal.json";
+    const proposal = {
+      kind: "reward-allocation",
+      projectId: "eliza",
+      cycleId: "2026-08",
+      chain: "solana",
+      fundingBasis: {
+        cycleId: "2026-08",
+        instrumentId: null,
+        fundingState: eliza.reward.fundingState,
+        committedMinor: eliza.reward.committedMinor,
+        monthlyCapMinor: resolveRewardCapMinor(
+          assertProjectDefinition(eliza),
+          "2026-08",
+        ),
+      },
+    };
+    const onBase = structuredClone(eliza);
+    onBase.reward.chain = "base";
+    expect(() => assertProjectDefinition(onBase)).not.toThrow();
+    // A new proposal must use the network reviewed on the base commit.
+    expect(() =>
+      validateProposalFundingTransitions(
+        [entry(eliza)],
+        [entry(eliza)],
+        [],
+        [[path, JSON.stringify({ ...proposal, chain: "base" })]],
+      ),
+    ).toThrow(/settlement network differs/u);
+    // The network change and a proposal cannot land together.
+    expect(() =>
+      validateProposalFundingTransitions(
+        [entry(eliza)],
+        [entry(onBase)],
+        [],
+        [[path, JSON.stringify({ ...proposal, chain: "base" })]],
+      ),
+    ).toThrow(/separate reviewed changes/u);
+    // After the change merges, the next proposal uses Base and the frozen
+    // Solana proposal keeps its network.
+    const historic: [string, string][] = [[path, JSON.stringify(proposal)]];
+    expect(() =>
+      validateProposalFundingTransitions(
+        [entry(onBase)],
+        [entry(onBase)],
+        historic,
+        [
+          ...historic,
+          [
+            "cycles/eliza/2026-09/proposal.json",
+            JSON.stringify({
+              ...proposal,
+              cycleId: "2026-09",
+              chain: "base",
+              fundingBasis: {
+                ...proposal.fundingBasis,
+                cycleId: "2026-09",
+                monthlyCapMinor: resolveRewardCapMinor(
+                  assertProjectDefinition(onBase),
+                  "2026-09",
+                ),
+              },
+            }),
+          ],
+        ],
+      ),
+    ).not.toThrow();
+    expect(() =>
+      validateProposalFundingTransitions(
+        [entry(onBase)],
+        [entry(onBase)],
+        historic,
+        [[path, JSON.stringify({ ...proposal, chain: "base" })]],
+      ),
+    ).toThrow(/historical proposal settlement network cannot change/u);
   });
   it("accepts unchanged policy and rejects silent terms history edits", () => {
     expect(validateProjectTransitions([entry(eliza)], [entry(eliza)])).toEqual({

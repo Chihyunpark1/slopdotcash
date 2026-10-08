@@ -10,16 +10,29 @@ import {
   assertAllocationFundingBasis,
   LAST_LEGACY_CAP_CYCLE,
 } from "./allocation-funding";
+import { isEvmTransactionHash } from "./evm-funding";
 import { isSolanaTransactionId } from "./funding-address.mjs";
 import { assertExactModelIdentity } from "./model-identity";
 import { findProject, type ProjectId } from "./projects.mjs";
-import { isSolanaAddress, WALLET_CLAIM_REPOSITORY } from "./wallets";
+import {
+  isWalletAddress,
+  isWalletChain,
+  WALLET_CLAIM_REPOSITORY,
+  type WalletChain,
+} from "./wallets";
 
 export const REWARD_PROTOCOL_VERSION = "1" as const;
 export const REVIEW_WINDOW_DAYS = 14;
 export const SHARE_PARTS_TOTAL = 1_000_000;
 export const PLATFORM_FEE_BASIS_POINTS = 100 as const;
 export const MINIMUM_TRANSFER_MINOR = "2000000" as const;
+
+/**
+ * The one network a cycle settles on. A proposal freezes the project's
+ * `reward.chain`; every wallet, plan, and settlement record of that cycle uses
+ * the same network, even if the project later changes its network.
+ */
+export type SettlementNetwork = WalletChain;
 
 export type AllocationState =
   | "approved"
@@ -42,7 +55,7 @@ export type AllocationHold =
 
 export interface ProfileReadmeWalletProof {
   address: string;
-  chain: "solana";
+  chain: SettlementNetwork;
   observedAt: string;
   sourceCommit: string;
   sourceUrl: string;
@@ -50,7 +63,7 @@ export interface ProfileReadmeWalletProof {
 
 export interface GithubIssueWalletProof {
   address: string;
-  chain: "solana";
+  chain: SettlementNetwork;
   observedAt: string;
   sourceActorId: string;
   sourceBodySha256: string;
@@ -62,7 +75,7 @@ export interface GithubIssueWalletProof {
 
 export interface SlopDatabaseWalletProof {
   address: string;
-  chain: "solana";
+  chain: SettlementNetwork;
   observedAt: string;
   sourceActorId: string;
   sourceClaimId: string;
@@ -135,7 +148,7 @@ export interface RewardAllocationManifest {
     lapsedAt?: string;
   };
   currency: "USDC";
-  chain: "solana";
+  chain: SettlementNetwork;
   capMinor: string;
   carriedMinor?: string;
   minimumTransferMinor?: typeof MINIMUM_TRANSFER_MINOR;
@@ -190,7 +203,7 @@ export interface RewardSettlementManifest {
   allocationSha256: string;
   settledAt: string;
   currency: "USDC";
-  chain: "solana";
+  chain: SettlementNetwork;
   status: "failed" | "paid" | "partially-paid";
   recipients: Array<{
     intentId: string;
@@ -287,6 +300,21 @@ function sha256(value: unknown, path: string): string {
   return text(value, path, { pattern: /^[0-9a-f]{64}$/u });
 }
 
+/** A finalized Solana signature or a confirmed Base transaction hash. */
+function transactionId(
+  value: unknown,
+  path: string,
+  chain: SettlementNetwork,
+): string {
+  if (chain === "base") {
+    if (!isEvmTransactionHash(value)) {
+      throw new TypeError(`${path} is not a canonical Base transaction hash`);
+    }
+    return value;
+  }
+  return solanaSignature(value, path);
+}
+
 function solanaSignature(value: unknown, path: string): string {
   if (!isSolanaTransactionId(value)) {
     throw new TypeError(`${path} is invalid`);
@@ -380,18 +408,33 @@ function assertEvidenceIds(value: unknown, path: string): string[] {
   return result;
 }
 
+/**
+ * Validates one wallet observation. `expectedChain` is the cycle network; a
+ * report wallet passes `null` because it keeps the network it was signed with.
+ */
 function assertWallet(
   value: unknown,
   path: string,
   actor: { id: string; login: string },
+  expectedChain: SettlementNetwork | null,
 ): WalletProof | null {
   if (value === null) return null;
   const wallet = record(value, path);
-  if (wallet.chain !== "solana") {
-    throw new TypeError(`${path}.chain must be solana`);
+  if (
+    !isWalletChain(wallet.chain) ||
+    (expectedChain !== null && wallet.chain !== expectedChain)
+  ) {
+    throw new TypeError(
+      `${path}.chain must be ${expectedChain ?? "solana or base"}`,
+    );
   }
-  if (!isSolanaAddress(wallet.address)) {
-    throw new TypeError(`${path}.address is not a Solana public key`);
+  const chain = wallet.chain;
+  if (!isWalletAddress(chain, wallet.address)) {
+    throw new TypeError(
+      chain === "base"
+        ? `${path}.address is not a canonical Base address`
+        : `${path}.address is not a Solana public key`,
+    );
   }
   const sourceUrl = text(wallet.sourceUrl, `${path}.sourceUrl`, { max: 512 });
   let parsedUrl: URL;
@@ -427,8 +470,8 @@ function assertWallet(
       );
     }
     return {
-      address: wallet.address,
-      chain: "solana",
+      address: wallet.address as string,
+      chain,
       observedAt: iso(wallet.observedAt, `${path}.observedAt`),
       sourceCommit,
       sourceUrl,
@@ -480,8 +523,8 @@ function assertWallet(
       );
     }
     return {
-      address: wallet.address,
-      chain: "solana",
+      address: wallet.address as string,
+      chain,
       observedAt: iso(wallet.observedAt, `${path}.observedAt`),
       sourceActorId,
       sourceClaimId,
@@ -536,8 +579,8 @@ function assertWallet(
     );
   }
   return {
-    address: wallet.address,
-    chain: "solana",
+    address: wallet.address as string,
+    chain,
     observedAt: iso(wallet.observedAt, `${path}.observedAt`),
     sourceActorId,
     sourceBodySha256,
@@ -601,7 +644,7 @@ export function assertUnsafeDestinationReport(
   );
   if (report.kind !== "unsafe-destination")
     throw new TypeError(`${path}.kind is invalid`);
-  const wallet = assertWallet(report.wallet, `${path}.wallet`, actor);
+  const wallet = assertWallet(report.wallet, `${path}.wallet`, actor, null);
   if (!wallet || !("sourceClaimId" in wallet))
     throw new TypeError(`${path} requires an actor-bound Slop wallet claim`);
   const reportedAt = iso(report.reportedAt, `${path}.reportedAt`);
@@ -670,7 +713,11 @@ export function unsafeDestinationReportMessage(
   })}`;
 }
 
-function assertAllocation(value: unknown, index: number): RewardAllocation {
+function assertAllocation(
+  value: unknown,
+  index: number,
+  chain: SettlementNetwork,
+): RewardAllocation {
   const path = `allocations[${index}]`;
   const allocation = record(value, path);
   const hasAccrual = "accruedMinor" in allocation;
@@ -839,7 +886,12 @@ function assertAllocation(value: unknown, index: number): RewardAllocation {
     );
   }
   const actor = assertActor(allocation.actor, `${path}.actor`);
-  const wallet = assertWallet(allocation.wallet, `${path}.wallet`, actor);
+  const wallet = assertWallet(
+    allocation.wallet,
+    `${path}.wallet`,
+    actor,
+    chain,
+  );
   const unsafeDestinationReports =
     "unsafeDestinationReports" in allocation
       ? array(
@@ -1026,10 +1078,11 @@ export function assertRewardAllocationManifest(
     typeof manifest.projectId !== "string" ||
     (manifest.status !== "proposed" && manifest.status !== "approved") ||
     manifest.currency !== "USDC" ||
-    manifest.chain !== "solana"
+    !isWalletChain(manifest.chain)
   ) {
     throw new TypeError("allocation manifest protocol header is invalid");
   }
+  const chain = manifest.chain;
   const project = findProject(manifest.projectId);
   if (project?.reward.kind !== "monthly-pool") {
     throw new TypeError("allocation manifest project has no monthly pool");
@@ -1151,7 +1204,7 @@ export function assertRewardAllocationManifest(
   const allocations = array(
     manifest.allocations,
     "allocation manifest.allocations",
-  ).map(assertAllocation);
+  ).map((entry, index) => assertAllocation(entry, index, chain));
   unique(
     allocations.map((allocation) => allocation.intentId),
     "allocation intent ids",
@@ -1384,7 +1437,7 @@ export function assertRewardAllocationManifest(
       ...(lapsedAt === undefined ? {} : { lapsedAt }),
     },
     currency: "USDC",
-    chain: "solana",
+    chain,
     capMinor,
     ...(fundingBasis ? { fundingBasis } : {}),
     ...(hasAccrual
@@ -1743,7 +1796,11 @@ export function assertRewardSettlementManifest(
       const signature =
         attempt.signature === null
           ? null
-          : solanaSignature(attempt.signature, `${path}.signature`);
+          : transactionId(
+              attempt.signature,
+              `${path}.signature`,
+              allocation.chain,
+            );
       if (state === "finalized" && signature === null) {
         throw new TypeError(`${path} finalized attempt needs a signature`);
       }
@@ -1823,15 +1880,19 @@ export function assertRewardSettlementManifest(
           max: 44,
           min: 32,
         });
-  if (feeRecipient !== null && !isSolanaAddress(feeRecipient)) {
+  if (
+    feeRecipient !== null &&
+    !isWalletAddress(allocation.chain, feeRecipient)
+  ) {
     throw new TypeError("settlement platform fee recipient is invalid");
   }
   const feeSignature =
     platformFeeRecord.signature === null
       ? null
-      : solanaSignature(
+      : transactionId(
           platformFeeRecord.signature,
           "settlement platformFee.signature",
+          allocation.chain,
         );
   if (BigInt(feeDueMinor) === 0n) {
     if (
@@ -1912,7 +1973,7 @@ export function assertRewardSettlementManifest(
     ),
     settledAt,
     currency: "USDC",
-    chain: "solana",
+    chain: allocation.chain,
     status: expectedStatus,
     recipients,
     attempts,
