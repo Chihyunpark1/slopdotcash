@@ -22,7 +22,13 @@ alias only.
 - Slop never infers copyright ownership, legal capacity, assignment, wallet
   control, or payment authority.
 - Slop never holds keys, signs transactions, broadcasts payments, or claims
-  success before public evidence proves it.
+  success before public evidence proves it, except for one key on the opt-in
+  `squads-project-vault` instrument (RFC #500, `funding/README.md`). For that
+  instrument only: Slop holds one of three keys on a project vault. That key
+  can vote on a payout the creator proposed. It cannot propose a transfer,
+  execute one, change the signers, or act alone. Slop holds no customer
+  balance, takes no fee from the vault, and never broadcasts a transfer of
+  vault funds.
 - Never publish secrets, prompts, responses, source files, credentials, session
   identifiers, private trajectories, or signing material.
 
@@ -276,9 +282,14 @@ shares only and never enters the platform payment lifecycle.
 
 Committed funding uses reviewed immutable third-party instruments: Squads v4
 multisig vaults on Solana and Sablier Lockup v4 streams on Base or Ethereum.
-Slop has no key, admin, or fee position. A positive committed amount requires
-an active reviewed instrument and deterministic verifier evidence. Never call
-funds “escrow” or “guaranteed.”
+Slop has no admin or fee position in any instrument and no key in the 2-of-2
+vault or a stream. On a 2-of-3 project vault Slop holds one vote-only key, and
+a payout is approved for payment only once the creator's on-chain proposal is
+bound in `funding/executions/ledger.json`; project vaults cannot activate
+payments until the readiness, reservation, and signer protocols cover three
+members. A positive committed amount requires an active reviewed instrument
+and deterministic verifier evidence. Never call funds “escrow” or
+“guaranteed.”
 
 ## Project authority and IP
 

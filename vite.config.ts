@@ -29,6 +29,10 @@ export default defineConfig({
   ],
   build: {
     target: "es2022",
+    // The production CSP sets font-src 'self', which blocks data: URIs, so
+    // self-hosted font subsets must ship as files rather than inlined assets.
+    assetsInlineLimit: (filePath) =>
+      /\.(woff2?|ttf|otf)$/.test(filePath) ? false : undefined,
   },
   // Cloudflare Pages serves /data/* with Access-Control-Allow-Origin: *
   // (public/_headers) so other program surfaces (e.g. the Eliza Hub landing

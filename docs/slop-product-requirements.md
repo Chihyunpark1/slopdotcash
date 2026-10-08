@@ -456,7 +456,7 @@ The user requested this requirements update on 6 October 2026. This update does 
 Current requirements take precedence over dated review recommendations, as listed in the review's precedence note.
 Deliver these requirements through MVP-10 with the existing dependent packages. Do not create a separate product phase.
 
-**UX-01 — Shared layout and navigation.** Keep cream, black, orange, strong headings and restrained borders. Reserve large display headings for landing pages. Use consistent buttons, terms, number and date formats. Keep the account avatar farthest right. Show identity and points after it opens. Remove redundant Home navigation and group record links in the footer.
+**UX-01 — Shared layout and navigation.** Use the Blackout design system adopted by the maintainer on 7 October 2026: a dark base (`#0f0e0c`), cream text, one orange accent (`#ff5a19`), Bricolage Grotesque display type with uppercase headings, JetBrains Mono for numbers, and the orange dripping-S tile mark. `brand/tokens.json` is the single token source. Use the shared button kinds (primary, secondary, inverse, ghost, destructive, icon), the 56/48/40 px button scale and 52 px inputs with an orange focus state. Use consistent terms, number and date formats. The header carries the mark and the account control only; keep the account avatar farthest right with points beside it. Group product, record and community links in the orange footer.
 
 Acceptance: Each route has one clear purpose and next action. Header, footer and controls use consistent names. Long names, numbers and mobile layouts remain readable.
 
