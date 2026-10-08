@@ -229,7 +229,7 @@ export function ProfilePage({
         ) : (
           <span>No current payout wallet registered</span>
         )}
-        <Link href="/wallet">Register or update your wallet</Link>
+        <Link href="/account#wallets">Register or update your wallet</Link>
       </ContributorIdentity>
       <ProfilePoints
         key={login.toLowerCase()}
