@@ -90,7 +90,7 @@ describe("generic monthly funding preparation", () => {
       input.contributors[0].actor.id,
       input.contributors[0].actor.login,
       f.options.observedAt,
-      { token: undefined },
+      { chain: "solana", token: undefined },
     );
     const review = createFundingReview(input);
     expect(
@@ -250,7 +250,7 @@ describe("wallet-only preparation refresh", () => {
       actor.id,
       actor.login,
       observedAt,
-      { token: undefined },
+      { chain: "solana", token: undefined },
     );
     const immutable = (input: typeof original) => ({
       ...input,
