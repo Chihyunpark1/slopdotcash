@@ -980,7 +980,7 @@ function validateReward(
   return reward;
 }
 
-function validateFunding(value, projectId) {
+function validateFunding(value, projectId, settlementNetwork) {
   const funding = record(value, "project.funding");
   const hasCommitments = Object.hasOwn(funding, "commitments");
   const hasPaymentPolicy = Object.hasOwn(funding, "freshCyclePaymentPolicy");
@@ -1015,17 +1015,26 @@ function validateFunding(value, projectId) {
     const policy = assertFreshCyclePaymentPolicy(
       funding.freshCyclePaymentPolicy,
     );
+    // The instrument must settle on the project's network (RFC #472): a
+    // Squads vault on Solana, or a Base Sablier stream with a reviewed
+    // recipient actor who attests control of the source address.
+    const fundsNetwork = (v) =>
+      settlementNetwork === "base"
+        ? v.kind === "sablier-lockup-v4" &&
+          v.network === "base" &&
+          v.recipientGithub !== undefined
+        : v.kind === "squads-v4-vault" || v.kind === "squads-project-vault";
     if (
       policy.projectId !== projectId ||
       !(funding.commitments ?? []).some(
         (v) =>
-          (v.kind === "squads-v4-vault" || v.kind === "squads-project-vault") &&
+          fundsNetwork(v) &&
           v.replacedAt === null &&
           v.monthlyCommitment?.cycleId === policy.cycleId,
       )
     )
       throw new TypeError(
-        "Fresh-cycle policy requires its exact active monthly Squads instrument",
+        "Fresh-cycle policy requires its exact active monthly instrument on the settlement network",
       );
   }
   return funding;
@@ -1151,7 +1160,7 @@ function validateProjectDefinition(
     allowLegacyExternalPrizeFee,
     escrow: project.escrow,
   });
-  validateFunding(project.funding, id);
+  validateFunding(project.funding, id, project.reward.chain);
   if (
     (project.reward.fundingState === "committed" ||
       project.reward.reviewBudget?.fundingState === "committed") &&

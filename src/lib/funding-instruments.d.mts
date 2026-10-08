@@ -66,6 +66,8 @@ export interface SablierLockupV4Instrument {
   readonly asset: "USDC";
   readonly contract: string;
   readonly recipient: string;
+  /** Reviewed GitHub actor attesting control of `recipient` (RFC #472). */
+  readonly recipientGithub?: GithubIdentityReference;
   readonly streamId: string;
   readonly deadline: string;
   readonly effectiveAt: string;

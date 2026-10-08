@@ -323,10 +323,12 @@ intent and the fee reconcile exactly. A Base transaction must be confirmed
 after the plan's `createdAt`, because an EIP-681 request carries no memo. The
 settlement record stores each hash in its `signature` field.
 
-No project uses Base today. Base payment activation still needs the owner's
-published Base fee recipient, a reviewed Base payment policy with reservation
-and live readiness, and a decision on the spare Base RPC authority (#471).
-Until then `rewards:plan-settlement` refuses every Base project.
+A Base cycle uses the same reservation and release commands as Solana
+(`protocol/fresh-cycle-payments.md`). The plan source is the frozen Base
+stream recipient, the signer is the reviewed `recipientGithub` actor with an
+EIP-191 proof, and the fee goes to Slop's published Base fee recipient
+`0xb7b0d5e45016d6d31629d9ab375df770fd2aaf77`. No project uses Base today and
+no payment is enabled.
 
 ### Read-only Base payout check
 

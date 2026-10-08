@@ -25,6 +25,7 @@ import {
   reservationGithub,
   reservationJson,
 } from "./payment-reservation-history";
+import { observeBaseSettlementSource } from "./verify-commitment-sablier";
 import { SOLANA_COMMITMENT_RPC_AUTHORITIES } from "./verify-commitment-squads";
 
 type Loaded = Awaited<ReturnType<typeof loadCanonicalPaymentReservation>>;
@@ -178,8 +179,12 @@ function canonical(value: unknown): string {
       .join(",")}}`;
   return JSON.stringify(value);
 }
+type SquadsInstrument = Exclude<
+  Loaded["instrument"],
+  { kind: "sablier-lockup-v4" }
+>;
 async function observedVaultState(
-  instrument: Loaded["instrument"],
+  instrument: SquadsInstrument,
   accounts: unknown,
   tokenAccount: string,
 ) {
@@ -220,7 +225,7 @@ async function observedVaultState(
 }
 /** Fixed public RPCs; two independently validated finalized observations must
  * agree on configuration and balance. Fresh finalized slot rejects stale replay. */
-export async function observeSettlementVault(instrument: Loaded["instrument"]) {
+export async function observeSettlementVault(instrument: SquadsInstrument) {
   const tokenAccount = await deriveVaultUsdcTokenAccount(instrument.vault);
   const settled = await Promise.allSettled(
     SOLANA_COMMITMENT_RPC_AUTHORITIES.map(async (authority, index) => {
@@ -335,11 +340,14 @@ export async function assertCanonicalSettlementReadiness(
         a.observedAt.localeCompare(b.observedAt) ||
         a.recordId.localeCompare(b.recordId),
     );
-  const relevant = allRecords.filter(
-    (r) =>
-      r.instrument.vault === loaded.instrument.vault &&
-      r.instrument.multisig === loaded.instrument.multisig &&
-      r.instrument.vaultIndex === loaded.instrument.vaultIndex,
+  const instrument = loaded.instrument;
+  const relevant = allRecords.filter((r) =>
+    instrument.kind === "sablier-lockup-v4"
+      ? r.instrument.contract === instrument.contract &&
+        r.instrument.streamId === instrument.streamId
+      : r.instrument.vault === instrument.vault &&
+        r.instrument.multisig === instrument.multisig &&
+        r.instrument.vaultIndex === instrument.vaultIndex,
   );
   for (const r of relevant) {
     if (
@@ -357,7 +365,22 @@ export async function assertCanonicalSettlementReadiness(
   const fundingRecords = assertProjectCommitmentLedger(relevant, [
     loaded.instrument,
   ]);
-  const observation = await observeSettlementVault(loaded.instrument);
+  // RFC #472: a Base stream is observed through the read-only EVM quorum.
+  const observation =
+    instrument.kind === "sablier-lockup-v4"
+      ? {
+          accounts: await observeBaseSettlementSource({
+            recipient: instrument.recipient,
+            streamId: instrument.streamId,
+          }),
+          observedAt: new Date().toISOString(),
+          tokenAccount: instrument.recipient,
+          cluster: "base-mainnet" as const,
+        }
+      : {
+          ...(await observeSettlementVault(instrument)),
+          cluster: "mainnet-beta" as const,
+        };
   const result = await verifyFundingReadiness({
     allocationBytes: loaded.allocationBytes,
     now: new Date().toISOString(),
@@ -367,7 +390,6 @@ export async function assertCanonicalSettlementReadiness(
       policy: loaded.policy,
       instrumentBytes: loaded.instrumentBytes,
       allocationSha256: loaded.reservation.allocationSha256,
-      cluster: "mainnet-beta",
       commitment: "finalized",
       fundingRecords: [...fundingRecords],
       signerReports: loaded.signerLedger.reports

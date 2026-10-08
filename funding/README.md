@@ -398,6 +398,13 @@ a positive `committedMinor`, and no evidence is emitted for it. Only a stream
 whose `isCancelable` flag is already false can be recorded. The verifier never
 signs, broadcasts, handles a key, or writes a record.
 
+A Base stream that backs a fresh-cycle payment policy (RFC #472) must also
+name `recipientGithub`: the reviewed GitHub actor (actor ID, node ID, login)
+who attests control of `recipient`, the settlement source. The release path,
+its EIP-191 signer proof, its quorum readiness and Slop's published Base fee
+recipient `0xb7b0d5e45016d6d31629d9ab375df770fd2aaf77` are described in
+[`protocol/fresh-cycle-payments.md`](../protocol/fresh-cycle-payments.md).
+
 A manifest may set `fundingState: "committed"` only while an active instrument
 is declared and the verified commitment ledger (deposits minus releases and
 refunds) covers `committedMinor`. The check is deterministic ledger arithmetic

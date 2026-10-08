@@ -2,6 +2,7 @@ import { assertFreshCyclePaymentPolicy } from "./fresh-cycle-policy.mjs";
 
 export { assertFreshCyclePaymentPolicy } from "./fresh-cycle-policy.mjs";
 
+import { fundingInstrumentId } from "./allocation-funding-basis.mjs";
 /** Read-only runtime readiness. No manifest activation, approval, reservation write, or signing.
  * The trusted loader must authenticate reviewed policy/instrument history, complete
  * funding/signer/reservation ledgers (including losses and retired intents), and
@@ -15,12 +16,14 @@ import {
 } from "./funding-commitment";
 import {
   assertFundingCommitments,
-  type SquadsProjectVaultInstrument,
-  type SquadsV4VaultInstrument,
+  type FundingCommitmentInstrument,
 } from "./funding-instruments.mjs";
 import { fundingReviewProposalSha256 } from "./funding-review-submission";
 import { assertRewardAllocationManifest } from "./rewards";
-import { planCarriesPlatformFee, squadsInstrumentId } from "./settlement-plan";
+import {
+  fundingInstrumentSource,
+  planCarriesPlatformFee,
+} from "./settlement-plan";
 import {
   assertPublicSignerReport,
   currentSignerStatus,
@@ -70,10 +73,13 @@ export interface FundingReadinessEvidence {
   allocationSha256: string;
   observedAt: string;
   /** Same finalized mainnet getMultipleAccounts response: multisig + USDC ATA,
-   * plus the creator multisig as a third account on a project vault. */
+   * plus the creator multisig as a third account on a project vault. On a
+   * Base stream (RFC #472) the quorum-agreed source observation: stream
+   * state, recipient code and recipient USDC balance at a finalized block. */
   accounts: unknown;
-  cluster: "mainnet-beta";
+  cluster: "mainnet-beta" | "base-mainnet";
   commitment: "finalized";
+  /** The Solana vault USDC account, or the Base stream recipient. */
   tokenAccount: string;
   /** Authenticated original monetary freezes, including superseded proposals.
    * Zero-funded preparatory snapshots are not monetary freezes. */
@@ -204,16 +210,18 @@ export async function verifyFundingReadiness(input: {
         ),
       ),
     ]);
+    // A Squads vault settles on Solana; a Base Sablier stream on Base.
+    const network = instrument.kind === "sablier-lockup-v4" ? "base" : "solana";
     if (
-      instrument.kind !== "squads-v4-vault" &&
-      instrument.kind !== "squads-project-vault"
+      instrument.kind === "sablier-lockup-v4" &&
+      instrument.network !== "base"
     )
-      throw new TypeError(
-        "Only reviewed Squads instruments are supported for fresh-cycle release",
-      );
-    const vault: SquadsV4VaultInstrument | SquadsProjectVaultInstrument =
-      instrument;
-    const instrumentId = squadsInstrumentId(vault);
+      throw new TypeError("Only a Base Sablier stream can back a release");
+    if (allocation.chain !== network)
+      block("Instrument network differs from the allocation network");
+    const vault: FundingCommitmentInstrument = instrument;
+    const instrumentId = fundingInstrumentId(vault);
+    const source = fundingInstrumentSource(vault);
     // RFC #500 section 8: only a 2-of-2 vault pays the platform fee from the
     // vault. A project vault covers contributor principal only; its fee is a
     // separate creator transfer reconciled at settlement, never reserved here.
@@ -246,7 +254,17 @@ export async function verifyFundingReadiness(input: {
           "Existing monetary freeze cannot be reactivated or repriced by a later policy",
         );
     }
-    if (vault.kind === "squads-v4-vault") {
+    if (vault.kind === "sablier-lockup-v4") {
+      if (
+        vault.replacedAt !== null ||
+        utc(vault.effectiveAt) > now ||
+        vault.monthlyCommitment?.cycleId !== allocation.cycleId ||
+        !vault.recipientGithub
+      )
+        block(
+          "Stream is inactive, expired, or lacks a reviewed exact-cycle recipient",
+        );
+    } else if (vault.kind === "squads-v4-vault") {
       if (
         vault.replacedAt !== null ||
         utc(vault.effectiveAt) > now ||
@@ -280,7 +298,7 @@ export async function verifyFundingReadiness(input: {
       intents.reduce((sum, r) => sum + money(r.approvedMinor), 0n) !== principal
     )
       block("Approved intents do not reconcile principal");
-    const { isSolanaAddress } = await import("./wallets");
+    const { isWalletAddress } = await import("./wallets");
     // On a project vault nothing Slop votes on may pay a Slop address
     // (protocol/project-vault-signing.md step 3).
     const slopAddresses =
@@ -288,34 +306,45 @@ export async function verifyFundingReadiness(input: {
         ? [vault.slopMember, policy.feeRecipient]
         : [];
     if (
-      !isSolanaAddress(policy.feeRecipient) ||
-      policy.feeRecipient === vault.vault ||
+      !isWalletAddress(network, policy.feeRecipient) ||
+      policy.feeRecipient === source ||
       intents.some(
         (r) =>
           !r.wallet ||
-          r.wallet.address === vault.vault ||
+          r.wallet.address === source ||
           slopAddresses.includes(r.wallet.address),
       )
     )
       block("Invalid payable destinations");
     if (
-      evidence.cluster !== "mainnet-beta" ||
+      evidence.cluster !==
+        (network === "base" ? "base-mainnet" : "mainnet-beta") ||
       evidence.commitment !== "finalized" ||
       utc(evidence.observedAt) > now ||
       now - utc(evidence.observedAt) > MAX_OBSERVATION_AGE_MS
     )
       block("Finalized mainnet evidence is absent, future, or stale");
     if (
-      evidence.tokenAccount !== (await deriveVaultUsdcTokenAccount(vault.vault))
+      evidence.tokenAccount !==
+      (vault.kind === "sablier-lockup-v4"
+        ? vault.recipient
+        : await deriveVaultUsdcTokenAccount(vault.vault))
     )
-      throw new TypeError("Observation is not the canonical vault USDC ATA");
+      throw new TypeError("Observation is not the canonical source account");
     const observation = evidence.accounts as {
       context: unknown;
       value: unknown[];
     };
     let state: { balanceMinor: string };
     let creatorSeat: VerifiedSquadsCreatorSeat | null = null;
-    if (vault.kind === "squads-v4-vault") {
+    if (vault.kind === "sablier-lockup-v4") {
+      // RFC #472, owner decision of 8 October 2026: the recipient must be an
+      // EOA (no code), the stream non-cancelable (checked by the verifier) and
+      // not canceled, and the recipient's own finalized USDC balance must
+      // cover principal plus fee. Once withdrawn, the funds sit in a single
+      // key, so the reservation is bookkeeping only.
+      state = assertBaseSourceObservation(evidence.accounts, vault);
+    } else if (vault.kind === "squads-v4-vault") {
       state = await assertSquadsVaultUsdcState(
         evidence.accounts,
         vault.multisig,
@@ -366,19 +395,21 @@ export async function verifyFundingReadiness(input: {
         vault.creatorVaultIndex,
       );
     }
-    const tokenInfo = (
-      observation.value as {
-        data: { parsed: { info: Record<string, unknown> } };
-      }[]
-    )[1].data.parsed.info;
-    if (
-      tokenInfo.state !== "initialized" ||
-      tokenInfo.delegate != null ||
-      tokenInfo.closeAuthority != null
-    )
-      block(
-        "Vault USDC account is frozen, delegated, or has a close authority",
-      );
+    if (vault.kind !== "sablier-lockup-v4") {
+      const tokenInfo = (
+        observation.value as {
+          data: { parsed: { info: Record<string, unknown> } };
+        }[]
+      )[1].data.parsed.info;
+      if (
+        tokenInfo.state !== "initialized" ||
+        tokenInfo.delegate != null ||
+        tokenInfo.closeAuthority != null
+      )
+        block(
+          "Vault USDC account is frozen, delegated, or has a close authority",
+        );
+    }
     if (money(state.balanceMinor) < principal + sourceFee)
       block(`Finalized USDC balance does not cover ${coverage}`);
     const records = assertProjectCommitmentLedger(evidence.fundingRecords, [
@@ -413,9 +444,11 @@ export async function verifyFundingReadiness(input: {
     }
     if (publicSignerStatus(reports, now) !== currentSignerStatus(instrumentId))
       block(
-        vault.kind === "squads-v4-vault"
-          ? "Both authenticated signers must be current; loss or expiry blocks new plans"
-          : "The creator and the independent signer must be current; loss or expiry blocks new plans",
+        vault.kind === "sablier-lockup-v4"
+          ? "The authenticated stream recipient must be current; loss or expiry blocks new plans"
+          : vault.kind === "squads-v4-vault"
+            ? "Both authenticated signers must be current; loss or expiry blocks new plans"
+            : "The creator and the independent signer must be current; loss or expiry blocks new plans",
       );
     if (!SHA.test(evidence.reservationRevision))
       throw new TypeError("Missing complete reservation revision");
@@ -503,6 +536,39 @@ export async function verifyFundingReadiness(input: {
 }
 
 /**
+ * Validates the quorum-agreed Base source observation from
+ * `observeBaseSettlementSource` against the exact reviewed stream.
+ */
+function assertBaseSourceObservation(
+  value: unknown,
+  stream: { recipient: string; streamId: string },
+): { balanceMinor: string } {
+  const o = value as {
+    network?: unknown;
+    recipient?: unknown;
+    recipientCode?: unknown;
+    balanceMinor?: unknown;
+    stream?: { streamId?: unknown; wasCanceled?: unknown };
+  } | null;
+  if (
+    !o ||
+    o.network !== "base" ||
+    o.recipient !== stream.recipient ||
+    typeof o.balanceMinor !== "string" ||
+    !/^(0|[1-9]\d{0,77})$/u.test(o.balanceMinor) ||
+    o.stream?.streamId !== stream.streamId
+  )
+    throw new TypeError("Base source observation is not the reviewed stream");
+  if (o.recipientCode !== "0x")
+    throw new TypeError(
+      "Base stream recipient has contract code; only an EOA source is supported",
+    );
+  if (o.stream.wasCanceled !== false)
+    throw new TypeError("Base stream was canceled");
+  return { balanceMinor: o.balanceMinor };
+}
+
+/**
  * Binds each signer report to the member it may speak for. On the 2-of-2 each
  * role is one reviewed key. On a project vault the independent signer is one
  * reviewed key, and the creator seat is the creator multisig's vault PDA,
@@ -512,10 +578,12 @@ export async function verifyFundingReadiness(input: {
  * role here (see signer-capability.ts).
  */
 function signerReportBindsMember(
-  vault: SquadsV4VaultInstrument | SquadsProjectVaultInstrument,
+  vault: FundingCommitmentInstrument,
   report: PublicSignerReport,
   creatorSeat: VerifiedSquadsCreatorSeat | null,
 ): boolean {
+  if (vault.kind === "sablier-lockup-v4")
+    return report.role === "recipient" && report.member === vault.recipient;
   if (vault.kind === "squads-v4-vault") {
     if (report.role === "funder") return report.member === vault.funderMember;
     if (report.role === "steward") return report.member === vault.stewardMember;

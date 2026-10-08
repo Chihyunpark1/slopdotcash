@@ -285,7 +285,13 @@ Squads separates proposal, vote, and execution permissions; that is useful gover
 5. `paid` on Base requires the same exact reconciliation as on Solana: the read-only verifier from #470, a 2-of-3 RPC quorum and 12 confirmations prove the source debit and every recipient credit for every intent and the fee. A Base transaction must be confirmed after its plan was created, because an EIP-681 request has no memo.
 6. Slop holds no key and does not sign or broadcast. Ethereum mainnet settlement, Merkle claims and migration of existing cycles stay out of scope.
 
-Activation gates remain: the owner must publish the Base fee-recipient address, a reviewed Base payment policy, reservation and live-readiness path must exist, and the spare Base RPC authority issue (#471) needs a decision. Until then no Base project can enable payments.
+On the same day the owner chose the Base release policy:
+
+7. **Signer control.** A Base Sablier instrument names a reviewed `recipientGithub` (actor ID, node ID, login) for its `recipient`. The one signer role is `recipient`. A `can-sign` report needs a GitHub-verified commit by that actor and an EIP-191 `personal_sign` signature by the recipient over the existing `signerCapabilityMessage`. Slop verifies the signature read-only with the pinned `@noble/curves` secp256k1 and refuses high-s signatures. `lost-access` is unchanged. Only an EOA recipient is supported: readiness refuses a recipient that has contract code at the finalized block.
+8. **Readiness.** Under the 2-of-3 Base RPC quorum, at a finalized block, the recipient's own USDC balance must be at least principal plus fee. The stream must use Base USDC, pay the exact recipient, be non-cancelable and not be canceled. The owner accepted that a Base reservation is bookkeeping only after the recipient withdraws the funds, because one key then controls them. Slop cannot stop that key from spending elsewhere.
+9. **Fee recipient.** Slop's Base platform-fee recipient is `0xb7b0d5e45016d6d31629d9ab375df770fd2aaf77`, stored in lowercase canonical form (EIP-55 form `0xb7B0D5E45016d6d31629d9ab375dF770fD2aaf77`). A Base fresh-cycle policy can name only this address.
+
+Base uses the same reservation, readiness, release and verification commands as Solana. No project uses Base and no payment is enabled. Before a Base project can pay, it needs a reviewed manifest change that sets `reward.chain` to `base`, adds the stream with `recipientGithub`, and adds the fresh-cycle policy. The spare Base RPC authority question (#471) is still open.
 
 ### Lifecycle
 
@@ -761,7 +767,7 @@ served files. Issue #534 tracks this approved operational change.
 | Account versus project authority | Backend for private accounts; GitHub manifests for active project policy | Product and backend owners |
 | Trace and score conflicts | Reconcile local instructions with upstream protocols; publish one effective rule | Maintainers and protocol owner |
 | Payout execution authority | No Slop-held key originates, routes or redirects a payment: project-operated or permissionless execution; actor-binding proof and recovery authority remain blocked under PAY-05; a wallet signature alone is insufficient; counsel review before any change | Security, financial-protocol and legal owners |
-| Monthly-pool settlement network | **Approved 8 October 2026 (RFC #472):** one network per project in `reward.chain`, Solana or Base; frozen per cycle; fee is a separate transfer on the same network (PAY-09). Base fee recipient and Base payment activation remain open | Repository owner |
+| Monthly-pool settlement network | **Approved 8 October 2026 (RFC #472):** one network per project in `reward.chain`, Solana or Base; frozen per cycle; fee is a separate transfer on the same network. Base release: one `recipient` signer bound by `recipientGithub` with EIP-191 proof, EOA only; quorum finalized recipient balance covers principal plus fee on a non-cancelable, uncanceled stream; reservation is bookkeeping once funds are withdrawn; Base fee recipient `0xb7b0d5e45016d6d31629d9ab375df770fd2aaf77` (PAY-09) | Repository owner |
 | Payout fee | Maintainer-approved 2% deduction from new gross awards; show net contributor earnings, reserve gross as net principal plus fee, charge once and freeze per obligation; preserve legacy policy | Product and finance owners |
 | Withdrawal fee | 10% remains a proposal; validate sponsor demand and retain clear net-refund preview | Product and finance owners |
 | Public donation rights | Nonrefundable reward-restricted class, contract-enforced | Product, protocol and legal owners |

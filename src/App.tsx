@@ -1130,7 +1130,9 @@ export function SignerReports({
                     ? "Both signers reported capability"
                     : state === "creator-and-independent-current"
                       ? "Creator and independent signer reported capability"
-                      : "Current capability unknown"}
+                      : state === "recipient-current"
+                        ? "Stream recipient reported capability"
+                        : "Current capability unknown"}
               </span>
             </h3>
             <p>Instrument: {group[0].instrumentId}</p>

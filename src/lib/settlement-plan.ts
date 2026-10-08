@@ -1,12 +1,13 @@
 /**
  * Builds and validates unsigned USDC transfer plans from approved payout
  * intents. A cycle settles on the one network frozen in its allocation: Solana
- * plans use the SPL mint and Solana Pay requests, Base plans use the Base USDC
+ * plans use the SPL mint, Base plans use the Base USDC
  * contract and EIP-681 requests. Plans contain public addresses and exact
  * integer amounts only; no signer, seed phrase, private key, or optimistic
  * payment state is accepted.
  */
 
+import { fundingInstrumentId } from "./allocation-funding-basis.mjs";
 import {
   EVM_FUNDING_CHAIN_IDS,
   EVM_FUNDING_USDC_CONTRACTS,
@@ -351,8 +352,7 @@ export function createBaseSettlementExecutionPlan(
   ).find(
     (candidate) =>
       candidate.kind === "sablier-lockup-v4" &&
-      `sablier-lockup-v4:${candidate.network}:${candidate.contract}:${candidate.streamId}` ===
-        instrumentId,
+      fundingInstrumentId(candidate) === instrumentId,
   );
   if (instrument?.kind !== "sablier-lockup-v4") {
     throw new TypeError(
@@ -376,6 +376,40 @@ export function createBaseSettlementExecutionPlan(
       decimals: USDC_DECIMALS,
     },
   };
+}
+
+/** The account a reviewed instrument pays from: the Squads vault or the stream recipient. */
+export function fundingInstrumentSource(
+  instrument: FundingCommitmentInstrument,
+): string {
+  return instrument.kind === "sablier-lockup-v4"
+    ? instrument.recipient
+    : instrument.vault;
+}
+
+/**
+ * Creates the unsigned plan on the allocation's frozen network, sourced from
+ * the exact reviewed instrument. The caller never supplies the source wallet.
+ */
+export function createNetworkSettlementExecutionPlan(
+  input: Omit<PlanInput, "sourceOwner"> & {
+    instrument: FundingCommitmentInstrument;
+  },
+): NetworkSettlementExecutionPlan {
+  const allocation = assertRewardAllocationManifest(input.allocation);
+  const planInput = {
+    allocation,
+    allocationSha256: input.allocationSha256,
+    createdAt: input.createdAt,
+    feeRecipient: input.feeRecipient,
+    sourceOwner: fundingInstrumentSource(input.instrument),
+  };
+  return allocation.chain === "base"
+    ? createBaseSettlementExecutionPlan({
+        ...planInput,
+        fundingInstruments: [input.instrument],
+      })
+    : createSettlementExecutionPlan(planInput);
 }
 
 function record(value: unknown, field: string): Record<string, unknown> {

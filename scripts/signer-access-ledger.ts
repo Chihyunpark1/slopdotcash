@@ -180,7 +180,8 @@ export function assertSignerCapabilityForSettlement(
   const instrumentId = allocation.fundingBasis?.instrumentId;
   if (
     !instrumentId?.startsWith("squads-v4-vault:") &&
-    !instrumentId?.startsWith("squads-project-vault:")
+    !instrumentId?.startsWith("squads-project-vault:") &&
+    !instrumentId?.startsWith("sablier-lockup-v4:base:")
   )
     return;
   const result = signerCapabilityState(

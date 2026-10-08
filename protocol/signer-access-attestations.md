@@ -69,6 +69,27 @@ The diagnostic reducer returns `creator-and-independent-current` for a
 project vault, which is no more an `accessible` or payable claim than
 `both-signers-current` is for the 2-of-2.
 
+## Base stream recipient role (RFC #472)
+
+On a Base Sablier stream the one role is `recipient`, approved by the
+repository owner on 8 October 2026. It binds the stream's reviewed
+`recipientGithub.actorId` and immutable node ID to the stream `recipient`,
+a lowercase Base address. `member` is that address.
+
+- `lost-access` is unchanged: a public reason, no expiry and no member
+  signature.
+- `can-sign` carries `memberSignature` as an EIP-191 `personal_sign`
+  signature: 65 bytes `r || s || v` in lowercase hex with a `0x` prefix and
+  `v` of 27 or 28. It signs the exact UTF-8 bytes of `signerCapabilityMessage`.
+  The verifier recovers the address with lockfile-pinned Noble Curves
+  secp256k1 and Keccak-256, refuses high-s signatures, and requires the
+  recovered address to equal `member`.
+
+Only an EOA recipient is supported. Release readiness refuses a recipient
+with contract code, so an EIP-1271 contract wallet cannot attest. The status
+`recipient-current` is no more an `accessible` or payable claim than the
+Squads statuses.
+
 ## Operator use
 
 The signer uses an external client to obtain the canonical message, optionally

@@ -142,6 +142,39 @@ project.
    Local output creation is exclusive; identical bytes are an idempotent retry,
    conflicting bytes cannot be overwritten. No new intent is generated on retry.
 
+### Base streams (RFC #472)
+
+On 8 October 2026 the repository owner approved Base as a settlement network
+and chose this release policy. A project with `reward.chain: "base"` uses the
+same four steps with a Base Sablier Lockup v4 stream instead of a Squads vault:
+
+- The policy's instrument is the one active monthly Base stream. It must name
+  a reviewed `recipientGithub` (actor ID, node ID, login) for its `recipient`.
+  `instrumentSha256` binds that normalized stream object.
+- `feeRecipient` must be Slop's published Base fee recipient
+  `0xb7b0d5e45016d6d31629d9ab375df770fd2aaf77` (lowercase canonical form). The
+  schema refuses any other Base address.
+- The reservation `instrumentId` is `sablier-lockup-v4:base:<contract>:<stream>`.
+  The reserved plan is a `base-usdc-transfer-plan` whose source is the stream
+  recipient. The fee is a separate transfer in the same plan.
+- The only signer role is `recipient`. It must be current, with an EIP-191
+  proof (`protocol/signer-access-attestations.md`). Loss blocks new plans.
+- Release readiness queries the three fixed Base RPC authorities. Two must
+  agree, at their finalized blocks, that the stream uses Base USDC, pays the
+  exact recipient, is non-cancelable and was not canceled; that the recipient
+  has no contract code; and that the recipient's USDC balance covers principal
+  plus fee. The canonical verified commitment ledger must also cover principal
+  plus fee.
+- `rewards:verify-settlement` proves each Base transaction hash through the
+  same quorum (12 confirmations) and accepts only exact deltas. Hashes cannot
+  be reused across cycles.
+
+The owner accepted that a Base reservation is bookkeeping only once the
+recipient withdraws the funds: a single key then controls them, and Slop cannot
+stop that key from spending elsewhere. A contract recipient (for example a
+Safe) is refused until a separate reviewed proof method exists. No project uses
+Base today and no payment is enabled.
+
 Distinct monthly instruments keep truthful later replacement timestamps. Window
 overlap remains forbidden within the same exact month. Retired unscoped
 instruments may remain as historical evidence only when their active intervals

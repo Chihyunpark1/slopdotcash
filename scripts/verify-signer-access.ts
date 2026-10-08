@@ -2,14 +2,18 @@
 import { execFileSync } from "node:child_process";
 import { lstat, readFile } from "node:fs/promises";
 import { ed25519 } from "@noble/curves/ed25519.js";
+import { secp256k1 } from "@noble/curves/secp256k1.js";
+import { keccak_256 } from "@noble/hashes/sha3.js";
+import { fundingInstrumentId } from "../src/lib/allocation-funding-basis.mjs";
 import type {
+  SablierLockupV4Instrument,
   SquadsProjectVaultInstrument,
   SquadsV4VaultInstrument,
 } from "../src/lib/funding-instruments.mjs";
 import { assertProjectDefinition } from "../src/lib/project-schema.mjs";
 import type { ProjectDefinition } from "../src/lib/projects.mjs";
-import { squadsInstrumentId } from "../src/lib/settlement-plan";
 import {
+  isBaseStreamSignerInstrument,
   requiredSignerRoles,
   type SignerRole,
 } from "../src/lib/signer-capability";
@@ -23,7 +27,8 @@ export interface SignerAccessReport {
   cycleId: string;
   instrumentId: string;
   actorId: string;
-  /** funder/steward on the 2-of-2; creator/independent on a project vault. */
+  /** funder/steward on the 2-of-2; creator/independent on a project vault;
+   * recipient on a Base Sablier stream (RFC #472). */
   role: SignerRole;
   member: string;
   capability: "can-sign" | "lost-access";
@@ -75,16 +80,14 @@ function timestamp(value: unknown): number {
 }
 
 type SquadsInstrument = SquadsV4VaultInstrument | SquadsProjectVaultInstrument;
+type SignerInstrument = SquadsInstrument | SablierLockupV4Instrument;
 const ROLES: readonly string[] = [
   "funder",
   "steward",
   "creator",
   "independent",
+  "recipient",
 ];
-
-export function squadsAccessInstrumentId(instrument: SquadsInstrument): string {
-  return squadsInstrumentId(instrument);
-}
 
 export function assertSignerAccessReport(value: unknown): SignerAccessReport {
   const report = object(value);
@@ -111,7 +114,9 @@ export function assertSignerAccessReport(value: unknown): SignerAccessReport {
     typeof report.role !== "string" ||
     !ROLES.includes(report.role) ||
     typeof report.member !== "string" ||
-    !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/u.test(report.member) ||
+    !(isBaseStreamSignerInstrument(report.instrumentId)
+      ? /^0x[0-9a-f]{40}$/u.test(report.member)
+      : /^[1-9A-HJ-NP-Za-km-z]{32,44}$/u.test(report.member)) ||
     (report.capability !== "can-sign" && report.capability !== "lost-access") ||
     typeof report.reason !== "string" ||
     report.reason.trim() !== report.reason ||
@@ -131,16 +136,24 @@ export function assertSignerAccessReport(value: unknown): SignerAccessReport {
       );
   } else {
     const expiresAt = timestamp(report.expiresAt);
+    // A Base recipient signs with EIP-191 personal_sign: 65 lowercase hex
+    // bytes r || s || v. A Solana member signs with canonical Ed25519 base64.
+    const canonicalSignature = isBaseStreamSignerInstrument(
+      report.instrumentId as string,
+    )
+      ? typeof report.memberSignature === "string" &&
+        /^0x[0-9a-f]{128}(?:1b|1c)$/u.test(report.memberSignature)
+      : typeof report.memberSignature === "string" &&
+        /^[A-Za-z0-9+/]{86}==$/u.test(report.memberSignature) &&
+        Buffer.from(report.memberSignature, "base64").toString("base64") ===
+          report.memberSignature;
     if (
       expiresAt <= reportedAt ||
       expiresAt - reportedAt > DAY_MS ||
-      typeof report.memberSignature !== "string" ||
-      !/^[A-Za-z0-9+/]{86}==$/u.test(report.memberSignature) ||
-      Buffer.from(report.memberSignature, "base64").toString("base64") !==
-        report.memberSignature
+      !canonicalSignature
     )
       throw new TypeError(
-        "Capability requires a canonical Ed25519 signature and at most 24-hour validity",
+        "Capability requires a canonical member signature and at most 24-hour validity",
       );
   }
   return { ...report } as unknown as SignerAccessReport;
@@ -176,6 +189,36 @@ function memberPublicKey(member: string) {
   const raw = Buffer.concat([Buffer.alloc(leading), Buffer.from(bytes)]);
   if (raw.length !== 32) throw new TypeError("Member key must be 32 bytes");
   return Uint8Array.from(raw);
+}
+
+/**
+ * Recovers the signer of an EIP-191 personal_sign signature over `message`.
+ * High-s signatures are refused, so each message has one canonical signature.
+ */
+export function eip191SignerAddress(
+  message: string,
+  signature: string,
+): string {
+  if (!/^0x[0-9a-f]{128}(?:1b|1c)$/u.test(signature))
+    throw new TypeError("EIP-191 signature is not canonical");
+  const bytes = Uint8Array.from(Buffer.from(signature.slice(2), "hex"));
+  const body = new TextEncoder().encode(message);
+  const digest = keccak_256(
+    new Uint8Array([
+      ...new TextEncoder().encode(
+        `\x19Ethereum Signed Message:\n${body.length}`,
+      ),
+      ...body,
+    ]),
+  );
+  const parsed = secp256k1.Signature.fromBytes(
+    bytes.slice(0, 64),
+    "compact",
+  ).addRecoveryBit(bytes[64] - 27);
+  if (parsed.hasHighS())
+    throw new TypeError("EIP-191 signature must use low s");
+  const publicKey = parsed.recoverPublicKey(digest).toBytes(false);
+  return `0x${Buffer.from(keccak_256(publicKey.slice(1)).slice(12)).toString("hex")}`;
 }
 
 export async function readSignerCommit(
@@ -216,7 +259,7 @@ export async function readSignerCommit(
  * creator multisig on chain. Slop's vote-only key never attests.
  */
 function signerAuthority(
-  instrument: SquadsInstrument,
+  instrument: SignerInstrument,
   report: SignerAccessReport,
 ): {
   actorId: string;
@@ -224,6 +267,16 @@ function signerAuthority(
   member: string | null;
   forbiddenMember: string | null;
 } | null {
+  // RFC #472: the reviewed recipient actor speaks for the stream recipient.
+  if (instrument.kind === "sablier-lockup-v4")
+    return report.role === "recipient" && instrument.recipientGithub
+      ? {
+          actorId: instrument.recipientGithub.actorId,
+          nodeId: instrument.recipientGithub.nodeId,
+          member: instrument.recipient,
+          forbiddenMember: null,
+        }
+      : null;
   if (instrument.kind === "squads-v4-vault") {
     if (
       !instrument.stewardGithub ||
@@ -291,10 +344,12 @@ export async function verifySignerAccess(input: {
       "Signer report does not bind the reviewed manifest or time",
     );
   const matches = (input.project.funding.commitments ?? []).filter(
-    (instrument): instrument is SquadsInstrument =>
+    (instrument): instrument is SignerInstrument =>
       (instrument.kind === "squads-v4-vault" ||
-        instrument.kind === "squads-project-vault") &&
-      squadsAccessInstrumentId(instrument) === report.instrumentId,
+        instrument.kind === "squads-project-vault" ||
+        (instrument.kind === "sablier-lockup-v4" &&
+          instrument.network === "base")) &&
+      fundingInstrumentId(instrument) === report.instrumentId,
   );
   const instrument = matches[0];
   if (
@@ -305,12 +360,12 @@ export async function verifySignerAccess(input: {
     !requiredSignerRoles(report.instrumentId).includes(report.role)
   )
     throw new TypeError(
-      "Report requires the exact reviewed monthly Squads instrument",
+      "Report requires the exact reviewed monthly instrument",
     );
   const authority = signerAuthority(instrument, report);
   if (!authority)
     throw new TypeError(
-      "Report requires the exact reviewed monthly Squads instrument",
+      "Report requires the exact reviewed monthly instrument",
     );
   if (
     report.actorId !== authority.actorId ||
@@ -340,16 +395,23 @@ export async function verifySignerAccess(input: {
     throw new TypeError(
       "GitHub signature does not bind the exact signer report",
     );
-  if (
-    report.capability === "can-sign" &&
-    !ed25519.verify(
-      Uint8Array.from(Buffer.from(report.memberSignature ?? "", "base64")),
-      new TextEncoder().encode(signerCapabilityMessage(report)),
-      memberPublicKey(report.member),
-      { zip215: false },
-    )
-  )
-    throw new TypeError("Member capability signature is invalid");
+  if (report.capability === "can-sign") {
+    const valid =
+      instrument.kind === "sablier-lockup-v4"
+        ? eip191SignerAddress(
+            signerCapabilityMessage(report),
+            report.memberSignature ?? "",
+          ) === report.member
+        : ed25519.verify(
+            Uint8Array.from(
+              Buffer.from(report.memberSignature ?? "", "base64"),
+            ),
+            new TextEncoder().encode(signerCapabilityMessage(report)),
+            memberPublicKey(report.member),
+            { zip215: false },
+          );
+    if (!valid) throw new TypeError("Member capability signature is invalid");
+  }
   return report;
 }
 
