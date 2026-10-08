@@ -14,7 +14,10 @@ import {
   assertLeaderboardSnapshot,
   type LeaderboardSnapshot,
 } from "../../src/lib/leaderboard";
-import { createProjectView } from "../../src/lib/project-view";
+import {
+  createProjectView,
+  projectCycleHasOpened,
+} from "../../src/lib/project-view";
 import { PROJECTS } from "../../src/lib/projects.mjs";
 
 const deployment = deploymentOrigins(
@@ -261,12 +264,13 @@ test("discovers projects and one points-ranked homepage leaderboard", async ({
   const elizaCard = page.locator('a.project-card[href="/projects/eliza"]');
   await expect(
     elizaCard.getByText("Not funded yet", { exact: true }),
-  ).toBeVisible();
-  await expect(elizaCard.getByText("$5k", { exact: true })).toHaveCount(0);
+  ).toHaveCount(0);
+  await expect(elizaCard.getByText("$5k", { exact: true })).toBeVisible();
   await expect(
-    elizaCard.getByText("Target $5k/mo", {
-      exact: true,
-    }),
+    elizaCard.getByText("/mo target", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    elizaCard.getByText("Vault: Unavailable", { exact: true }),
   ).toBeVisible();
   await expect(elizaCard.getByText("$5,000", { exact: true })).toHaveCount(0);
   await expect(
@@ -613,7 +617,37 @@ test("renders contributor and cycle records from validated public data", async (
       .getByText("recorded score", { exact: true }),
   ).toBeVisible();
   await expect(
-    page.locator(".profile-totals").getByText(/^[A-Z][a-z]+ \d{4} projected/u),
+    page
+      .locator(".profile-totals")
+      .getByText(/^[A-Z][a-z]+ \d{4} simulated estimate/u),
+  ).toBeVisible();
+  const simulated = PROJECTS.reduce((total, project) => {
+    if (
+      !projectCycleHasOpened(snapshot, project.id) ||
+      !project.repositories.every((repository) =>
+        snapshot.repositories.some(
+          (collected) => collected.id === repository.id,
+        ),
+      )
+    )
+      return total;
+    const view = createProjectView(snapshot, project.id);
+    const leader = view.leaders.find((entry) => entry.actor.id === actor.id);
+    return total + BigInt(leader?.simulatedMinor ?? "0");
+  }, 0n);
+  const estimate = page.locator(".profile-totals > div").filter({
+    hasText: /simulated estimate/u,
+  });
+  await expect(estimate.locator("strong")).toHaveText(
+    new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+      minimumFractionDigits: simulated % 1_000_000n === 0n ? 0 : 2,
+      maximumFractionDigits: 2,
+    }).format(Number(simulated) / 1_000_000),
+  );
+  await expect(
+    page.getByText(/14-day review applies to monthly proposals/u),
   ).toBeVisible();
   await expect(page.getByRole("heading", { name: "Progress" })).toHaveCount(0);
   const acceptedRecordCount = snapshot.ledger.filter(

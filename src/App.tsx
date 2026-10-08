@@ -73,6 +73,7 @@ import {
   projectFundingTotals,
   publicFundingRecordsForDonor,
 } from "./lib/funding";
+import { commitmentVerifiedNetMinor } from "./lib/funding-commitment";
 import { cycleSettlementReminder } from "./lib/funding-reminders";
 import { createGlobalLeaders } from "./lib/global-leaderboard";
 import { createInstallCommand } from "./lib/install-command";
@@ -502,10 +503,43 @@ function monthlyPoolCapLabel(reward: ProjectDefinition["reward"]): string {
     .replace(/K$/u, "k");
 }
 
-function ProjectCard({ project }: { project: ProjectDefinition }) {
-  const unfunded =
-    project.reward.kind === "monthly-pool" &&
-    monthlyPoolUnfunded(project.reward);
+function ProjectCard({
+  project,
+  funding,
+}: {
+  project: ProjectDefinition;
+  funding: FundingDataState;
+}) {
+  const vaults =
+    project.funding.commitments?.filter(
+      (instrument) =>
+        instrument.kind === "squads-v4-vault" && instrument.replacedAt === null,
+    ) ?? [];
+  const vaultRecords =
+    funding.status === "ready"
+      ? funding.index.commitments.filter(
+          (record) =>
+            record.projectId === project.id &&
+            "vault" in record.instrument &&
+            vaults.some(
+              (vault) =>
+                vault.kind === "squads-v4-vault" &&
+                "vault" in record.instrument &&
+                vault.vault === record.instrument.vault,
+            ),
+        )
+      : [];
+  const vaultBalance =
+    vaults.length === 0
+      ? "Unavailable"
+      : funding.status === "loading"
+        ? "Loading…"
+        : funding.status === "error" ||
+            !vaultRecords.some((record) => record.state === "verified-on-chain")
+          ? "Unavailable"
+          : formatMicroUsdc(
+              commitmentVerifiedNetMinor(vaultRecords).toString(),
+            );
   const amount =
     project.reward.kind === "monthly-pool"
       ? monthlyPoolCapLabel(project.reward)
@@ -521,25 +555,17 @@ function ProjectCard({ project }: { project: ProjectDefinition }) {
       </div>
       <div className="project-card-content">
         <p className="project-summary">{project.description}</p>
-        {unfunded ? (
-          <p className="project-bounty project-bounty-unfunded">
-            <strong>{UNFUNDED_POOL_HEADLINE}</strong>
-          </p>
-        ) : (
-          <p className="project-bounty">
-            <strong>{amount}</strong>
-            {project.reward.kind === "monthly-pool" ? <span>/mo</span> : null}
-          </p>
-        )}
-        {project.reward.kind === "monthly-pool" ? (
-          <small className="project-money-state">
-            {unfunded
-              ? `Target ${amount}/mo`
-              : "Committed balance · accessibility unknown · payments disabled"}
-          </small>
-        ) : (
-          <small className="project-money-state">External prize</small>
-        )}
+        <p className="project-bounty">
+          <strong>{amount}</strong>
+          {project.reward.kind === "monthly-pool" ? (
+            <span>/mo target</span>
+          ) : null}
+        </p>
+        <small className="project-money-state">
+          {project.reward.kind === "monthly-pool"
+            ? `Vault: ${vaultBalance}`
+            : "External prize"}
+        </small>
         {project.reward.reviewBudget ? (
           <small className="project-review-budget">
             + {reviewBudgetLabel(project.reward.reviewBudget)}
@@ -601,6 +627,7 @@ function GlobalLeaderboard() {
 }
 
 function HomePage() {
+  const funding = useFundingIndex();
   const promotedProjects = homeProjects();
   const featuredProjects = promotedProjects.filter(
     (project) => project.listingTier === "featured",
@@ -639,7 +666,11 @@ function HomePage() {
           <h3 id="featured-projects">Featured</h3>
           <div className="project-grid">
             {featuredProjects.map((project) => (
-              <ProjectCard key={project.id} project={project} />
+              <ProjectCard
+                key={project.id}
+                project={project}
+                funding={funding}
+              />
             ))}
           </div>
         </section>
@@ -648,7 +679,11 @@ function HomePage() {
             <summary>Community projects</summary>
             <div className="project-grid">
               {communityProjects.map((project) => (
-                <ProjectCard key={project.id} project={project} />
+                <ProjectCard
+                  key={project.id}
+                  project={project}
+                  funding={funding}
+                />
               ))}
             </div>
           </details>
@@ -2032,21 +2067,21 @@ function ProfilePage({
     (total, match) => total + match.leader.acceptedOutcomeCount,
     0,
   );
-  const projected = matches.reduce(
-    (total, match) => total + BigInt(match.leader.projectedMinor ?? "0"),
+  const simulated = matches.reduce(
+    (total, match) => total + BigInt(match.leader.simulatedMinor ?? "0"),
     0n,
   );
-  // Name the UTC cycle behind the projection and whether money backs it.
+  // Keep the cap-based estimate separate from funding and approved awards.
   const cycleId = (matches[0]?.view ?? state.views[0])?.cycle.id;
   const monthlyPools = (
     matches.length > 0 ? matches.map(({ view }) => view) : state.views
   ).filter((view) => view.project.reward.kind === "monthly-pool");
-  const projectedUnfunded =
+  const simulatedUnfunded =
     monthlyPools.length > 0 &&
     monthlyPools.every((view) => monthlyPoolUnfunded(view.project.reward));
-  const projectedLabel = `${
+  const simulatedLabel = `${
     cycleId ? formatCycleMonth(cycleId) : "monthly"
-  } projected${projectedUnfunded ? ", unfunded" : ""}`;
+  } simulated estimate${simulatedUnfunded ? ", unfunded" : ""}`;
   const paid = history.reduce(
     (total, { contributor }) => total + BigInt(contributor.paidMinor),
     0n,
@@ -2109,14 +2144,18 @@ function ProfilePage({
           <span>accepted this month</span>
         </div>
         <div>
-          <strong>{formatMicroUsdc(projected.toString())}</strong>
-          <span>{projectedLabel}</span>
+          <strong>{formatMicroUsdc(simulated.toString())}</strong>
+          <span>{simulatedLabel}</span>
         </div>
         <div>
           <strong>{formatMicroUsdc(paid.toString())}</strong>
           <span>paid</span>
         </div>
       </div>
+      <p>
+        This estimate uses project budget targets. It is not an approved payout.
+        The 14-day review applies to monthly proposals, not this estimate.
+      </p>
       <section className="section profile-section">
         <div className="profile-section-heading">
           <h2>Projects</h2>
