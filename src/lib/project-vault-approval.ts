@@ -12,7 +12,10 @@
  */
 
 import { assertRewardAllocationManifest } from "./rewards";
-import { assertSettlementExecutionPlan } from "./settlement-plan";
+import {
+  assertSettlementExecutionPlan,
+  PROJECT_VAULT_INSTRUMENT_PREFIX,
+} from "./settlement-plan";
 import {
   assertSquadsBindingLedger,
   executionSha256,
@@ -21,7 +24,7 @@ import {
 } from "./squads-execution";
 import { deriveSquadsVaultAddress } from "./squads-funding";
 
-export const PROJECT_VAULT_INSTRUMENT_PREFIX = "squads-project-vault:solana:";
+export { PROJECT_VAULT_INSTRUMENT_PREFIX };
 
 const PROJECT_VAULT_INSTRUMENT_ID =
   /^squads-project-vault:solana:([1-9A-HJ-NP-Za-km-z]{32,44}):(0|[1-9][0-9]{0,2}):([1-9A-HJ-NP-Za-km-z]{32,44})$/u;
