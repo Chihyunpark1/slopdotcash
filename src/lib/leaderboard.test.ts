@@ -33,6 +33,7 @@ import {
   type LeaderboardSnapshot,
   MATERIAL_TEST_ADDITIONS,
   MATERIAL_TEST_CHURN,
+  type MergedPullRequestOutcome,
   type MergedPullRequestReviewRecord,
   type ModelAttribution,
   mergedPullRequestPoints,
@@ -45,6 +46,7 @@ import {
   SCORE_CAPS,
   SCORE_RULE_VERSION,
   type ScoreEvent,
+  shareScoreThirds,
   TARGET_REPOSITORIES,
   type VerifiedEvidenceArtifact,
 } from "./leaderboard";
@@ -421,6 +423,8 @@ function input(overrides: Partial<LeaderboardInput> = {}): LeaderboardInput {
       author: pullRequest.author,
       additions: pullRequest.additions,
       deletions: pullRequest.deletions,
+      baseRefName: "develop",
+      commits: [],
     })),
     mergedPullRequests,
     detailEligibleMergedPullRequestIds: mergedPullRequests.map(
@@ -458,6 +462,80 @@ function v2Input(pullRequests: PullRequestRecord[]): LeaderboardInput {
 }
 
 describe("score v2 work units", () => {
+  it("shares merge credit with commit authors once per commit (#506)", () => {
+    const lead = actor("lead");
+    const contributor = actor("contributor");
+    const commit = (oid: string, author: GitHubActor | null) => ({
+      oid: oid.repeat(40),
+      author,
+    });
+    // A maintainer merges #10 with the commits of a closed contributor PR.
+    const combined = pullRequest({
+      id: "PR_COMBINED",
+      number: 10,
+      author: lead,
+      createdAt: "2026-08-09T08:00:00.000Z",
+      updatedAt: "2026-08-10T03:00:00.000Z",
+      mergedAt: "2026-08-10T03:00:00.000Z",
+      reviews: [
+        {
+          id: "REVIEW_COMMITTER",
+          body: "I verified the lease renewal path against real Redis.",
+          state: "APPROVED",
+          submittedAt: "2026-08-10T02:00:00.000Z",
+          url: "https://github.com/elizaOS/eliza/pull/10#pullrequestreview-1001",
+          author: contributor,
+          inlineCommentCount: 0,
+        },
+      ],
+    });
+    // A later consolidation PR lists the same commits again.
+    const consolidation = pullRequest({
+      id: "PR_CONSOLIDATION",
+      number: 11,
+      author: lead,
+      createdAt: "2026-08-11T08:00:00.000Z",
+      updatedAt: "2026-08-12T03:00:00.000Z",
+      mergedAt: "2026-08-12T03:00:00.000Z",
+    });
+    const base = v2Input([combined, consolidation]);
+    const commits = {
+      PR_COMBINED: [
+        commit("1", contributor),
+        commit("2", contributor),
+        commit("3", lead),
+        commit("4", actor("helper-bot", "Bot")),
+        commit("5", null),
+      ],
+      PR_CONSOLIDATION: [commit("1", contributor), commit("6", lead)],
+    } as Record<string, MergedPullRequestOutcome["commits"]>;
+    const snapshot = createLeaderboardSnapshot({
+      ...base,
+      mergedPullRequestOutcomes: base.mergedPullRequestOutcomes.map(
+        (outcome) => ({ ...outcome, commits: commits[outcome.id] ?? [] }),
+      ),
+    });
+
+    expect(
+      snapshot.ledger
+        .filter((event) => event.category === "merged-pull-request")
+        .map((event) => [event.id, event.actor.login, event.scoreThirds])
+        .sort(),
+    ).toEqual([
+      ["PR_COMBINED:merged", "lead", 1],
+      ["PR_COMBINED:merged:ACTOR_contributor", "contributor", 1],
+      ["PR_CONSOLIDATION:merged", "lead", 1],
+    ]);
+    expect(snapshot.reviewExclusions).toContainEqual(
+      expect.objectContaining({
+        reviewId: "REVIEW_COMMITTER",
+        reason: "self-review",
+      }),
+    );
+    expect(shareScoreThirds(9, 2)).toEqual([5, 4]);
+    expect(shareScoreThirds(1, 3)).toEqual([1, 1, 1]);
+  });
+
   it("requires explicit maintainer acceptance for external prize work", () => {
     const unratified = pullRequest({
       id: "PR_DELTA_UNRATIFIED",
@@ -2536,6 +2614,8 @@ describe("scoring and limits", () => {
             author: merged.author,
             additions: merged.additions,
             deletions: merged.deletions,
+            baseRefName: "develop",
+            commits: [],
           },
         ],
         mergedPullRequests: [],
@@ -5252,6 +5332,8 @@ describe("deduplication and public schema", () => {
       author: detail.author,
       additions: detail.additions,
       deletions: detail.deletions,
+      baseRefName: "develop",
+      commits: [],
     };
     const outcomeOnly = createLeaderboardSnapshot(
       input({

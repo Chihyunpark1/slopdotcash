@@ -345,9 +345,12 @@ export function summarizeModelOutcomes(
     }
   };
 
+  // Shared merge credit emits one event per commit author of one merge.
+  const mergedSourceIds = new Set<string>();
   for (const event of snapshot.ledger) {
     if (event.category === "merged-pull-request") {
-      totals.mergedPullRequests += 1;
+      mergedSourceIds.add(event.source.id);
+      totals.mergedPullRequests = mergedSourceIds.size;
       totals.pullRequestPoints += event.points;
       countOutcome(event, true);
     } else if (event.category === "substantive-review") {

@@ -501,6 +501,11 @@ const SEARCH_REFERENCES_QUERY = `
           author { ...LeaderboardActor }
           additions
           deletions
+          baseRefName
+          commits(first: 100) {
+            totalCount
+            nodes { commit { oid author { user { ...LeaderboardActor } } } }
+          }
         }
       }
     }
@@ -2095,7 +2100,39 @@ function parsePullRequestOutcome(
     author: parseActor(node.author, `${path}.author`),
     additions: asNumber(node.additions, `${path}.additions`),
     deletions: asNumber(node.deletions, `${path}.deletions`),
+    baseRefName: asString(node.baseRefName, `${path}.baseRefName`),
+    commits: parseOutcomeCommits(node.commits, `${path}.commits`),
   };
+}
+
+function parseOutcomeCommits(
+  value: unknown,
+  path: string,
+): MergedPullRequestOutcome["commits"] {
+  const connection = asRecord(value, path);
+  const totalCount = asNumber(connection.totalCount, `${path}.totalCount`);
+  const nodes = asArray(connection.nodes, `${path}.nodes`);
+  if (totalCount > GRAPHQL_PAGE_SIZE) return null;
+  if (nodes.length !== totalCount) {
+    throw new Error(
+      `${path} returned ${nodes.length} commits but reported ${totalCount}`,
+    );
+  }
+  return nodes.map((nodeValue, index) => {
+    const nodePath = `${path}.nodes[${index}]`;
+    const commit = child(asRecord(nodeValue, nodePath), "commit", nodePath);
+    const commitPath = `${nodePath}.commit`;
+    return {
+      oid: asFullCommitSha(commit.oid, `${commitPath}.oid`),
+      author:
+        commit.author === null
+          ? null
+          : parseActor(
+              child(commit, "author", commitPath).user,
+              `${commitPath}.author.user`,
+            ),
+    };
+  });
 }
 
 function parseDetailBatch<
