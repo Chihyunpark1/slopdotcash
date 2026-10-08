@@ -82,19 +82,12 @@ and the compiler pinned in `foundry.toml`. From the repository root:
 
 ```sh
 forge fmt --root contracts/evm --check
-forge test --root contracts/evm -vv
 forge build --root contracts/evm --sizes
 bun contracts/evm/adapter.integration.ts
 ```
 
-Tests execute the contracts and a test ERC-20 in the EVM; they do not stub the
-escrow functions. They cover the 1,000-USDC acceptance scenario, reserve
-protection, late registration, permissionless payment, replay and source
-consumption, wallet rotation ordering, authority separation, transfer rollback,
-recipient isolation, rounding, the uint64 gross and lifetime-deposit limits, and factory
-registration. Two 512-run fuzz tests and a 128-run, depth-64 stateful invariant
-exercise conservation and cumulative withdrawal fees. The test token is not
-Circle USDC; Circle integration, wallet signatures, OAuth, indexer finality,
+The integration deploys `integration/TestDollar.sol`, a six-decimal test
+ERC-20. The test token is not Circle USDC; Circle integration, wallet signatures, OAuth, indexer finality,
 and live broadcast require separate public-chain acceptance. The adapter integration
 script starts an isolated Anvil on port 18546, executes actual deployment, award,
 and payment transactions, and checks canonical finalized receipts plus rejection

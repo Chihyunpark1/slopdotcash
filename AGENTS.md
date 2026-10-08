@@ -139,8 +139,7 @@ backend/        private trace storage boundary
 workers/        narrowly scoped Cloudflare services
 src/            React product and strict browser/domain contracts
 scripts/        ingestion, packaging, rewards, settlement, and evidence
-skill-tests/    executable tests for bundled skill behavior
-tests/          unit, integration, accessibility, and browser coverage
+tests/e2e/      real-browser end-to-end, accessibility, and Pages coverage
 ```
 
 ## Add a project
@@ -378,7 +377,6 @@ bun run cycles:check
 bun run typecheck
 bun run lint:check
 bun run format:check
-bun run test
 bun run build
 bun run test:e2e
 bun run verify

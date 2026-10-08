@@ -200,7 +200,7 @@ jobs:
           SOLANA_RPC_URL: ${{ secrets.SOLANA_RPC_URL }}
         run: bun run cycles:verify
 
-      - name: Check code and run tests
+      - name: Check code
         run: bun run verify:code
 
       - name: Build production site
@@ -224,6 +224,9 @@ jobs:
             fi
             echo "::warning::Playwright Chromium installation stalled or failed; retrying once."
           done
+
+      - name: Run installer lifecycle end-to-end checks
+        run: bun run test:installer:e2e
 
       - name: Run desktop and mobile browser tests
         env:

@@ -79,16 +79,6 @@ async function loadCycles(request: APIRequestContext): Promise<CycleIndex> {
   return value;
 }
 
-test.beforeEach(async ({ page }, testInfo) => {
-  if (
-    testInfo.title.includes("fundraising slide") ||
-    testInfo.title.includes("byte-consistent install")
-  ) {
-    return;
-  }
-  await page.goto("/", { waitUntil: "networkidle" });
-});
-
 test("shows signer loss and expired capability without payout availability", async ({
   page,
 }, testInfo) => {
@@ -183,6 +173,7 @@ test("discovers projects and one score-ranked homepage leaderboard", async ({
   page,
 }) => {
   await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.goto("/", { waitUntil: "networkidle" });
   await page.reload({ waitUntil: "networkidle" });
 
   await expect(
@@ -1172,10 +1163,15 @@ for (const scenario of [
   { name: "200% text enlargement", width: 1280, textScale: 2 },
   { name: "combined narrow enlarged-text stress", width: 320, textScale: 2 },
 ]) {
-  test(`reflows with ${scenario.name}`, async ({ page }, testInfo) => {
-    // Each scenario has its own timeout while retaining every registered route.
-    test.skip(testInfo.project.name !== "wide-desktop-chromium");
-    await page.setViewportSize({ width: scenario.width, height: 1000 });
+  // Each scenario and route is its own test, so every registered route keeps
+  // its own timeout and the matrix runs across workers.
+  test.describe(`reflow ${scenario.name}`, () => {
+    // A describe-level condition skips before any page fixture is created.
+    // The wide desktop project is the only 1440 px viewport.
+    test.skip(
+      ({ viewport }) => viewport?.width !== 1440,
+      "Runs once on wide-desktop-chromium",
+    );
     for (const path of [
       "/models",
       "/sponsors",
@@ -1185,50 +1181,53 @@ for (const scenario of [
       "/projects/new",
       "/projects/eliza/funding",
     ]) {
-      await page.goto(path, { waitUntil: "networkidle" });
-      if (scenario.textScale === 2) {
-        await page.evaluate(() => {
-          // Capture every original computed size before changing any ancestor,
-          // so nested text receives exactly 200%, not compounded enlargement.
-          const typography = [
-            ...document.querySelectorAll<HTMLElement>("body *"),
-          ]
-            .filter((element) => element instanceof HTMLElement)
-            .map((element) => ({
-              element,
-              font: getComputedStyle(element).fontSize,
-              line: getComputedStyle(element).lineHeight,
-            }));
-          for (const { element, font, line } of typography) {
-            element.style.setProperty(
-              "font-size",
-              `${Number.parseFloat(font) * 2}px`,
-            );
-            if (line !== "normal")
+      test(`reflows ${path} with ${scenario.name}`, async ({ page }) => {
+        await page.setViewportSize({ width: scenario.width, height: 1000 });
+        await page.goto(path, { waitUntil: "networkidle" });
+        if (scenario.textScale === 2) {
+          await page.evaluate(() => {
+            // Capture every original computed size before changing any ancestor,
+            // so nested text receives exactly 200%, not compounded enlargement.
+            const typography = [
+              ...document.querySelectorAll<HTMLElement>("body *"),
+            ]
+              .filter((element) => element instanceof HTMLElement)
+              .map((element) => ({
+                element,
+                font: getComputedStyle(element).fontSize,
+                line: getComputedStyle(element).lineHeight,
+              }));
+            for (const { element, font, line } of typography) {
               element.style.setProperty(
-                "line-height",
-                `${Number.parseFloat(line) * 2}px`,
+                "font-size",
+                `${Number.parseFloat(font) * 2}px`,
               );
-          }
-        });
-      }
-      await page.keyboard.press("Tab");
-      await expect(page.locator(":focus")).toHaveAttribute("href", "/");
-      const accessibility = await new AxeBuilder({ page })
-        .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
-        .analyze();
-      expect(
-        accessibility.violations,
-        `${scenario.name} ${path} accessibility`,
-      ).toEqual([]);
-      const geometry = await page.evaluate(() => ({
-        viewport: innerWidth,
-        page: document.documentElement.scrollWidth,
-      }));
-      expect(
-        geometry.page,
-        `${scenario.name} ${path} horizontal overflow`,
-      ).toBeLessThanOrEqual(geometry.viewport);
+              if (line !== "normal")
+                element.style.setProperty(
+                  "line-height",
+                  `${Number.parseFloat(line) * 2}px`,
+                );
+            }
+          });
+        }
+        await page.keyboard.press("Tab");
+        await expect(page.locator(":focus")).toHaveAttribute("href", "/");
+        const accessibility = await new AxeBuilder({ page })
+          .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+          .analyze();
+        expect(
+          accessibility.violations,
+          `${scenario.name} ${path} accessibility`,
+        ).toEqual([]);
+        const geometry = await page.evaluate(() => ({
+          viewport: innerWidth,
+          page: document.documentElement.scrollWidth,
+        }));
+        expect(
+          geometry.page,
+          `${scenario.name} ${path} horizontal overflow`,
+        ).toBeLessThanOrEqual(geometry.viewport);
+      });
     }
   });
 }
@@ -1304,27 +1303,32 @@ test("finds a receipt and opens its full evidence and GitHub contribution", asyn
   );
 });
 
-test("keeps primary routes accessible and inside the viewport", async ({
-  page,
-  request,
-}) => {
-  const snapshot = await loadSnapshot(request);
-  const cycles = await loadCycles(request);
-  for (const path of [
-    ...cycles.cycles
-      .slice(0, 1)
-      .map((cycle) => `/cycles/${cycle.projectId}/${cycle.cycleId}`),
-    "/models",
-    "/receipts",
-    "/sponsors",
-    "/verification",
-    "/",
-    ...PROJECTS.map((project) => `/projects/${project.id}`),
-    "/projects/eliza/funding",
-    "/projects/eliza/funding/",
-    "/projects/eliza/manage",
-    "/projects/new",
-  ]) {
+// One test per route keeps each axe and overflow check independent, so the
+// routes run on separate workers instead of one long serial test.
+for (const route of [
+  "latest cycle",
+  "/models",
+  "/receipts",
+  "/sponsors",
+  "/verification",
+  "/",
+  ...PROJECTS.map((project) => `/projects/${project.id}`),
+  "/projects/eliza/funding",
+  "/projects/eliza/funding/",
+  "/projects/eliza/manage",
+  "/projects/new",
+]) {
+  test(`keeps ${route} accessible and inside the viewport`, async ({
+    page,
+    request,
+  }) => {
+    const snapshot = await loadSnapshot(request);
+    let path = route;
+    if (route === "latest cycle") {
+      const [cycle] = (await loadCycles(request)).cycles;
+      test.skip(!cycle, "No closed cycle is published");
+      path = `/cycles/${cycle.projectId}/${cycle.cycleId}`;
+    }
     await page.goto(path, { waitUntil: "networkidle" });
     if (path === "/") {
       await expect(
@@ -1379,8 +1383,8 @@ test("keeps primary routes accessible and inside the viewport", async ({
       () => document.documentElement.scrollWidth - window.innerWidth,
     );
     expect(overflow, `${path} horizontal page overflow`).toBeLessThanOrEqual(1);
-  }
-});
+  });
+}
 
 test("opens the models page directly and through keyboard navigation", async ({
   page,
@@ -1587,9 +1591,8 @@ test("derives Solana addresses on the settlement verification page", async ({
     }),
   ).toBeVisible();
 
-  // The same multisig and vault the reviewed commitment verifier pins in
-  // scripts/verify-commitment-squads.test.ts, so the browser derivation and the
-  // backend verifier are held to one vector.
+  // A known Squads v4 multisig and vault pair, so the browser derivation is
+  // checked against a fixed vector.
   await page
     .getByLabel("Squads v4 multisig", { exact: true })
     .fill("xmWqhNJwNL4z4BcDo1Yh7BbStLU7omVafZNmg91y2Vg");

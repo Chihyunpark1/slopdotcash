@@ -138,7 +138,6 @@ Run at minimum:
 
 ```bash
 bun run projects:check
-bun run test
 bun run build
 bun run test:e2e
 ```

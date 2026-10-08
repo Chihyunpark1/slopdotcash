@@ -207,7 +207,7 @@ try {
     .filter((f) => f.endsWith(".sql"))
     .sort())
     sql.exec(readFileSync(`${root}migrations/${file}`, "utf8"));
-  const asset = deploy("test/ProjectEscrow.t.sol:TestDollar");
+  const asset = deploy("integration/TestDollar.sol:TestDollar");
   const vault = deploy("src/ProjectEscrow.sol:ProjectEscrow", [
     award,
     asset,
