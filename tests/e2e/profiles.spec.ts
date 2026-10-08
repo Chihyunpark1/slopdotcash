@@ -49,7 +49,7 @@ test("a contributor with only open and closed PRs has a searchable individual pr
     }),
   );
   await page.goto("/points");
-  const directory = page.getByRole("region", { name: "Contributor directory" });
+  const directory = page.getByRole("region", { name: "People", exact: true });
   await directory.getByLabel("GitHub username").fill("profile-only");
   await directory
     .getByRole("link", { name: "profile-only-contributor", exact: true })
