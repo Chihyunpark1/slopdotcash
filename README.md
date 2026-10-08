@@ -110,12 +110,16 @@ Slop uses precise financial states:
   with reasons; sub-$2 awards accrue instead of being discarded.
 
 Project owners keep control of their funds and sign payments outside Slop.
-Slop does not create wallets, custody assets, or broadcast transactions. In
-the default funding modes Slop holds no keys. On an opt-in 2-of-3 project
-vault (RFC #500) Slop holds one of three keys, which can only vote on a payout
-the creator proposed; it cannot propose, execute, redirect, or block a
-transfer, or act alone. A 1% platform fee applies only when an approved payout
-is paid.
+Slop does not create wallets, custody assets, hold keys, or broadcast
+transactions, except for one key on the opt-in `squads-project-vault`
+instrument (RFC #500). For that instrument only:
+
+> Slop holds one of three keys on a project vault. That key can vote on a
+> payout the creator proposed. It cannot propose a transfer, execute one,
+> change the signers, or act alone. Slop holds no customer balance, takes no
+> fee from the vault, and never broadcasts a transfer of vault funds.
+
+A 1% platform fee applies only when an approved payout is paid.
 
 ## Repository architecture
 

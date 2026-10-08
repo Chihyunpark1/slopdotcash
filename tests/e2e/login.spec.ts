@@ -15,8 +15,6 @@ test("serves GitHub login on direct navigation and reload", async ({
     page.getByRole("heading", { name: "Log in", exact: true }),
   ).toBeVisible();
   const header = page.getByRole("banner");
-  const menu = header.getByRole("button", { name: "Open navigation" });
-  if (await menu.isVisible()) await menu.click();
   await expect(
     header.getByRole("link", { name: "Receipts", exact: true }),
   ).toHaveCount(0);
