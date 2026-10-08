@@ -1,3 +1,11 @@
+/**
+ * Slop's published Base mainnet platform-fee recipient, chosen by the
+ * repository owner on 8 October 2026 (RFC #472), in lowercase canonical form.
+ * A Base fresh-cycle policy may name only this address.
+ */
+export const BASE_PLATFORM_FEE_RECIPIENT =
+  "0xb7b0d5e45016d6d31629d9ab375df770fd2aaf77";
+
 /** Optional exact-cycle activation contract. Runtime readiness and canonical reservation remain mandatory. */
 export function assertFreshCyclePaymentPolicy(value) {
   if (!value || typeof value !== "object" || Array.isArray(value))
@@ -19,7 +27,12 @@ export function assertFreshCyclePaymentPolicy(value) {
     typeof value.instrumentSha256 !== "string" ||
     !/^[a-f0-9]{64}$/u.test(value.instrumentSha256) ||
     typeof value.feeRecipient !== "string" ||
-    !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/u.test(value.feeRecipient) ||
+    // A Solana public key, or the published Base fee recipient (RFC #472).
+    // The plan builder checks it against the cycle's settlement network.
+    !(
+      /^[1-9A-HJ-NP-Za-km-z]{32,44}$/u.test(value.feeRecipient) ||
+      value.feeRecipient === BASE_PLATFORM_FEE_RECIPIENT
+    ) ||
     !utc(value.effectiveAt) ||
     !utc(value.planningExpiresAt) ||
     value.effectiveAt >= value.planningExpiresAt

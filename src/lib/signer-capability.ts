@@ -14,7 +14,12 @@ import {
  * member, so it neither attests nor blocks. Its loss is reported publicly and
  * followed by a reviewed signer swap (protocol/project-vault-signing.md).
  */
-export type SignerRole = "funder" | "steward" | "creator" | "independent";
+export type SignerRole =
+  | "funder"
+  | "steward"
+  | "creator"
+  | "independent"
+  | "recipient";
 export const TWO_OF_TWO_SIGNER_ROLES = Object.freeze([
   "funder",
   "steward",
@@ -23,11 +28,19 @@ export const PROJECT_VAULT_SIGNER_ROLES = Object.freeze([
   "creator",
   "independent",
 ] as const);
+/**
+ * RFC #472, owner decision of 8 October 2026: on a Base Sablier stream the one
+ * reviewed recipient actor must be current. The recipient is a single EOA, so
+ * once funds are withdrawn a reservation is bookkeeping only.
+ */
+export const BASE_STREAM_SIGNER_ROLES = Object.freeze(["recipient"] as const);
+export const BASE_STREAM_INSTRUMENT_PREFIX = "sablier-lockup-v4:base:";
 export type SignerCapabilityStatus =
   | "inaccessible"
   | "unknown"
   | "both-signers-current"
-  | "creator-and-independent-current";
+  | "creator-and-independent-current"
+  | "recipient-current";
 
 export interface PublicSignerReport {
   projectId: string;
@@ -48,7 +61,11 @@ export interface PublicSignerReport {
 }
 
 const INSTRUMENT_ID =
-  /^squads-(?:v4|project)-vault:solana:[1-9A-HJ-NP-Za-km-z]{32,44}:(?:0|[1-9][0-9]*):[1-9A-HJ-NP-Za-km-z]{32,44}$/u;
+  /^(?:squads-(?:v4|project)-vault:solana:[1-9A-HJ-NP-Za-km-z]{32,44}:(?:0|[1-9][0-9]*):[1-9A-HJ-NP-Za-km-z]{32,44}|sablier-lockup-v4:base:0x[0-9a-f]{40}:[1-9][0-9]{0,77})$/u;
+
+export function isBaseStreamSignerInstrument(instrumentId: string): boolean {
+  return instrumentId.startsWith(BASE_STREAM_INSTRUMENT_PREFIX);
+}
 
 export function isProjectVaultSignerInstrument(instrumentId: string): boolean {
   return instrumentId.startsWith(PROJECT_VAULT_INSTRUMENT_PREFIX);
@@ -58,6 +75,8 @@ export function isProjectVaultSignerInstrument(instrumentId: string): boolean {
 export function requiredSignerRoles(
   instrumentId: string,
 ): readonly SignerRole[] {
+  if (isBaseStreamSignerInstrument(instrumentId))
+    return BASE_STREAM_SIGNER_ROLES;
   return planCarriesPlatformFee(instrumentId)
     ? TWO_OF_TWO_SIGNER_ROLES
     : PROJECT_VAULT_SIGNER_ROLES;
@@ -65,7 +84,11 @@ export function requiredSignerRoles(
 
 export function currentSignerStatus(
   instrumentId: string,
-): "both-signers-current" | "creator-and-independent-current" {
+):
+  | "both-signers-current"
+  | "creator-and-independent-current"
+  | "recipient-current" {
+  if (isBaseStreamSignerInstrument(instrumentId)) return "recipient-current";
   return isProjectVaultSignerInstrument(instrumentId)
     ? "creator-and-independent-current"
     : "both-signers-current";
@@ -99,7 +122,9 @@ export function assertPublicSignerReport(value: unknown): PublicSignerReport {
       r.role,
     ) ||
     typeof r.member !== "string" ||
-    !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/u.test(r.member) ||
+    !(isBaseStreamSignerInstrument(r.instrumentId)
+      ? /^0x[0-9a-f]{40}$/u.test(r.member)
+      : /^[1-9A-HJ-NP-Za-km-z]{32,44}$/u.test(r.member)) ||
     (r.capability !== "can-sign" && r.capability !== "lost-access") ||
     typeof r.reason !== "string" ||
     r.reason.trim() !== r.reason ||

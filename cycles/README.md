@@ -252,8 +252,10 @@ changes to the enforcement workflow or repository policy remain a separate
 GitHub trust boundary, not permission granted by this report mechanism.
 
 - `allocation.json` — reviewed and approved payout intents;
-- `execution-plan.json` — an unsigned, exact Solana USDC transfer plan;
-- `transactions.json` — submitted public transaction signatures;
+- `execution-plan.json` — an unsigned, exact USDC transfer plan on the cycle
+  network;
+- `transactions.json` — submitted public Solana signatures or Base
+  transaction hashes;
 - `settlement.json` — generated only after finalized on-chain balance changes
   reconcile every contributor transfer and the 1% platform fee charged when
   the approved payout is paid;
@@ -288,16 +290,50 @@ For an allocation with a frozen funding basis, a Solana execution plan must
 use that exact Squads vault as `sourceOwner`. The same check applies when
 reading a stored plan; another valid wallet is not a substitute. A pledged or
 Sablier/EVM basis cannot produce a Solana plan without a separately reviewed
-funding transition. Historical allocations predating the funding-basis schema
+funding transition. A Base plan requires a frozen Base Sablier basis and uses
+that stream's recipient as `sourceOwner`; a Squads or Ethereum basis cannot
+produce a Base plan. Historical allocations predating the funding-basis schema
 retain their existing validation; this does not migrate or rewrite records.
 Source binding does not prove current backing, signing capability, transaction
 retirement, or safe carry, and does not enable payments.
 
+### Settlement network
+
+Each monthly-pool project declares one settlement network in `reward.chain`:
+`solana` (default) or `base` (RFC #472). A proposal records that network in
+its `chain` field. The allocation, plan, and settlement of the cycle keep it,
+even if the project changes network later. The trusted project-transition gate
+refuses a new proposal whose `chain` differs from the reviewed base commit and
+refuses any change to a recorded proposal's `chain`. A network change therefore
+lands in its own PR, between cycles.
+
+Contributors keep one wallet claim per network. Proposal generation reads only
+the claim on the cycle network. A contributor with no claim on that network is
+`unclaimed`, exactly like a contributor with no wallet.
+
+A Base cycle uses the same lifecycle files. Its plan has kind
+`base-usdc-transfer-plan`, chain ID 8453, and the Base USDC contract. Each
+transfer maps to an EIP-681 request
+(`ethereum:<USDC>@8453/transfer?address=<recipient>&uint256=<amount>`). The 1%
+fee is a separate transfer to the Base fee recipient. Its `transactions.json`
+has kind `base-settlement-evidence`, `transactionHash` per attempt, and
+`platformFeeTransactionHash`. `rewards:verify-settlement` proves each hash with
+the read-only verifier below and writes `settlement.json` only when every
+intent and the fee reconcile exactly. A Base transaction must be confirmed
+after the plan's `createdAt`, because an EIP-681 request carries no memo. The
+settlement record stores each hash in its `signature` field.
+
+A Base cycle uses the same reservation and release commands as Solana
+(`protocol/fresh-cycle-payments.md`). The plan source is the frozen Base
+stream recipient, the signer is the reviewed `recipientGithub` actor with an
+EIP-191 proof, and the fee goes to Slop's published Base fee recipient
+`0xb7b0d5e45016d6d31629d9ab375df770fd2aaf77`. No project uses Base today and
+no payment is enabled.
+
 ### Read-only Base payout check
 
-The cycle lifecycle above settles on Solana only. A separate read-only tool
-reconciles one confirmed Base mainnet USDC transaction against a declared
-source and a closed list of recipients:
+A separate read-only tool reconciles one confirmed Base mainnet USDC
+transaction against a declared source and a closed list of recipients:
 
 ```bash
 bun run settlement:verify-evm -- --network base --transaction <0x-hash> \
@@ -313,5 +349,6 @@ transaction sender, so a single transfer, a relayed transfer, and a
 smart-account batch all reconcile the same way. Addresses are lowercase
 canonical hex and amounts are integer USDC micro-units.
 
-This check writes nothing. It does not create a plan, accept Base wallets,
-produce `settlement.json`, or move any cycle to `paid`.
+This check writes nothing. It does not create a plan, produce
+`settlement.json`, or move any cycle to `paid`. `rewards:verify-settlement`
+uses the same verifier for a Base cycle.

@@ -276,6 +276,9 @@ function validateSablierInstrument(candidate, field) {
         : []),
       "network",
       "recipient",
+      ...(Object.hasOwn(candidate, "recipientGithub")
+        ? ["recipientGithub"]
+        : []),
       "replacedAt",
       "streamId",
     ],
@@ -309,6 +312,16 @@ function validateSablierInstrument(candidate, field) {
     asset: "USDC",
     contract: candidate.contract,
     recipient: candidate.recipient,
+    // RFC #472: the reviewed GitHub actor who attests control of the stream
+    // recipient, the Base settlement source. Required for a fresh-cycle policy.
+    ...(Object.hasOwn(candidate, "recipientGithub")
+      ? {
+          recipientGithub: validateGithubIdentity(
+            candidate.recipientGithub,
+            `${field}.recipientGithub`,
+          ),
+        }
+      : {}),
     streamId: candidate.streamId,
     ...monthlyCommitment(candidate, field),
     ...window,
@@ -493,20 +506,27 @@ export function assertMonthlyCommitmentPolicy(project) {
       project.funding.freshCyclePaymentPolicy,
     );
     const active = instruments.filter((v) => v.replacedAt === null);
-    // Either reviewed Squads shape may activate: the 2-of-2 commitment vault,
-    // or the 2-of-3 project vault (RFC #500) whose readiness, reservation,
-    // signer-capability, and approval-binding rules cover three members.
+    // On Solana either reviewed Squads shape may activate: the 2-of-2
+    // commitment vault, or the 2-of-3 project vault (RFC #500) whose
+    // readiness, reservation, signer-capability, and approval-binding rules
+    // cover three members. On Base a Sablier stream with a reviewed recipient
+    // actor may activate (RFC #472).
+    const activates = (v) =>
+      project.reward.chain === "base"
+        ? v.kind === "sablier-lockup-v4" &&
+          v.network === "base" &&
+          v.recipientGithub !== undefined
+        : v.kind === "squads-v4-vault" || v.kind === "squads-project-vault";
     if (
       project.reward.kind !== "monthly-pool" ||
       project.reward.reviewBudget ||
       policy.projectId !== project.id ||
       active.length !== 1 ||
-      (active[0].kind !== "squads-v4-vault" &&
-        active[0].kind !== "squads-project-vault") ||
+      !activates(active[0]) ||
       active[0].monthlyCommitment?.cycleId !== policy.cycleId
     )
       throw new TypeError(
-        "Fresh-cycle payment activation requires one matching reviewed Squads instrument without a review budget",
+        "Fresh-cycle payment activation requires one matching reviewed instrument on the settlement network without a review budget",
       );
   }
   const claimed =

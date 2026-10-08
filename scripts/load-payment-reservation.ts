@@ -124,6 +124,7 @@ export async function loadCanonicalPaymentReservation(
     reservation,
     allocationBytes,
     policy,
+    instrument,
   );
   const existing = gitReservationBlob(
     root,
@@ -164,6 +165,13 @@ function signerReportMatchesInstrument(
   instrument: ReturnType<typeof reviewedReservationPolicy>["instrument"],
   report: { role: string; member: string; actorId: string; capability: string },
 ): boolean {
+  // RFC #472: the reviewed recipient actor speaks for the Base source address.
+  if (instrument.kind === "sablier-lockup-v4")
+    return (
+      report.role === "recipient" &&
+      report.member === instrument.recipient &&
+      report.actorId === instrument.recipientGithub?.actorId
+    );
   if (instrument.kind === "squads-v4-vault") {
     if (report.role === "funder")
       return (

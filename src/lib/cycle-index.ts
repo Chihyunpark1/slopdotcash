@@ -11,7 +11,12 @@ import {
   LAST_LEGACY_CAP_CYCLE,
 } from "./allocation-funding";
 import { findProject } from "./projects.mjs";
-import { isSolanaAddress, WALLET_CLAIM_REPOSITORY } from "./wallets";
+import {
+  isWalletAddress,
+  isWalletChain,
+  WALLET_CLAIM_REPOSITORY,
+  type WalletChain,
+} from "./wallets";
 
 export const CYCLE_INDEX_SCHEMA_VERSION = "1" as const;
 
@@ -22,7 +27,7 @@ export interface CycleFileReference {
 
 export interface CycleProfileReadmeWalletProof {
   address: string;
-  chain: "solana";
+  chain: WalletChain;
   observedAt: string;
   sourceCommit: string;
   sourceUrl: string;
@@ -30,7 +35,7 @@ export interface CycleProfileReadmeWalletProof {
 
 export interface CycleGithubIssueWalletProof {
   address: string;
-  chain: "solana";
+  chain: WalletChain;
   observedAt: string;
   sourceActorId: string;
   sourceBodySha256: string;
@@ -42,7 +47,7 @@ export interface CycleGithubIssueWalletProof {
 
 export interface CycleSlopDatabaseWalletProof {
   address: string;
-  chain: "solana";
+  chain: WalletChain;
   observedAt: string;
   sourceActorId: string;
   sourceClaimId: string;
@@ -261,9 +266,12 @@ function contributorWallet(
   if (value === null) return null;
   const wallet = record(value, field);
   const address = text(wallet.address, `${field}.address`);
-  if (wallet.chain !== "solana" || !isSolanaAddress(address)) {
-    throw new TypeError(`${field} is not a Solana wallet`);
+  // The index is generated from allocations that already bind each wallet to
+  // the cycle network, so here the address only has to match its own chain.
+  if (!isWalletChain(wallet.chain) || !isWalletAddress(wallet.chain, address)) {
+    throw new TypeError(`${field} is not a Solana or Base wallet`);
   }
+  const chain = wallet.chain;
   const sourceUrl = text(wallet.sourceUrl, `${field}.sourceUrl`);
   let parsed: URL;
   try {
@@ -297,7 +305,7 @@ function contributorWallet(
     }
     return {
       address,
-      chain: "solana",
+      chain,
       observedAt: iso(wallet.observedAt, `${field}.observedAt`),
       sourceCommit,
       sourceUrl,
@@ -347,7 +355,7 @@ function contributorWallet(
     }
     return {
       address,
-      chain: "solana",
+      chain,
       observedAt: iso(wallet.observedAt, `${field}.observedAt`),
       sourceActorId,
       sourceClaimId,
@@ -398,7 +406,7 @@ function contributorWallet(
   }
   return {
     address,
-    chain: "solana",
+    chain,
     observedAt: iso(wallet.observedAt, `${field}.observedAt`),
     sourceActorId,
     sourceBodySha256,
