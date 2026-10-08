@@ -10,6 +10,9 @@
     "types": ["node", "bun-types"]
   },
   "include": [
+    "src/lib/payments/**/*.ts",
+    "contracts/evm/adapter.ts",
+    "contracts/solana/adapter.ts",
     "src/lib/points.ts",
     "src/lib/payout-points.ts",
     "src/lib/squads-batch-message.ts",

@@ -21,11 +21,14 @@ alias only.
   is disclosed.
 - Slop never infers copyright ownership, legal capacity, assignment, wallet
   control, or payment authority.
-- Slop never signs or broadcasts a transfer of funds, never acts alone on any
-  funding instrument, and never claims success before public evidence proves
-  it. Slop holds no key except one vote-only key on an opt-in 2-of-3 project
-  vault (RFC #500, `funding/README.md`), which cannot propose, execute,
-  redirect, or block a transfer.
+- Slop never holds keys, signs transactions, broadcasts payments, or claims
+  success before public evidence proves it, except for one key on the opt-in
+  `squads-project-vault` instrument (RFC #500, `funding/README.md`). For that
+  instrument only: Slop holds one of three keys on a project vault. That key
+  can vote on a payout the creator proposed. It cannot propose a transfer,
+  execute one, change the signers, or act alone. Slop holds no customer
+  balance, takes no fee from the vault, and never broadcasts a transfer of
+  vault funds.
 - Never publish secrets, prompts, responses, source files, credentials, session
   identifiers, private trajectories, or signing material.
 
@@ -405,3 +408,17 @@ only when genuinely inapplicable. Captured evidence is not committed.
 A local test is not proof of merge. A merge is not proof of deployment. A
 deployment is not proof of provider, device, identity, wallet, or settlement
 availability. Report each boundary precisely.
+
+
+## Escrow payout migration
+
+The maintainer-authorized escrow MVP is defined in `docs/payouts-mvp.md` and
+`docs/base-solana-payout-plan.md`. Its scoped contract, identity attestation and
+relayer services may execute isolated test-chain transactions under those rules.
+This supersedes the legacy unsigned-only model for that protocol only. Never
+use production credentials or move mainnet funds during testnet qualification.
+New gross awards deduct 2% before contributor earnings are displayed or paid.
+Unused-fund withdrawals deduct 10%; funded obligations cannot be withdrawn.
+Historical v1 records retain their original fee and authority rules. No project
+activates escrow merely because the new code is present. Keep project deployment
+bindings in the canonical manifest, never in a second project inventory.

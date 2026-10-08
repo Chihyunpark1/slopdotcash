@@ -10,6 +10,8 @@ export interface PointsDependencies {
   rateLimitSecret: string;
   identity: { fetch(request: Request): Promise<Response> };
   now?: () => Date;
+  /** Trusted deployment origins; never request-supplied. */
+  allowedOrigins?: readonly string[];
   x?: XConfiguration;
   xFetch?: (input: string, init: RequestInit) => Promise<Response>;
 }
@@ -67,7 +69,8 @@ export async function handlePointsApi(
   const url = new URL(request.url);
   const route = url.pathname.replace("/api/v1/points", "");
   const now = (deps.now?.() ?? new Date()).toISOString();
-  if (!origins.has(url.origin)) return json(403, { error: "origin_forbidden" });
+  if (!new Set([...origins, ...(deps.allowedOrigins ?? [])]).has(url.origin))
+    return json(403, { error: "origin_forbidden" });
   if (
     request.method !== "GET" &&
     (request.method !== "POST" ||
