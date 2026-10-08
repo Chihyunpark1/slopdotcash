@@ -10,6 +10,7 @@ import { lstat, open } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { fundingReviewProposalSha256 } from "../src/lib/funding-review-submission";
+import { BASE_PAYMENT_REFUSAL } from "../src/lib/payment-reservations";
 import {
   assertProjectPaymentsEnabled,
   findProject,
@@ -106,6 +107,8 @@ export async function prepareSettlementPlan(
     write?: (path: string, value: unknown) => Promise<void>;
   } = {},
 ) {
+  if (findProject(arguments_.projectId)?.reward.chain === "base")
+    throw new TypeError(BASE_PAYMENT_REFUSAL);
   assertProjectPaymentsEnabled(arguments_.projectId, arguments_.cycleId);
   if (Object.keys(options).length)
     throw new TypeError(

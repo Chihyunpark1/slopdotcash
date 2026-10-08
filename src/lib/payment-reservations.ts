@@ -134,6 +134,10 @@ export function assertPaymentReservationTransition(
     );
   return next;
 }
+/** Base reservation and release fail closed until the owner declares a
+ * reviewed Base signer-control policy and fee recipient (RFC #472). */
+export const BASE_PAYMENT_REFUSAL =
+  "Base reservation and release are refused until a reviewed Base signer-control policy and fee recipient are declared (RFC #472)";
 /** Pure drafting helper. Output is a reservation proposal, NOT released plan bytes.
  * Trusted transition validates policy and allocation from immutable base blobs. */
 export async function draftPaymentReservation(
@@ -142,10 +146,11 @@ export async function draftPaymentReservation(
   reservedAt: string,
 ): Promise<PaymentReservation> {
   const source = new Uint8Array(allocationBytes);
-  const policy = assertFreshCyclePaymentPolicy(policyValue);
   const allocation = assertRewardAllocationManifest(
     JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(source)),
   );
+  if (allocation.chain !== "solana") throw new TypeError(BASE_PAYMENT_REFUSAL);
+  const policy = assertFreshCyclePaymentPolicy(policyValue);
   if (
     allocation.projectId !== policy.projectId ||
     allocation.cycleId !== policy.cycleId ||

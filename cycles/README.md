@@ -326,7 +326,11 @@ settlement record stores each hash in its `signature` field.
 No project uses Base today. Base payment activation still needs the owner's
 published Base fee recipient, a reviewed Base payment policy with reservation
 and live readiness, and a decision on the spare Base RPC authority (#471).
-Until then `rewards:plan-settlement` refuses every Base project.
+Until a reviewed Base signer-control policy and fee recipient are declared,
+reservation drafting and `rewards:plan-settlement` release refuse every Base
+allocation and project with an explicit reason. `rewards:verify-settlement`
+also stays closed for Base, because it needs a fresh-cycle payment policy. Only
+the read-only `settlement:verify-evm` check can run on Base today.
 
 ### Read-only Base payout check
 

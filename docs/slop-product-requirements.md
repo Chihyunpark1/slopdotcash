@@ -285,7 +285,7 @@ Squads separates proposal, vote, and execution permissions; that is useful gover
 5. `paid` on Base requires the same exact reconciliation as on Solana: the read-only verifier from #470, a 2-of-3 RPC quorum and 12 confirmations prove the source debit and every recipient credit for every intent and the fee. A Base transaction must be confirmed after its plan was created, because an EIP-681 request has no memo.
 6. Slop holds no key and does not sign or broadcast. Ethereum mainnet settlement, Merkle claims and migration of existing cycles stay out of scope.
 
-Activation gates remain: the owner must publish the Base fee-recipient address, a reviewed Base payment policy, reservation and live-readiness path must exist, and the spare Base RPC authority issue (#471) needs a decision. Until then no Base project can enable payments.
+Activation gates remain: the owner must publish the Base fee-recipient address, a reviewed Base payment policy, reservation and live-readiness path must exist, and the spare Base RPC authority issue (#471) needs a decision. Until then reservation and release refuse every Base allocation and project with an explicit reason, and no Base project can enable payments.
 
 ### Lifecycle
 
