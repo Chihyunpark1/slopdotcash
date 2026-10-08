@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { parseArgs } from "node:util";
 import { readBoundedJson } from "../src/lib/browser-json";
 import {
   assertProfiles,
@@ -8,6 +9,16 @@ import {
 } from "../src/lib/profiles";
 import { TARGET_REPOSITORIES } from "../src/lib/repositories.mjs";
 
+const { values } = parseArgs({
+  args: process.argv.slice(2),
+  options: {
+    live: { type: "boolean" },
+    seed: { type: "boolean" },
+    input: { type: "string" },
+  },
+});
+if (values.live && values.input)
+  throw new Error("Choose live collection or a profile input file.");
 const output = "public/data/profiles.json";
 const seed = "data/profiles/seed.json";
 const query = `query($owner:String!,$name:String!,$after:String){repository(owner:$owner,name:$name){id pullRequests(first:100,after:$after,orderBy:{field:CREATED_AT,direction:ASC}){totalCount pageInfo{hasNextPage endCursor} nodes{id state author{__typename login avatarUrl ... on User{id}}}}}rateLimit{remaining resetAt}}`;
@@ -16,7 +27,7 @@ async function publish(path: string, value: ProfileIndex) {
   await writeFile(`${path}.tmp`, `${JSON.stringify(value)}\n`);
   await rename(`${path}.tmp`, path);
 }
-if (process.argv.includes("--live")) {
+if (values.live) {
   const token =
     process.env.GITHUB_TOKEN ??
     process.env.GH_TOKEN ??
@@ -147,19 +158,11 @@ if (process.argv.includes("--live")) {
   result.people = [...people.values()].sort((a, b) => a.id.localeCompare(b.id));
   result.generatedAt = new Date().toISOString();
   assertProfiles(result);
-  if (process.argv.includes("--seed")) await publish(seed, result);
+  if (values.seed) await publish(seed, result);
   await publish(output, result);
   console.log(`Published ${result.people.length} profiles`);
 } else {
-  const value = JSON.parse(
-    await readFile(
-      await readFile(output).then(
-        () => output,
-        () => seed,
-      ),
-      "utf8",
-    ),
-  );
+  const value = JSON.parse(await readFile(values.input ?? seed, "utf8"));
   assertProfiles(value);
   await publish(output, value);
 }

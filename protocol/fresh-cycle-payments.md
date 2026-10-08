@@ -8,7 +8,7 @@ never makes public funding accessibility true.
 ## Operator prerequisites
 
 Deploy the trusted reservation workflow and verifier before activation. Configure
-classic protection on canonical `SlopDotCash/slopdotcash` `develop`: strict
+classic protection on canonical `SlopDotCash/slopdotcash` `main`: strict
 up-to-date PR checks requiring `Trusted payment reservation gate` from the verified
 GitHub Actions app, approving review with stale dismissal and last-push approval,
 resolved conversations, admin enforcement, no review bypass, force push or deletion.
@@ -29,8 +29,11 @@ payments.
 The checkpoint is a reviewed trust root in verifier code, never a CLI argument,
 candidate manifest, or environment assertion.
 
-The loader rejects shallow history, requires continuous two-parent develop merges
+The loader rejects shallow history, requires continuous two-parent canonical merges
 since that checkpoint, and replays every policy/allocation/reservation transition.
+Current merges target `main`. Historical `develop` merges are accepted only
+when they are ancestors of the immutable branch-migration checkpoint
+`2b1ec5089d03d2b6413ce5475cbccaab63005daf`.
 For each merge it also verifies the actual successful `pull_request_target` run
 with a receipt bound to the exact first-parent base, the pinned workflow bytes, successful named job,
 and a digest-checked workflow receipt binding PR number, base, head, run and attempt.
@@ -130,6 +133,12 @@ project.
    checks fresh finalized quorum observations of configuration and token balance,
    and requires principal plus fee coverage. Both members vote; collectively they
    must also be able to propose and execute. Permissions 3/6 or 7/2 suffice.
+   On a `squads-project-vault` the plan carries no fee transfer and coverage is
+   principal only; the fee is the creator's separate transfer (RFC #500 s.8).
+   Its observation also carries the creator multisig, the shape must be masks
+   7/2/6 at threshold 2 with the manifest's time lock and no config authority,
+   and the current signers are the creator and the independent signer
+   (`funding/README.md`, "Signer capability on a project vault").
    Local output creation is exclusive; identical bytes are an idempotent retry,
    conflicting bytes cannot be overwritten. No new intent is generated on retry.
 

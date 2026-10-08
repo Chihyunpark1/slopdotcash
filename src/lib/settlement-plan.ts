@@ -15,6 +15,33 @@ export const SOLANA_MAINNET_USDC_MINT =
   "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" as const;
 export const USDC_DECIMALS = 6 as const;
 export const MAX_TRANSFERS_PER_PLAN = 200;
+export const PROJECT_VAULT_INSTRUMENT_PREFIX = "squads-project-vault:solana:";
+
+/**
+ * RFC #500 section 8. A 2-of-2 vault pays the platform fee from the vault, so
+ * its plan ends with a fee transfer. A project vault holds contributor
+ * principal only: the creator sends the fee as a separate transfer from the
+ * creator's own wallet, so the plan carries no fee transfer, reports
+ * `platformFeeMinor: "0"`, and nothing Slop votes on can pay Slop. The fee
+ * due stays `allocation.totals.feeMinor` and is reconciled at settlement.
+ */
+export function planCarriesPlatformFee(instrumentId: unknown): boolean {
+  return !(
+    typeof instrumentId === "string" &&
+    instrumentId.startsWith(PROJECT_VAULT_INSTRUMENT_PREFIX)
+  );
+}
+
+/** The frozen funding-basis identity of a reviewed Squads instrument of either
+ * kind. Every ledger that names an instrument uses this exact string. */
+export function squadsInstrumentId(instrument: {
+  kind: "squads-v4-vault" | "squads-project-vault";
+  multisig: string;
+  vaultIndex: number;
+  vault: string;
+}): string {
+  return `${instrument.kind}:solana:${instrument.multisig}:${instrument.vaultIndex}:${instrument.vault}`;
+}
 
 export interface SettlementPlanTransfer {
   paymentId: string;
@@ -49,47 +76,6 @@ export interface SettlementExecutionPlan {
     platformFeeMinor: string;
     totalMinor: string;
   };
-}
-
-function decimalTokenAmount(amountMinor: string): string {
-  const canonical = minor(amountMinor, "payment request amountMinor");
-  const padded = canonical.padStart(USDC_DECIMALS + 1, "0");
-  const whole = padded.slice(0, -USDC_DECIMALS);
-  const fraction = padded.slice(-USDC_DECIMALS);
-  return `${whole}.${fraction}`;
-}
-
-/**
- * Creates a standard non-custodial Solana Pay request for one immutable plan
- * transfer. A wallet still shows and signs the ordinary USDC transfer, and the
- * cycle remains unpaid until finalized deltas are independently verified.
- */
-export function createSolanaPayTransferRequest(
-  plan: SettlementExecutionPlan,
-  transfer: SettlementPlanTransfer,
-): string {
-  if (
-    plan.cluster !== "mainnet-beta" ||
-    plan.token.mint !== SOLANA_MAINNET_USDC_MINT ||
-    plan.token.decimals !== USDC_DECIMALS ||
-    !plan.transfers.some(
-      (candidate) =>
-        candidate.paymentId === transfer.paymentId &&
-        candidate.recipientOwner === transfer.recipientOwner &&
-        candidate.amountMinor === transfer.amountMinor,
-    )
-  ) {
-    throw new TypeError("Payment request transfer is not in the mainnet plan");
-  }
-  const recipient = address(transfer.recipientOwner, "recipientOwner");
-  const query = new URLSearchParams({
-    amount: decimalTokenAmount(transfer.amountMinor),
-    "spl-token": SOLANA_MAINNET_USDC_MINT,
-    label: "Slop",
-    message: `${plan.projectId} ${plan.cycleId} payout`,
-    memo: transfer.paymentId,
-  });
-  return `solana:${recipient}?${query.toString()}`;
 }
 
 function exactUtc(value: string): string {
@@ -132,7 +118,10 @@ export function createSettlementExecutionPlan(input: {
     // The allocation validator has already checked the complete identity syntax.
     // A caller-supplied wallet cannot substitute for the frozen funding source.
     const instrumentId = allocation.fundingBasis.instrumentId;
-    if (!instrumentId?.startsWith("squads-v4-vault:solana:")) {
+    if (
+      !instrumentId?.startsWith("squads-v4-vault:solana:") &&
+      !instrumentId?.startsWith(PROJECT_VAULT_INSTRUMENT_PREFIX)
+    ) {
       throw new TypeError(
         "Settlement requires a frozen Solana Squads funding instrument",
       );
@@ -144,13 +133,16 @@ export function createSettlementExecutionPlan(input: {
       );
     }
   }
+  const carriesFee = planCarriesPlatformFee(
+    allocation.fundingBasis?.instrumentId,
+  );
   const approved = allocation.allocations.filter(
     (row) => row.state === "approved",
   );
   if (approved.length === 0) {
     throw new RangeError("Approved allocation contains no payable intents");
   }
-  if (approved.length + 1 > MAX_TRANSFERS_PER_PLAN) {
+  if (approved.length + (carriesFee ? 1 : 0) > MAX_TRANSFERS_PER_PLAN) {
     throw new RangeError("Settlement exceeds the bounded transfer-plan limit");
   }
   const transfers: SettlementPlanTransfer[] = approved.map((row) => {
@@ -178,7 +170,7 @@ export function createSettlementExecutionPlan(input: {
         : {}),
     };
   });
-  const platformFeeMinor = allocation.totals.feeMinor;
+  const platformFeeMinor = carriesFee ? allocation.totals.feeMinor : "0";
   if (BigInt(platformFeeMinor) > 0n) {
     const feeRecipient = address(input.feeRecipient, "feeRecipient");
     if (feeRecipient === sourceOwner) {

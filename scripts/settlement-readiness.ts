@@ -1,3 +1,4 @@
+import { hasCanonicalMergeBase } from "./canonical-merge-base";
 /** Production evidence assembly. All history comes from a verified canonical SHA;
  * no caller-supplied ledger, RPC endpoint, or positive readiness flag is accepted. */
 
@@ -11,6 +12,8 @@ import {
 import { fetchWithRateLimitRetry } from "../src/lib/rate-limited-fetch";
 import { publicSignerReport } from "../src/lib/signer-capability";
 import {
+  assertSquadsCreatorSeat,
+  assertSquadsProjectVaultUsdcState,
   assertSquadsVaultUsdcState,
   deriveVaultUsdcTokenAccount,
 } from "../src/lib/squads-funding";
@@ -42,7 +45,7 @@ function paths(root: string, sha: string, directory: string): string[] {
     throw new TypeError("Canonical inventory exceeds bound");
   return rows;
 }
-function acceptedAt(sha: string): string {
+function acceptedAt(root: string, sha: string): string {
   const prs = reservationGithub(
     `repos/${PAYMENT_REPOSITORY}/commits/${sha}/pulls?per_page=100`,
   ) as {
@@ -54,14 +57,14 @@ function acceptedAt(sha: string): string {
     ? prs.filter(
         (p) =>
           p.merge_commit_sha === sha &&
-          p.base?.ref === "develop" &&
-          p.base.repo?.full_name === PAYMENT_REPOSITORY &&
+          hasCanonicalMergeBase(root, sha, p.base?.ref) &&
+          p.base?.repo?.full_name === PAYMENT_REPOSITORY &&
           p.merged_at,
       )
     : [];
   if (matches.length !== 1)
     throw new TypeError(
-      "Cannot prove canonical policy/proposal acceptance through a merged develop PR",
+      "Cannot prove canonical policy/proposal acceptance through a merged main PR",
     );
   const time = new Date(matches[0].merged_at as string);
   if (!Number.isFinite(time.getTime()))
@@ -156,13 +159,13 @@ function history(root: string, loaded: Loaded) {
         instrumentId: r.fundingBasis?.instrumentId ?? "legacy",
         generatedAt: r.generatedAt,
         sourceSnapshotSha256: r.sourceSnapshotSha256,
-        firstPublishedAt: acceptedAt(sha),
+        firstPublishedAt: acceptedAt(root, sha),
       });
     }
   }
   return {
     reviewedCommit: policyCommit,
-    reviewedAt: acceptedAt(policyCommit),
+    reviewedAt: acceptedAt(root, policyCommit),
     fundedProposalHistory: freezes,
   };
 }
@@ -174,6 +177,46 @@ function canonical(value: unknown): string {
       .map(([k, v]) => `${JSON.stringify(k)}:${canonical(v)}`)
       .join(",")}}`;
   return JSON.stringify(value);
+}
+async function observedVaultState(
+  instrument: Loaded["instrument"],
+  accounts: unknown,
+  tokenAccount: string,
+) {
+  if (instrument.kind === "squads-v4-vault")
+    return assertSquadsVaultUsdcState(
+      accounts,
+      instrument.multisig,
+      instrument.vault,
+      instrument.vaultIndex,
+      tokenAccount,
+      instrument.funderMember,
+      instrument.stewardMember,
+    );
+  const observation = accounts as { context: unknown; value: unknown[] };
+  if (!Array.isArray(observation.value) || observation.value.length !== 3)
+    throw new TypeError(
+      "Project vault observation must contain the multisig, its USDC account, and the creator multisig",
+    );
+  const state = await assertSquadsProjectVaultUsdcState(
+    { context: observation.context, value: observation.value.slice(0, 2) },
+    instrument.multisig,
+    instrument.vault,
+    instrument.vaultIndex,
+    tokenAccount,
+    {
+      creatorMember: instrument.creatorMember,
+      slopMember: instrument.slopMember,
+      independentMember: instrument.independentMember,
+    },
+  );
+  await assertSquadsCreatorSeat(
+    observation.value[2],
+    instrument.creatorMultisig,
+    instrument.creatorMember,
+    instrument.creatorVaultIndex,
+  );
+  return state;
 }
 /** Fixed public RPCs; two independently validated finalized observations must
  * agree on configuration and balance. Fresh finalized slot rejects stale replay. */
@@ -214,18 +257,21 @@ export async function observeSettlementVault(instrument: Loaded["instrument"]) {
           throw new TypeError("Invalid finalized RPC envelope");
         return value.result;
       }
+      // A project vault observation also carries the creator multisig, so
+      // readiness can prove the creator seat and the attesting creator key
+      // from the same finalized slot.
+      const addresses =
+        instrument.kind === "squads-project-vault"
+          ? [instrument.multisig, tokenAccount, instrument.creatorMultisig]
+          : [instrument.multisig, tokenAccount];
       const accounts = await rpc("getMultipleAccounts", [
-        [instrument.multisig, tokenAccount],
+        addresses,
         { commitment: "finalized", encoding: "jsonParsed" },
       ]);
-      const state = await assertSquadsVaultUsdcState(
+      const state = await observedVaultState(
+        instrument,
         accounts,
-        instrument.multisig,
-        instrument.vault,
-        instrument.vaultIndex,
         tokenAccount,
-        instrument.funderMember,
-        instrument.stewardMember,
       );
       const latest = await rpc("getSlot", [{ commitment: "finalized" }]);
       if (

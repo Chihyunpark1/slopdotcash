@@ -29,10 +29,10 @@ The rest of the PRD is blocked until maintainers approve an explicit MVP complet
 | MVP-06 | FND-01–05, PAY-01–08 | Base and Solana contract/program, funding classes and protected obligations | MVP-00/02/03; approved PAY-05 actor-binding proof and recovery authority, independent review and accounting/authority conformance |
 | MVP-07 | PAY-01–08 | Human approval, manual/automatic execution, late wallet dispatch, finality and receipts | MVP-06; full same-scenario test deployment evidence on both chains |
 | MVP-08 | ELG-01–03 | Prospective maintainer exclusions, moderation, financial holds and appeals | MVP-00/03/07; scoped human decisions and protected accrued obligations |
-| MVP-09 | SCR-01–03, LDR-01–03, DSC-01–04 | Separate signed Slop Score/points, closure debits/reversals, issue/PR ratios and score-default sorting | MVP-00/03/05/07/08; exact source coverage, ties, zero denominators, no duplicate penalties or financial seizure |
+| MVP-09 | SCR-01–04, LDR-01–03, DSC-01–04 | Separate signed Slop Score/points, shared commit-author merge credit (owner decision on #506), closure debits/reversals, issue/PR ratios and score-default sorting | MVP-00/03/05/07/08; exact source coverage, ties, zero denominators, no duplicate penalties or financial seizure |
 | MVP-10 | ADM-01–06, NOT-01, UX-01–17, PRD sections 16–17 | Unified pages, bot health, security evidence, admin featuring/bans, notifications and recovery | Relevant prior packages; permissions, canonical sync, cached/direct-route enforcement, appeals and browser evidence |
 | MVP-12 | VET-01–08 | Revision-bound secure-VM vetting, full declared telemetry, binary/obfuscation quarantine, Astra and Opus reviews, confirmed-malware bans | MVP-00/01 and project drafts; required before community/featured executable onboarding; isolated clean/malicious fixture evidence |
-| MVP-11 | PRD sections 20–23 | Versioned migration and limited production activation | All release gates; authorized production proof and reconciliation |
+| MVP-11 | DEP-01, PRD sections 20–23 | Versioned migration and limited production activation | All release gates; authorized production proof and reconciliation |
 
 No package is marked implemented by this document. Create bounded implementation issues only after approval, tied to a real missing requirement and existing work. Reuse or reconcile open vault, settlement, installer, queue and deployment proposals before starting duplicate work.
 
@@ -57,7 +57,7 @@ No package is marked implemented by this document. Create bounded implementation
 - **Contracts:** exact deployed code, network/asset/vault identity, permissions, reserve invariants, donation rights, fee arithmetic, no Slop-held key able to originate or redirect a payment, and independent security review.
 - **Financial operations:** complete Base/Solana test scenarios, ambiguous-send recovery, replay protection, finalized receipts, queue/indexer restart and reconciliation.
 - **UI:** desktop/mobile, keyboard, 200% zoom, WCAG AA, copy/download/link checks, console/network evidence, uploaded walkthrough and test videos.
-- **Deployment:** approved protected workflow and environment; production website/API/contract checks are separate. Claim the deploy/DNS lever before any such change.
+- **Deployment:** DEP-01 separates `development` staging and `main` production, including an isolated staging login and write backend; approved protected workflow and environment; production website/API/contract checks are separate. Claim the deploy/DNS lever before any such change.
 - **Operations:** named incident/recovery owners, tested restore, scoped operator access, alerts, support/appeals and approved privacy/retention terms.
 - **Pilot:** small authorized mainnet exposure; no broad enabling until actual payments and public totals reconcile.
 

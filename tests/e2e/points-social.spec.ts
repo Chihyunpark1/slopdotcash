@@ -101,16 +101,6 @@ test("social membership shows connection points, respects privacy and survives d
     .getByRole("link", { name: "Slop home" })
     .boundingBox();
   expect(accountBounds!.x).toBeGreaterThan(brandBounds!.x + brandBounds!.width);
-  const navigationToggle = header.getByRole("button", {
-    name: "Open navigation",
-  });
-  const preceding = (await navigationToggle.isVisible())
-    ? navigationToggle
-    : header.getByRole("link", { name: "Add a project" });
-  const precedingBounds = await preceding.boundingBox();
-  expect(accountBounds!.x).toBeGreaterThanOrEqual(
-    precedingBounds!.x + precedingBounds!.width,
-  );
   await accountButton.click();
   const accountPanel = page.getByRole("region", {
     name: "Your account details",
@@ -138,20 +128,31 @@ test("social membership shows connection points, respects privacy and survives d
   // uncovered header edge to exercise a real outside pointer interaction.
   await header.click({ position: { x: 1, y: 1 } });
   await expect(accountPanel).toHaveCount(0);
-  const social = page.getByRole("region", { name: "Connect X" });
-  const community = page.getByRole("region", { name: "Community members" });
+  await accountButton.click();
+  await accountPanel.getByRole("link", { name: "Account settings" }).click();
+  await expect(page).toHaveURL("https://slop.cash/account");
   await expect(
-    community.getByRole("link", { name: "social-member", exact: true }),
+    page.getByRole("heading", { name: "Account", exact: true }),
   ).toBeVisible();
+  await expect(page.getByRole("table")).toHaveCount(0);
   await expect(
-    community.getByRole("link", { name: "X · @social_member" }),
+    page.getByRole("region", { name: "Community members" }),
   ).toHaveCount(0);
+  const social = page.getByRole("region", { name: "Connect X" });
+  await expect(social.getByRole("checkbox")).toHaveCount(1);
+  const community = page.getByRole("region", { name: "Community members" });
   await social
     .getByLabel("Show my X account with my public membership", { exact: true })
     .click();
+  await expect(social.getByText("X visibility updated.")).toBeVisible();
+  await page.goto("https://slop.cash/points#people");
   await expect(
     community.getByRole("link", { name: "X · @social_member" }),
   ).toBeVisible();
+  await page
+    .getByRole("link", { name: "Account settings", exact: true })
+    .click();
+  await expect(social.getByRole("checkbox")).toHaveCount(1);
   const a11y = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
     .analyze();
@@ -166,6 +167,7 @@ test("social membership shows connection points, respects privacy and survives d
   await expect(
     social.getByText("X disconnected. Your earned points are retained."),
   ).toBeVisible();
+  await page.goto("https://slop.cash/points#people");
   await expect(
     community.getByRole("link", { name: "X · @social_member" }),
   ).toHaveCount(0);
@@ -173,7 +175,12 @@ test("social membership shows connection points, respects privacy and survives d
   await community
     .getByRole("link", { name: "social-member", exact: true })
     .click();
-  await expect(page.locator(".points-total")).toHaveText("15 pts");
+  await expect(
+    page
+      .getByText("Points · recorded history", { exact: true })
+      .locator("..")
+      .locator("strong"),
+  ).toHaveText("15");
   await expect(page.getByText(/10 X connection points/)).toBeVisible();
   expect(errors).toEqual([]);
   expect(failures).toEqual([]);

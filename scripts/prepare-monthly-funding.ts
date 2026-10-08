@@ -209,9 +209,11 @@ export async function prepareMonthlyFunding(
         snapshotLedgerCount: snapshot.ledger.length,
         sourceMergedPullRequests: snapshot.source.counts.mergedPullRequests,
         mergedCensus: null,
-        scoredMerges: view.ledger.filter(
-          (e) => e.category === "merged-pull-request",
-        ).length,
+        scoredMerges: new Set(
+          view.ledger
+            .filter((e) => e.category === "merged-pull-request")
+            .map((e) => e.source.id),
+        ).size,
       },
       counts: {
         contributors: contributors.length,

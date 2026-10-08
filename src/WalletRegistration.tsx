@@ -1,11 +1,12 @@
 import { useEffect, useId, useRef, useState } from "react";
+import { browserDeployment } from "./lib/browser-deployment";
 import {
   prepareWalletRegistration,
   type RegisteredWalletClaim,
   type WalletAuthorization,
   type WalletRegistrationSession,
 } from "./lib/wallet-registration";
-import { isSolanaAddress } from "./lib/wallets";
+import { isWalletAddress, type WalletChain } from "./lib/wallets";
 
 const PENDING_WALLET = "slop-wallet-authorization";
 const WALLET_ADDRESS = "slop-wallet-address";
@@ -39,6 +40,16 @@ function saveAuthorization(value: WalletAuthorization | null) {
 export function WalletRegistration() {
   const addressId = useId();
   const [address, setAddress] = useState(savedAddress);
+  const [chain, setChain] = useState<WalletChain>(() => {
+    try {
+      return sessionStorage.getItem("slop-wallet-chain") === "base"
+        ? "base"
+        : "solana";
+    } catch {
+      return "solana";
+    }
+  });
+  const chainLabel = chain === "base" ? "Base" : "Solana";
   const [canResume, setCanResume] = useState(false);
   const [authorizationUrl, setAuthorizationUrl] = useState<string | null>(null);
   const [phase, setPhase] = useState<
@@ -72,8 +83,12 @@ export function WalletRegistration() {
   );
   async function start(resume?: WalletAuthorization) {
     const exactAddress = address.trim();
-    if (!isSolanaAddress(exactAddress)) {
-      setMessage("Enter a valid Solana public address (32-byte base58).");
+    if (!isWalletAddress(chain, exactAddress)) {
+      setMessage(
+        chain === "base"
+          ? "Enter a valid lowercase Base public address (0x and 40 hexadecimal characters)."
+          : "Enter a valid Solana public address (32-byte base58).",
+      );
       return;
     }
     release();
@@ -86,6 +101,7 @@ export function WalletRegistration() {
     setAuthorizationUrl(null);
     try {
       sessionStorage.setItem(WALLET_ADDRESS, exactAddress);
+      sessionStorage.setItem("slop-wallet-chain", chain);
     } catch {
       /* Keep in component state. */
     }
@@ -100,6 +116,7 @@ export function WalletRegistration() {
     setPhase("signing-in");
     try {
       const prepared = await prepareWalletRegistration(exactAddress, {
+        chain,
         signal: run.controller.signal,
         resume,
         saveAuthorization: (value) => {
@@ -173,8 +190,8 @@ export function WalletRegistration() {
     >
       <h1 id={`${addressId}-heading`}>Register your wallet</h1>
       <p>
-        Link your GitHub account to a public Solana address for USDC rewards. No
-        wallet connection, private keys, or signing required.
+        Link your GitHub account to a public Base or Solana address for USDC
+        rewards. No wallet connection, private keys, or signing required.
       </p>
       <p>
         Your GitHub identity and address become a public, permanent claim.
@@ -206,7 +223,30 @@ export function WalletRegistration() {
           void start();
         }}
       >
-        <label htmlFor={addressId}>Solana public address</label>
+        <label htmlFor={`${addressId}-chain`}>Payout network</label>
+        <select
+          id={`${addressId}-chain`}
+          value={chain}
+          disabled={busy || phase === "preview"}
+          onChange={(event) => {
+            release();
+            saveAuthorization(null);
+            setChain(event.target.value as WalletChain);
+            setAddress("");
+            setRegistered(null);
+            setMessage("");
+            try {
+              sessionStorage.setItem("slop-wallet-chain", event.target.value);
+              sessionStorage.removeItem(WALLET_ADDRESS);
+            } catch {
+              /* The in-memory form remains usable. */
+            }
+          }}
+        >
+          <option value="solana">Solana</option>
+          <option value="base">Base</option>
+        </select>
+        <label htmlFor={addressId}>{chainLabel} public address</label>
         <input
           id={addressId}
           name="wallet-address"
@@ -238,7 +278,7 @@ export function WalletRegistration() {
             {session.preview.identity.githubActorId})
           </p>
           <p>
-            Solana address:{" "}
+            {chainLabel} address:{" "}
             <code className="wallet-address">{session.preview.address}</code>
           </p>
           <p>
@@ -303,7 +343,7 @@ export function WalletRegistration() {
             <code className="wallet-address">{registered.recordDigest}</code>
           </p>
           <a
-            href={`https://api.slop.cash/api/v1/wallet-claims/${registered.claimId}`}
+            href={`${browserDeployment.api}/api/v1/wallet-claims/${registered.claimId}`}
             target="_blank"
             rel="noreferrer"
           >

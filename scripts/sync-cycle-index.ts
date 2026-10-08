@@ -28,6 +28,11 @@ import {
   assertLeaderboardSnapshot,
   type LeaderboardSnapshot,
 } from "../src/lib/leaderboard";
+import {
+  assertProjectVaultWindup,
+  PROJECT_VAULT_WINDUP_FILE,
+  type ProjectVaultWindupRecord,
+} from "../src/lib/project-vault-windup";
 import { createProjectView } from "../src/lib/project-view";
 import { findProject, type ProjectId } from "../src/lib/projects.mjs";
 import { createRewardCycleProposal } from "../src/lib/reward-cycle";
@@ -44,6 +49,9 @@ import {
   type SettlementExecutionPlan,
 } from "../src/lib/settlement-plan";
 import { verifyRewardSettlementOnchain } from "../src/lib/solana-settlement";
+import { assertEscrowDecisions } from "./escrow-review";
+import { loadProjectCommitmentRecords } from "./funding-commitment-records";
+import { validateEscrowCycle } from "./prepare-escrow-cycle";
 import { loadPriorCycleAccrual } from "./prior-cycle-accrual";
 import {
   DEFAULT_SOLANA_RPC_URL,
@@ -63,7 +71,12 @@ const ALLOWED_FILES = new Set([
   "settlement.json",
   "source-snapshot.json",
   "transactions.json",
+  PROJECT_VAULT_WINDUP_FILE,
 ]);
+const EXECUTION_LEDGER = resolve(
+  REPOSITORY_ROOT,
+  "funding/executions/ledger.json",
+);
 const REQUIRED_FILES = ["proposal.json", "source-snapshot.json"] as const;
 const MAX_CYCLES = 240;
 const MAX_JSON_BYTES = 8 * 1024 * 1024;
@@ -81,6 +94,7 @@ interface CycleBuild {
   allocation: RewardAllocationManifest | null;
   plan: SettlementExecutionPlan | null;
   settlement: RewardSettlementManifest | null;
+  windup: ProjectVaultWindupRecord | null;
 }
 
 function canonical(value: unknown): string {
@@ -353,12 +367,14 @@ async function buildCycle(
           allocation: null,
           executionPlan: null,
           settlement: null,
+          windup: null,
         },
       },
       files,
       allocation: null,
       plan: null,
       settlement: null,
+      windup: null,
     };
   }
 
@@ -432,6 +448,32 @@ async function buildCycle(
     );
   }
 
+  // RFC #500 section 10: a project vault creator returned the vault after
+  // binding the proposal. The record is validated against the frozen
+  // allocation, plan, execution binding, and the project's verified funding
+  // ledger, which is always supplied here so a submitted file cannot name a
+  // refund the ledger does not hold or hold rows on a self-reported balance.
+  // A windup holds every approved row; it does not cancel the bound proposal,
+  // so later finalized payment evidence may sit beside it (PRD PAY-01, PAY-07).
+  const windupFile = loaded.get(PROJECT_VAULT_WINDUP_FILE) ?? null;
+  let windup: ProjectVaultWindupRecord | null = null;
+  if (windupFile) {
+    if (!allocation || !allocationFile || !plan || !planFile) {
+      throw new TypeError("Windup has no approved allocation and plan");
+    }
+    const ledger = await jsonFile(EXECUTION_LEDGER);
+    windup = await assertProjectVaultWindup(windupFile.value, {
+      allocation: allocationFile.value,
+      allocationSha256: allocationFile.digest,
+      planBytes: planFile.bytes,
+      ledger: ledger.value,
+      fundingRecords: await loadProjectCommitmentRecords(projectId),
+    });
+    if (windup.projectId !== projectId || windup.cycleId !== cycleId) {
+      throw new TypeError("Windup does not match its cycle path");
+    }
+  }
+
   const state =
     proposal.allocations.length === 0
       ? "closed-no-awards"
@@ -439,11 +481,13 @@ async function buildCycle(
         ? settlement.status === "paid"
           ? "paid"
           : "settlement-planned"
-        : plan
-          ? "settlement-planned"
-          : allocation
-            ? "payment-ready"
-            : "review";
+        : windup
+          ? "wound-up"
+          : plan
+            ? "settlement-planned"
+            : allocation
+              ? "payment-ready"
+              : "review";
   const allocationByIntent = new Map(
     allocation?.allocations.map((entry) => [entry.intentId, entry]) ?? [],
   );
@@ -522,7 +566,11 @@ async function buildCycle(
           score: entry.score,
           scoreThirds: exactScores.get(entry.actor.id) ?? 0,
           state:
-            paid?.state === "paid" ? "paid" : (approved?.state ?? entry.state),
+            paid?.state === "paid"
+              ? "paid"
+              : windup && approved?.state === "approved"
+                ? "held"
+                : (approved?.state ?? entry.state),
           suggestedMinor: entry.suggestedMinor,
           approvedMinor: approved?.approvedMinor ?? "0",
           paidMinor: paid?.paidMinor ?? "0",
@@ -565,12 +613,16 @@ async function buildCycle(
         settlement: settlementFile
           ? reference(projectId, cycleId, "settlement.json", settlementFile)
           : null,
+        windup: windupFile
+          ? reference(projectId, cycleId, PROJECT_VAULT_WINDUP_FILE, windupFile)
+          : null,
       },
     },
     files,
     allocation,
     plan,
     settlement,
+    windup,
   };
 }
 
@@ -640,6 +692,73 @@ async function collectCycles(): Promise<CycleBuild[]> {
         throw new TypeError(
           `cycles/${projectEntry.name}/${cycleEntry.name} is not a canonical cycle directory`,
         );
+      }
+      const versioned = join(projectDirectory, cycleEntry.name, "escrow-v2");
+      const versionedStat = await lstat(versioned).catch(
+        (error: NodeJS.ErrnoException) => {
+          if (error.code === "ENOENT") return null;
+          throw error;
+        },
+      );
+      if (versionedStat) {
+        if (!versionedStat.isDirectory() || versionedStat.isSymbolicLink())
+          throw new Error("Invalid escrow cycle directory");
+        const files = await readdir(versioned);
+        const required = [
+          "github-identities.json",
+          "project.json",
+          "proposal.json",
+          "source-snapshot.json",
+        ];
+        const allowed = new Set([
+          ...required,
+          "decisions.json",
+          "platform-approvals.json",
+        ]);
+        if (
+          required.some((name) => !files.includes(name)) ||
+          files.some((name) => !allowed.has(name))
+        )
+          throw new Error("Unknown or missing escrow cycle artifact");
+        const siblings = await readdir(join(projectDirectory, cycleEntry.name));
+        if (siblings.length !== 1)
+          throw new Error("Legacy and escrow cycles cannot share a cycle");
+        const verified = await validateEscrowCycle(
+          versioned,
+          projectEntry.name,
+          cycleEntry.name,
+        );
+        if (files.includes("decisions.json")) {
+          const policy = JSON.parse(
+            await readFile(join(versioned, "project.json"), "utf8"),
+          );
+          assertEscrowDecisions(
+            JSON.parse(
+              await readFile(join(versioned, "decisions.json"), "utf8"),
+            ),
+            verified.proposal,
+            verified.digest,
+            policy.steward.github.actorId,
+          );
+        }
+        if (files.includes("platform-approvals.json")) {
+          if (!files.includes("decisions.json"))
+            throw new Error("Platform approval requires exact decisions");
+          const approval = JSON.parse(
+            await readFile(join(versioned, "platform-approvals.json"), "utf8"),
+          );
+          const decisionDigest = createHash("sha256")
+            .update(await readFile(join(versioned, "decisions.json")))
+            .digest("hex");
+          if (
+            approval.schemaVersion !== "1" ||
+            approval.proposalSha256 !== verified.digest ||
+            approval.decisionsSha256 !== decisionDigest ||
+            !Array.isArray(approval.approvals)
+          )
+            throw new Error("Platform approval source mismatch");
+        }
+        continue;
       }
       builds.push(
         await buildCycle(
