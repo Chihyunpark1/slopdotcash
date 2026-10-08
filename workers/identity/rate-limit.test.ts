@@ -127,6 +127,22 @@ function pollRequest(ip = "192.0.2.1") {
 }
 
 describe("identity rate limits", () => {
+  it("applies the same edge and exact limits to the explicitly configured test origin", async () => {
+    const start = limiter(true);
+    const env = environment(start);
+    const origin = "https://slop-identity-test.fixture.workers.dev";
+    const request = () =>
+      new Request(`${origin}/v1/oauth/start`, {
+        method: "POST",
+        headers: { "cf-connecting-ip": "192.0.2.1" },
+      });
+    const test = { ...env.value, IDENTITY_PUBLIC_ORIGIN: origin };
+    for (let i = 0; i < 12; i++)
+      expect(await applyIdentityRateLimit(request(), test)).toBeNull();
+    expect((await applyIdentityRateLimit(request(), test))?.status).toBe(429);
+    expect(start.keys).toHaveLength(13);
+    expect(env.exact.observedKeyHashes.length).toBeGreaterThan(0);
+  });
   it.each([
     ["/v1/oauth/start", "start"],
     ["/v1/oauth/poll", "poll"],

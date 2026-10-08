@@ -1,5 +1,5 @@
 /** Browser adapter for the canonical wallet-claim/run-receipt OAuth protocol. */
-import { isSolanaAddress } from "./wallets";
+import { isWalletAddress, isWalletChain, type WalletChain } from "./wallets";
 
 const IDENTITY = "https://identity.slop.cash";
 const API = "https://api.slop.cash";
@@ -12,6 +12,7 @@ export interface WalletRegistrationIdentity {
   githubLogin: string;
 }
 export interface RegisteredWalletClaim extends WalletRegistrationIdentity {
+  chain: WalletChain;
   schemaVersion: 1;
   claimId: string;
   address: string;
@@ -24,6 +25,7 @@ export interface RegisteredWalletClaim extends WalletRegistrationIdentity {
   supersedesClaimId: string | null;
 }
 export interface WalletRegistrationPreview {
+  chain: WalletChain;
   identity: WalletRegistrationIdentity;
   address: string;
   current: RegisteredWalletClaim | null;
@@ -42,6 +44,7 @@ export interface WalletAuthorization {
   pollAfterSeconds: number;
 }
 export interface WalletRegistrationOptions {
+  chain?: WalletChain;
   /** Short-lived per-tab state for same-tab navigation; never an API session token. */
   resume?: unknown;
   saveAuthorization?: (value: WalletAuthorization | null) => void;
@@ -90,6 +93,7 @@ async function digest(value: unknown) {
 async function claim(
   value: unknown,
   owner: WalletRegistrationIdentity,
+  chain: WalletChain,
 ): Promise<RegisteredWalletClaim> {
   const row = record(value);
   const actor = identity(row);
@@ -104,7 +108,8 @@ async function claim(
     row.schemaVersion !== 1 ||
     typeof row.claimId !== "string" ||
     !/^[A-Za-z0-9_-]+$/u.test(row.claimId) ||
-    !isSolanaAddress(row.address) ||
+    !isWalletAddress(chain, row.address) ||
+    (row.chain ?? "solana") !== chain ||
     !["d1_registry", "github_issue", "profile_readme"].includes(
       String(row.source),
     ) ||
@@ -131,6 +136,7 @@ async function claim(
     schemaVersion: 1,
     ...actor,
     address: row.address,
+    ...(chain === "base" ? { chain } : {}),
     source: row.source,
     issueRepository: row.issueRepository,
     issueNumber: row.issueNumber,
@@ -144,6 +150,7 @@ async function claim(
     );
   return {
     ...canonical,
+    chain,
     claimId: row.claimId,
     recordDigest: row.recordDigest,
   } as RegisteredWalletClaim;
@@ -201,8 +208,13 @@ export async function prepareWalletRegistration(
   address: string,
   options: WalletRegistrationOptions,
 ): Promise<WalletRegistrationSession> {
-  if (!isSolanaAddress(address))
-    throw new Error("Enter a valid Solana public address (32-byte base58).");
+  const chain = options.chain ?? "solana";
+  if (!isWalletChain(chain) || !isWalletAddress(chain, address))
+    throw new Error(
+      chain === "base"
+        ? "Enter a valid lowercase Base public address (0x and 40 hexadecimal characters)."
+        : "Enter a valid Solana public address (32-byte base58).",
+    );
   const now = options.now ?? Date.now;
   const transport = options.fetch ?? globalThis.fetch;
   const controller = new AbortController();
@@ -382,12 +394,12 @@ export async function prepareWalletRegistration(
     )
       invalid();
     const currentResponse = await request(
-      `${API}/api/v1/wallet-claims/current`,
+      `${API}/api/v1/wallet-claims/current${chain === "base" ? "?chain=base" : ""}`,
       { headers: { Authorization: `Bearer ${token}` } },
       true,
     );
     const current = currentResponse
-      ? await claim(currentResponse.body, owner)
+      ? await claim(currentResponse.body, owner, chain)
       : null;
     clearTimeout(oauthTimer);
     const sessionTimer = setTimeout(
@@ -407,6 +419,7 @@ export async function prepareWalletRegistration(
       { once: true },
     );
     const preview = {
+      chain,
       identity: owner,
       address,
       current,
@@ -429,6 +442,7 @@ export async function prepareWalletRegistration(
               await request(`${API}/api/v1/wallet-claims`, {
                 ...post({
                   address,
+                  ...(chain === "base" ? { chain } : {}),
                   supersedesClaimId: current?.claimId ?? null,
                 }),
                 headers: {
@@ -437,7 +451,7 @@ export async function prepareWalletRegistration(
                 },
               })
             )?.body ?? invalid();
-          const created = await claim(result, owner);
+          const created = await claim(result, owner, chain);
           if (
             created.address !== address ||
             created.supersedesClaimId !== (current?.claimId ?? null) ||
@@ -449,6 +463,7 @@ export async function prepareWalletRegistration(
                 schemaVersion: 1,
                 githubActorId: owner.githubActorId,
                 address,
+                ...(chain === "base" ? { chain } : {}),
                 supersedesClaimId: current?.claimId ?? null,
               }))
           )

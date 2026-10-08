@@ -1,3 +1,4 @@
+import type { EscrowPolicy } from "./escrow-policy.mjs";
 /** Types for the public project and reward-policy registry. */
 
 import type { FundingCommitmentInstrument } from "./funding-instruments.mjs";
@@ -44,14 +45,14 @@ export interface ProjectRewardPolicy {
   }[];
   readonly kind: RewardKind;
   readonly currency: "USDC" | null;
-  readonly chain: "solana" | null;
+  readonly chain: "solana" | "base" | null;
   readonly rewardStartAt: string;
   readonly cycle: "calendar-month-utc";
   readonly monthlyCapMinor: string;
   readonly monthlyCapDisplay: string;
   readonly committedMinor: string;
   readonly paymentMode: "disabled" | "enabled";
-  readonly feeBasisPoints: 100 | 1000;
+  readonly feeBasisPoints: 100 | 200 | 1000;
   readonly unusedFunds: "not-applicable" | "rollover-without-cap-increase";
   readonly fundingState: "committed" | "external-opportunity" | "pledged";
   readonly reviewBudget?: ProjectReviewBudgetPolicy;
@@ -69,6 +70,7 @@ export interface ProjectRewardPolicy {
 }
 
 export interface ProjectDefinition {
+  readonly escrow?: EscrowPolicy;
   readonly schemaVersion: "1";
   readonly id: ProjectId;
   readonly slug: ProjectId;

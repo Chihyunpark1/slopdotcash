@@ -77,3 +77,16 @@ export interface IdentityPersistence {
   ): Promise<IdentityAssertion | null>;
   deleteExpired(now: string): Promise<void>;
 }
+
+/** Dedicated isolated test worker only; never arbitrary OAuth redirect hosts. */
+export function identityPublicOrigin(value?: string): string {
+  if (value === undefined || value === IDENTITY_PUBLIC_ORIGIN)
+    return IDENTITY_PUBLIC_ORIGIN;
+  if (
+    /^https:\/\/slop-identity-test\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.workers\.dev$/.test(
+      value,
+    )
+  )
+    return value;
+  throw new Error("Unsupported identity public origin");
+}

@@ -1,4 +1,7 @@
+import { EarningsPage } from "./Earnings";
+import { EscrowFunding } from "./EscrowFunding";
 import { Link, useInitialHashScroll } from "./Link";
+import { SlopMark, Wordmark } from "./Logo";
 import { CONTACT_EMAIL, CONTACT_MAILTO } from "./lib/contact";
 import { copyText } from "./lib/copy-text";
 import { homeProjects } from "./lib/home-projects";
@@ -29,15 +32,21 @@ import { type DataState, useSnapshot } from "./lib/use-snapshot";
  */
 
 import {
+  ArrowLeft,
   ArrowRight,
+  BadgeCheck,
   Check,
   ChevronRight,
   CircleAlert,
   Clipboard,
+  Coins,
   ExternalLink,
-  Menu,
+  FolderGit2,
+  GitPullRequest,
+  Plus,
   RotateCcw,
-  X,
+  ShieldCheck,
+  Terminal,
 } from "lucide-react";
 import { readBoundedJson } from "./lib/browser-json";
 import { SettlementVerification } from "./SettlementVerification";
@@ -51,7 +60,6 @@ import {
   Suspense,
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from "react";
 import {
@@ -70,6 +78,7 @@ import {
   projectFundingTotals,
   publicFundingRecordsForDonor,
 } from "./lib/funding";
+import { commitmentVerifiedNetMinor } from "./lib/funding-commitment";
 import { cycleSettlementReminder } from "./lib/funding-reminders";
 import { createGlobalLeaders } from "./lib/global-leaderboard";
 import { createInstallCommand } from "./lib/install-command";
@@ -157,7 +166,8 @@ interface Route {
     | "cycle-archive"
     | "unknown"
     | "points"
-    | "login";
+    | "login"
+    | "earnings";
   projectId?: string;
   cycleId?: string;
   login?: string;
@@ -171,6 +181,8 @@ function internalRoute(pathname: string): Route {
     return { kind: "unknown" };
   }
   if (segments.length === 0) return { kind: "home" };
+  if (segments.length === 1 && segments[0] === "earnings")
+    return { kind: "earnings" };
   if (segments.length === 1 && segments[0] === "login")
     return { kind: "login" };
   if (segments.length === 1 && segments[0] === "points")
@@ -238,13 +250,21 @@ function ExternalLinkAnchor({
   children,
   className,
   href,
+  onClick,
 }: {
   children: ReactNode;
   className?: string;
   href: string;
+  onClick?: () => void;
 }) {
   return (
-    <a className={className} href={href} rel="noreferrer" target="_blank">
+    <a
+      className={className}
+      href={href}
+      onClick={onClick}
+      rel="noreferrer"
+      target="_blank"
+    >
       {children}
     </a>
   );
@@ -344,71 +364,17 @@ function stale(snapshot: Pick<LeaderboardSnapshot, "generatedAt">): boolean {
 }
 
 function Header() {
-  const [open, setOpen] = useState(false);
-  const headerRef = useRef<HTMLElement>(null);
-  const menuButtonRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const closeForOutsidePointer = (event: PointerEvent) => {
-      if (!headerRef.current?.contains(event.target as Node)) setOpen(false);
-    };
-    const closeForEscape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      setOpen(false);
-      menuButtonRef.current?.focus();
-    };
-    const closeForRoute = () => setOpen(false);
-    window.addEventListener("pointerdown", closeForOutsidePointer);
-    window.addEventListener("keydown", closeForEscape);
-    window.addEventListener("popstate", closeForRoute);
-    return () => {
-      window.removeEventListener("pointerdown", closeForOutsidePointer);
-      window.removeEventListener("keydown", closeForEscape);
-      window.removeEventListener("popstate", closeForRoute);
-    };
-  }, [open]);
-  const closeMenu = () => setOpen(false);
+  const domain = publicFooterDomain(window.location.hostname);
   return (
-    <header className="site-header" ref={headerRef}>
+    <header className="site-header">
       <div className="shell header-inner">
         <Link ariaLabel="Slop home" className="wordmark" href="/">
-          slop.cash
+          <SlopMark size={36} />
+          <span className="wordmark-text">
+            <Wordmark domain={domain} />
+          </span>
         </Link>
-        <button
-          aria-expanded={open}
-          aria-controls="primary-navigation"
-          aria-label={open ? "Close navigation" : "Open navigation"}
-          className="menu-button"
-          onClick={() => setOpen((value) => !value)}
-          ref={menuButtonRef}
-          type="button"
-        >
-          {open ? <X aria-hidden="true" /> : <Menu aria-hidden="true" />}
-        </button>
-        <nav
-          className={open ? "nav-links nav-links-open" : "nav-links"}
-          id="primary-navigation"
-        >
-          <Link href="/#projects" onNavigate={closeMenu}>
-            Projects
-          </Link>
-          <Link href="/#leaderboard" onNavigate={closeMenu}>
-            Leaderboard
-          </Link>
-          <Link href="/how-it-works" onNavigate={closeMenu}>
-            How it works
-          </Link>
-          <Link href="/models" onNavigate={closeMenu}>
-            Models
-          </Link>
-          <Link href="/sponsors" onNavigate={closeMenu}>
-            Sponsors
-          </Link>
-          <Link className="nav-cta" href="/projects/new" onNavigate={closeMenu}>
-            Add a project
-          </Link>
-        </nav>
-        <PointsNav onNavigate={closeMenu} />
+        <PointsNav />
       </div>
     </header>
   );
@@ -420,18 +386,27 @@ function Footer() {
     <footer className="site-footer">
       <div className="shell footer-grid">
         <div className="footer-brand-row">
+          <SlopMark inverse size={104} />
           <div className="wordmark footer-wordmark">{domain}</div>
-          <p className="footer-copyright">
-            © {new Date().getUTCFullYear()} slop.cash.
-          </p>
         </div>
-        <div className="footer-links">
+        <nav className="footer-links" aria-label="Product">
+          <span>Product</span>
           <Link href="/#projects">Projects</Link>
+          <Link href="/#leaderboard">Leaderboard</Link>
           <Link href="/how-it-works">How it works</Link>
           <Link href="/how-it-works#faq">FAQ</Link>
           <Link href="/models">Models</Link>
           <Link href="/sponsors">Sponsors</Link>
           <Link href="/projects/new">Add a project</Link>
+        </nav>
+        <nav className="footer-links footer-records" aria-label="Records">
+          <span>Records</span>
+          <Link href="/receipts">Run receipts</Link>
+          <Link href="/cycles">Cycle archive</Link>
+          <Link href="/how-it-works#verification">Verification</Link>
+        </nav>
+        <nav className="footer-links" aria-label="Community">
+          <span>Community</span>
           <ExternalLinkAnchor href={SOURCE_REPOSITORY}>
             GitHub
           </ExternalLinkAnchor>
@@ -443,13 +418,13 @@ function Footer() {
             Telegram
           </ExternalLinkAnchor>
           <a href={CONTACT_MAILTO}>{CONTACT_EMAIL}</a>
-        </div>
-        <nav className="footer-links footer-records" aria-label="Records">
-          <span>Records</span>
-          <Link href="/receipts">Run receipts</Link>
-          <Link href="/cycles">Cycle archive</Link>
-          <Link href="/how-it-works#verification">Verification</Link>
         </nav>
+        <div className="footer-meta">
+          <p className="footer-copyright">
+            © {new Date().getUTCFullYear()} slop.cash.
+          </p>
+          <p>GitHub is the record.</p>
+        </div>
       </div>
     </footer>
   );
@@ -496,10 +471,72 @@ function monthlyPoolCapLabel(reward: ProjectDefinition["reward"]): string {
     .replace(/K$/u, "k");
 }
 
-function ProjectCard({ project }: { project: ProjectDefinition }) {
-  const unfunded =
-    project.reward.kind === "monthly-pool" &&
-    monthlyPoolUnfunded(project.reward);
+function ProjectOwnerAvatar({ project }: { project: ProjectDefinition }) {
+  const repository = project.repositories[0];
+  const owner = (repository?.aliases?.at(-1) ?? repository?.id ?? "").split(
+    "/",
+  )[0];
+  const src = owner
+    ? `https://avatars.githubusercontent.com/${encodeURIComponent(owner)}?size=96`
+    : "";
+  const [failed, setFailed] = useState(false);
+  if (!src || failed) {
+    return (
+      <span aria-hidden="true" className="project-avatar">
+        {project.name.slice(0, 1)}
+      </span>
+    );
+  }
+  return (
+    <img
+      alt=""
+      aria-hidden="true"
+      className="project-avatar"
+      height={56}
+      onError={() => setFailed(true)}
+      src={src}
+      width={56}
+    />
+  );
+}
+
+function ProjectCard({
+  project,
+  funding,
+}: {
+  project: ProjectDefinition;
+  funding: FundingDataState;
+}) {
+  const vaults =
+    project.funding.commitments?.filter(
+      (instrument) =>
+        instrument.kind === "squads-v4-vault" && instrument.replacedAt === null,
+    ) ?? [];
+  const vaultRecords =
+    funding.status === "ready"
+      ? funding.index.commitments.filter(
+          (record) =>
+            record.projectId === project.id &&
+            "vault" in record.instrument &&
+            vaults.some(
+              (vault) =>
+                vault.kind === "squads-v4-vault" &&
+                "vault" in record.instrument &&
+                vault.vault === record.instrument.vault,
+            ),
+        )
+      : [];
+  const vaultBalance =
+    vaults.length === 0
+      ? "Unavailable"
+      : funding.status === "loading"
+        ? "Loading…"
+        : funding.status === "error" ||
+            !vaultRecords.some((record) => record.state === "verified-on-chain")
+          ? "Unavailable"
+          : formatMicroUsdc(
+              commitmentVerifiedNetMinor(vaultRecords).toString(),
+            );
   const amount =
     project.reward.kind === "monthly-pool"
       ? monthlyPoolCapLabel(project.reward)
@@ -508,32 +545,23 @@ function ProjectCard({ project }: { project: ProjectDefinition }) {
   return (
     <Link className="project-card" href={`/projects/${project.slug}`}>
       <div className="project-card-heading">
-        <div>
-          <h3>{project.name}</h3>
-        </div>
+        <ProjectOwnerAvatar project={project} />
+        <h3>{project.name}</h3>
         <ArrowRight aria-hidden="true" />
       </div>
       <div className="project-card-content">
         <p className="project-summary">{project.description}</p>
-        {unfunded ? (
-          <p className="project-bounty project-bounty-unfunded">
-            <strong>{UNFUNDED_POOL_HEADLINE}</strong>
-          </p>
-        ) : (
-          <p className="project-bounty">
-            <strong>{amount}</strong>
-            {project.reward.kind === "monthly-pool" ? <span>/mo</span> : null}
-          </p>
-        )}
-        {project.reward.kind === "monthly-pool" ? (
-          <small className="project-money-state">
-            {unfunded
-              ? `Target ${amount}/mo`
-              : "Committed balance · accessibility unknown · payments disabled"}
-          </small>
-        ) : (
-          <small className="project-money-state">External prize</small>
-        )}
+        <p className="project-bounty">
+          <strong>{amount}</strong>
+          {project.reward.kind === "monthly-pool" ? (
+            <span>/mo target</span>
+          ) : null}
+        </p>
+        <small className="project-money-state">
+          {project.reward.kind === "monthly-pool"
+            ? `Vault: ${vaultBalance}`
+            : "External prize"}
+        </small>
         {project.reward.reviewBudget ? (
           <small className="project-review-budget">
             + {reviewBudgetLabel(project.reward.reviewBudget)}
@@ -541,6 +569,78 @@ function ProjectCard({ project }: { project: ProjectDefinition }) {
         ) : null}
       </div>
     </Link>
+  );
+}
+
+function ProjectRow({ project }: { project: ProjectDefinition }) {
+  const amount =
+    project.reward.kind === "monthly-pool"
+      ? `${monthlyPoolCapLabel(project.reward)}/mo target`
+      : (project.reward.externalOpportunity?.advertisedAmountDisplay ??
+        "External prize");
+  return (
+    <li>
+      <Link className="project-row" href={`/projects/${project.slug}`}>
+        <ProjectOwnerAvatar project={project} />
+        <span className="project-row-name">
+          <strong>{project.name}</strong>
+          <small>{project.description}</small>
+        </span>
+        <span className="project-row-amount">{amount}</span>
+        <ChevronRight aria-hidden="true" />
+      </Link>
+    </li>
+  );
+}
+
+const COMMUNITY_PAGE_SIZE = 10;
+
+function CommunityProjects({ projects }: { projects: ProjectDefinition[] }) {
+  const [page, setPage] = useState(0);
+  if (projects.length === 0) return null;
+  const pages = Math.ceil(projects.length / COMMUNITY_PAGE_SIZE);
+  const current = Math.min(page, pages - 1);
+  const visible = projects.slice(
+    current * COMMUNITY_PAGE_SIZE,
+    (current + 1) * COMMUNITY_PAGE_SIZE,
+  );
+  return (
+    <section
+      className="project-tier community-projects"
+      aria-labelledby="community-projects"
+    >
+      <h3 id="community-projects">Community</h3>
+      <ul className="project-rows">
+        {visible.map((project) => (
+          <ProjectRow key={project.id} project={project} />
+        ))}
+      </ul>
+      {pages > 1 ? (
+        <nav aria-label="Community project pages" className="pagination">
+          <button
+            aria-label="Previous page"
+            className="button secondary-button icon-button"
+            disabled={current === 0}
+            onClick={() => setPage(current - 1)}
+            type="button"
+          >
+            <ArrowLeft aria-hidden="true" />
+          </button>
+          <span>
+            {current + 1} / {pages}
+          </span>
+          <button
+            aria-label="Next page"
+            className="button secondary-button icon-button"
+            disabled={current === pages - 1}
+            onClick={() => setPage(current + 1)}
+            type="button"
+          >
+            <ArrowRight aria-hidden="true" />
+          </button>
+        </nav>
+      ) : null}
+    </section>
   );
 }
 
@@ -589,12 +689,18 @@ function GlobalLeaderboard() {
       className="section shell home-leaderboard-section"
       id="leaderboard"
     >
-      <PointsStandings compact title="Leaderboard" />
+      <PointsStandings compact title="Top sloperators" />
     </section>
   );
 }
 
+function bootstrapAgentPrompt(): string {
+  const origin = window.location.origin.replace(/\/$/u, "");
+  return `Read ${origin}/SKILL.md and follow it.`;
+}
+
 function HomePage() {
+  const funding = useFundingIndex();
   const promotedProjects = homeProjects();
   const featuredProjects = promotedProjects.filter(
     (project) => project.listingTier === "featured",
@@ -609,78 +715,96 @@ function HomePage() {
           <span>MAKE MONEY</span>{" "}
           <span className="hero-action">SHIPPING OPEN SOURCE.</span>
         </h1>
-        <p className="hero-copy">
-          Ship useful work with any agent. Maintainers review it on GitHub;
-          project owners approve rewards.
-        </p>
-        <div className="hero-actions">
-          <Link className="button primary-button" href="/#projects">
-            Explore projects <ArrowRight aria-hidden="true" />
-          </Link>
-          <Link className="button secondary-button" href="/sponsors">
-            Fund a project
-          </Link>
-        </div>
+        <p className="hero-copy">Paste this into your coding agent.</p>
+        <AgentPromptBox openIn prompt={bootstrapAgentPrompt()} />
       </section>
 
       <section className="section shell home-projects-section" id="projects">
         <div className="home-section-heading">
-          <div>
-            <h2 className="home-section-title">Projects</h2>
-          </div>
+          <h2 className="home-section-title">Projects</h2>
+          <Link className="button primary-button" href="/projects/new">
+            <Plus aria-hidden="true" /> Add a project
+          </Link>
         </div>
         <section className="project-tier" aria-labelledby="featured-projects">
           <h3 id="featured-projects">Featured</h3>
           <div className="project-grid">
             {featuredProjects.map((project) => (
-              <ProjectCard key={project.id} project={project} />
+              <ProjectCard
+                key={project.id}
+                project={project}
+                funding={funding}
+              />
             ))}
           </div>
         </section>
-        {communityProjects.length > 0 ? (
-          <details className="project-tier community-projects">
-            <summary>Community projects</summary>
-            <div className="project-grid">
-              {communityProjects.map((project) => (
-                <ProjectCard key={project.id} project={project} />
-              ))}
-            </div>
-          </details>
-        ) : null}
+        <CommunityProjects projects={communityProjects} />
       </section>
-      <GlobalLeaderboard />
       <section className="how-section" id="how-it-works">
         <div className="shell">
-          <div className="home-section-heading inverse-heading">
-            <div>
-              <h2 className="home-section-title">How it works</h2>
-            </div>
+          <div className="home-section-heading">
+            <h2 className="home-section-title">How it works</h2>
+            <Link className="button secondary-button" href="/how-it-works">
+              Scores and rewards <ArrowRight aria-hidden="true" />
+            </Link>
           </div>
-          <div className="how-grid">
+          <div className="how-tracks">
             <article>
-              <h3>Choose work.</h3>
-              <p>Read the project terms and choose unblocked work on GitHub.</p>
+              <h3>Contributors</h3>
+              <ol className="how-steps">
+                <li>
+                  <Terminal aria-hidden="true" />
+                  <span>
+                    <strong>Paste the skill.</strong> Your agent reads the
+                    project terms and picks unblocked work on GitHub.
+                  </span>
+                </li>
+                <li>
+                  <GitPullRequest aria-hidden="true" />
+                  <span>
+                    <strong>Ship a PR.</strong> The skill tests the change and
+                    prepares the evidence.
+                  </span>
+                </li>
+                <li>
+                  <BadgeCheck aria-hidden="true" />
+                  <span>
+                    <strong>Get merged.</strong> Accepted work raises your Slop
+                    Score. Owners approve rewards.
+                  </span>
+                </li>
+              </ol>
             </article>
             <article>
-              <h3>Submit a PR.</h3>
-              <p>
-                Use the project skill to guide your agent through testing and
-                submission.
-              </p>
-            </article>
-            <article>
-              <h3>Get reviewed.</h3>
-              <p>
-                Maintainers review your PR. Track accepted work, scores, and
-                payments on Slop.
-              </p>
+              <h3>Maintainers</h3>
+              <ol className="how-steps">
+                <li>
+                  <FolderGit2 aria-hidden="true" />
+                  <span>
+                    <strong>Add your repo.</strong> Draft the manifest and the
+                    agent brief, then open the PR on GitHub.
+                  </span>
+                </li>
+                <li>
+                  <Coins aria-hidden="true" />
+                  <span>
+                    <strong>Set a monthly pool.</strong> Fund it through a
+                    reviewed third-party instrument.
+                  </span>
+                </li>
+                <li>
+                  <ShieldCheck aria-hidden="true" />
+                  <span>
+                    <strong>Review on GitHub.</strong> You merge the work. You
+                    approve each payout.
+                  </span>
+                </li>
+              </ol>
             </article>
           </div>
-          <Link className="how-details-link" href="/how-it-works">
-            How scores and rewards work <ArrowRight aria-hidden="true" />
-          </Link>
         </div>
       </section>
+      <GlobalLeaderboard />
     </main>
   );
 }
@@ -699,7 +823,19 @@ function projectAgentPrompt(project: ProjectDefinition): string {
   return `Read ${origin}/SKILL.md and follow it to contribute to github.com/${repository}.`;
 }
 
-function AgentPromptBox({ prompt }: { prompt: string }) {
+const AGENT_DEEP_LINKS = [
+  { name: "Cursor", href: "https://cursor.com/link/prompt?text=" },
+  { name: "ChatGPT", href: "https://chatgpt.com/?q=" },
+  { name: "Claude", href: "https://claude.ai/new?q=" },
+] as const;
+
+function AgentPromptBox({
+  prompt,
+  openIn = false,
+}: {
+  prompt: string;
+  openIn?: boolean;
+}) {
   const [copy, setCopy] = useState<"copied" | "error" | "idle">("idle");
   useEffect(() => {
     if (copy !== "copied") return;
@@ -715,7 +851,7 @@ function AgentPromptBox({ prompt }: { prompt: string }) {
       setCopy("error");
     }
   };
-  return (
+  const box = (
     <div className="command-box agent-prompt-box">
       <output aria-label="Agent prompt" className="agent-prompt-copy">
         <code>
@@ -737,6 +873,11 @@ function AgentPromptBox({ prompt }: { prompt: string }) {
               ? "Copy unavailable; select agent prompt"
               : "Copy agent prompt"
         }
+        className={
+          copy === "copied"
+            ? "button primary-button agent-prompt-copied"
+            : "button primary-button"
+        }
         onClick={() => void copyPrompt()}
         type="button"
       >
@@ -749,6 +890,25 @@ function AgentPromptBox({ prompt }: { prompt: string }) {
               : "Copy"}
         </span>
       </button>
+    </div>
+  );
+  if (!openIn) return box;
+  return (
+    <div className="agent-prompt">
+      {box}
+      <p className="agent-open-in">
+        <span>Open in</span>
+        {AGENT_DEEP_LINKS.map((agent) => (
+          <ExternalLinkAnchor
+            href={`${agent.href}${encodeURIComponent(prompt)}`}
+            key={agent.name}
+            onClick={() => void copyText(prompt).catch(() => undefined)}
+          >
+            {agent.name}
+          </ExternalLinkAnchor>
+        ))}
+        <span>or any desktop agent</span>
+      </p>
     </div>
   );
 }
@@ -1199,6 +1359,7 @@ export function ProjectFunding({ project }: { project: ProjectDefinition }) {
     key: string;
     status: "copied" | "error";
   } | null>(null);
+  if (project.escrow) return <EscrowFunding project={project} />;
   const now = Date.now();
   const activeRoutes = project.funding.addresses.filter(
     (route) =>
@@ -2025,21 +2186,21 @@ function ProfilePage({
     (total, match) => total + match.leader.acceptedOutcomeCount,
     0,
   );
-  const projected = matches.reduce(
-    (total, match) => total + BigInt(match.leader.projectedMinor ?? "0"),
+  const simulated = matches.reduce(
+    (total, match) => total + BigInt(match.leader.simulatedMinor ?? "0"),
     0n,
   );
-  // Name the UTC cycle behind the projection and whether money backs it.
+  // Keep the cap-based estimate separate from funding and approved awards.
   const cycleId = (matches[0]?.view ?? state.views[0])?.cycle.id;
   const monthlyPools = (
     matches.length > 0 ? matches.map(({ view }) => view) : state.views
   ).filter((view) => view.project.reward.kind === "monthly-pool");
-  const projectedUnfunded =
+  const simulatedUnfunded =
     monthlyPools.length > 0 &&
     monthlyPools.every((view) => monthlyPoolUnfunded(view.project.reward));
-  const projectedLabel = `${
+  const simulatedLabel = `${
     cycleId ? formatCycleMonth(cycleId) : "monthly"
-  } projected${projectedUnfunded ? ", unfunded" : ""}`;
+  } simulated estimate${simulatedUnfunded ? ", unfunded" : ""}`;
   const paid = history.reduce(
     (total, { contributor }) => total + BigInt(contributor.paidMinor),
     0n,
@@ -2102,14 +2263,18 @@ function ProfilePage({
           <span>accepted this month</span>
         </div>
         <div>
-          <strong>{formatMicroUsdc(projected.toString())}</strong>
-          <span>{projectedLabel}</span>
+          <strong>{formatMicroUsdc(simulated.toString())}</strong>
+          <span>{simulatedLabel}</span>
         </div>
         <div>
           <strong>{formatMicroUsdc(paid.toString())}</strong>
           <span>paid</span>
         </div>
       </div>
+      <p>
+        This estimate uses project budget targets. It is not an approved payout.
+        The 14-day review applies to monthly proposals, not this estimate.
+      </p>
       <section className="section profile-section">
         <div className="profile-section-heading">
           <h2>Projects</h2>
@@ -4630,6 +4795,7 @@ function AppContent() {
     "home",
     "points",
     "login",
+    "earnings",
     "how-it-works",
     "new-project",
     "wallet",
@@ -4643,6 +4809,7 @@ function AppContent() {
   if (route.kind === "home") content = <HomePage />;
   else if (route.kind === "points") content = <PointsPage />;
   else if (route.kind === "login") content = <LoginPage />;
+  else if (route.kind === "earnings") content = <EarningsPage />;
   else if (route.kind === "how-it-works") content = <HowItWorksPage />;
   else if (route.kind === "sponsors")
     content = <SponsorsPage retry={retry} state={state} />;

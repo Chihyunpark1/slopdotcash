@@ -13,7 +13,10 @@ import {
   assertLeaderboardSnapshot,
   type LeaderboardSnapshot,
 } from "../../src/lib/leaderboard";
-import { createProjectView } from "../../src/lib/project-view";
+import {
+  createProjectView,
+  projectCycleHasOpened,
+} from "../../src/lib/project-view";
 import { PROJECTS } from "../../src/lib/projects.mjs";
 
 const test = base.extend<{ browserDiagnostics: undefined }>({
@@ -223,25 +226,26 @@ test("discovers projects and one points-ranked homepage leaderboard", async ({
   await expect(
     page.getByRole("heading", { exact: true, name: "Featured" }),
   ).toBeVisible();
-  const community = page.locator("details.community-projects");
+  const community = page.locator("section.community-projects");
   const eligibleCommunity = homeProjects().filter(
     (project) => project.listingTier === "community",
   );
   if (eligibleCommunity.length === 0) {
     await expect(community).toHaveCount(0);
   } else {
-    await expect(community).not.toHaveAttribute("open", "");
-    await expect(community.locator("a.project-card")).toHaveCount(
-      eligibleCommunity.length,
-    );
-    for (const card of await community.locator("a.project-card").all())
-      await expect(card).toBeHidden();
-    await community.locator("summary").focus();
-    await page.keyboard.press("Enter");
-    for (const project of eligibleCommunity)
-      await expect(
-        community.locator(`a.project-card[href="/projects/${project.id}"]`),
-      ).toBeVisible();
+    // Community projects list ten per page; every page stays reachable.
+    const pages = Math.ceil(eligibleCommunity.length / 10);
+    for (let index = 0; index < pages; index += 1) {
+      for (const project of eligibleCommunity.slice(
+        index * 10,
+        (index + 1) * 10,
+      ))
+        await expect(
+          community.locator(`a.project-row[href="/projects/${project.id}"]`),
+        ).toBeVisible();
+      if (index < pages - 1)
+        await community.getByRole("button", { name: "Next page" }).click();
+    }
   }
   for (const project of PROJECTS.filter(
     (project) => project.status === "paused",
@@ -256,12 +260,13 @@ test("discovers projects and one points-ranked homepage leaderboard", async ({
   const elizaCard = page.locator('a.project-card[href="/projects/eliza"]');
   await expect(
     elizaCard.getByText("Not funded yet", { exact: true }),
-  ).toBeVisible();
-  await expect(elizaCard.getByText("$5k", { exact: true })).toHaveCount(0);
+  ).toHaveCount(0);
+  await expect(elizaCard.getByText("$5k", { exact: true })).toBeVisible();
   await expect(
-    elizaCard.getByText("Target $5k/mo", {
-      exact: true,
-    }),
+    elizaCard.getByText("/mo target", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    elizaCard.getByText("Vault: Unavailable", { exact: true }),
   ).toBeVisible();
   await expect(elizaCard.getByText("$5,000", { exact: true })).toHaveCount(0);
   await expect(
@@ -289,9 +294,13 @@ test("discovers projects and one points-ranked homepage leaderboard", async ({
   expect(gridBox).not.toBeNull();
   expect(elizaBox).not.toBeNull();
   expect(deltaBox).not.toBeNull();
-  expect(elizaBox?.width).toBeGreaterThan((gridBox?.width ?? 0) - 2);
-  expect(deltaBox?.width).toBeGreaterThan((gridBox?.width ?? 0) - 2);
-  expect(deltaBox?.y).toBeGreaterThan((elizaBox?.y ?? 0) + 1);
+  // Featured cards share the grid and never spill past it.
+  for (const box of [elizaBox, deltaBox]) {
+    expect(box?.x ?? 0).toBeGreaterThanOrEqual((gridBox?.x ?? 0) - 1);
+    expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(
+      (gridBox?.x ?? 0) + (gridBox?.width ?? 0) + 1,
+    );
+  }
   await expect(page.getByText("Public beta.")).toHaveCount(0);
   await expect(
     page.getByText(/Rankings are live. Payouts are off/u),
@@ -299,14 +308,18 @@ test("discovers projects and one points-ranked homepage leaderboard", async ({
   await expect(
     page.getByRole("heading", { name: "Contribute to Eliza." }),
   ).toHaveCount(0);
-  await expect(page.getByRole("status", { name: "Agent prompt" })).toHaveCount(
-    0,
+  await expect(page.getByRole("status", { name: "Agent prompt" })).toHaveText(
+    `Read ${new URL(page.url()).origin}/SKILL.md and follow it.`,
   );
+  for (const agent of ["Cursor", "ChatGPT", "Claude"])
+    await expect(
+      page.getByRole("link", { name: agent, exact: true }),
+    ).toHaveAttribute("target", "_blank");
   await expect(
-    page.getByRole("heading", { name: "Leaderboard" }),
+    page.getByRole("heading", { name: "Top sloperators" }),
   ).toBeVisible();
   const leaderboard = page.getByRole("region", {
-    name: "Leaderboard",
+    name: "Top sloperators",
     exact: true,
   });
   await expect(leaderboard.getByRole("table")).toBeVisible();
@@ -344,11 +357,12 @@ test("discovers projects and one points-ranked homepage leaderboard", async ({
     "SHIPPING OPEN SOURCE.",
   );
   await expect(
-    page.getByRole("link", { name: "Fund a project", exact: true }),
-  ).toHaveAttribute("href", "/sponsors");
-  const menuButton = page.getByRole("button", { name: "Open navigation" });
-  if (await menuButton.isVisible()) await menuButton.click();
-  await page.getByRole("link", { name: "Leaderboard" }).click();
+    page.locator("#projects").getByRole("link", { name: "Add a project" }),
+  ).toHaveAttribute("href", "/projects/new");
+  await page
+    .locator(".site-footer")
+    .getByRole("link", { name: "Leaderboard" })
+    .click();
   await expect(page).toHaveURL(/\/#leaderboard$/u);
   await expect
     .poll(() =>
@@ -381,19 +395,11 @@ test("starts Eliza with one prompt and no separate payout form", async ({
   const homeLink = page.getByRole("link", { name: "Slop home", exact: true });
   await expect(homeLink).toBeVisible();
   await expect(homeLink).toHaveAttribute("href", "/");
-  const projectLink = page.locator("#primary-navigation").getByRole("link", {
+  const projectLink = page.locator(".site-footer").getByRole("link", {
     name: "Projects",
     exact: true,
   });
-  if (await page.getByRole("button", { name: "Open navigation" }).isVisible()) {
-    await page.getByRole("button", { name: "Open navigation" }).click();
-    await expect(projectLink).toBeVisible();
-    await expect(projectLink).toHaveAttribute("href", "/#projects");
-    await page.getByRole("button", { name: "Close navigation" }).click();
-  } else {
-    await expect(projectLink).toBeVisible();
-    await expect(projectLink).toHaveAttribute("href", "/#projects");
-  }
+  await expect(projectLink).toHaveAttribute("href", "/#projects");
   await expect(
     page.getByRole("heading", { name: "Make money building agents." }),
   ).toBeVisible();
@@ -608,7 +614,37 @@ test("renders contributor and cycle records from validated public data", async (
       .getByText("recorded score", { exact: true }),
   ).toBeVisible();
   await expect(
-    page.locator(".profile-totals").getByText(/^[A-Z][a-z]+ \d{4} projected/u),
+    page
+      .locator(".profile-totals")
+      .getByText(/^[A-Z][a-z]+ \d{4} simulated estimate/u),
+  ).toBeVisible();
+  const simulated = PROJECTS.reduce((total, project) => {
+    if (
+      !projectCycleHasOpened(snapshot, project.id) ||
+      !project.repositories.every((repository) =>
+        snapshot.repositories.some(
+          (collected) => collected.id === repository.id,
+        ),
+      )
+    )
+      return total;
+    const view = createProjectView(snapshot, project.id);
+    const leader = view.leaders.find((entry) => entry.actor.id === actor.id);
+    return total + BigInt(leader?.simulatedMinor ?? "0");
+  }, 0n);
+  const estimate = page.locator(".profile-totals > div").filter({
+    hasText: /simulated estimate/u,
+  });
+  await expect(estimate.locator("strong")).toHaveText(
+    new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+      minimumFractionDigits: simulated % 1_000_000n === 0n ? 0 : 2,
+      maximumFractionDigits: 2,
+    }).format(Number(simulated) / 1_000_000),
+  );
+  await expect(
+    page.getByText(/14-day review applies to monthly proposals/u),
   ).toBeVisible();
   await expect(page.getByRole("heading", { name: "Progress" })).toHaveCount(0);
   const acceptedRecordCount = snapshot.ledger.filter(
@@ -768,9 +804,7 @@ test("creates a valid GitHub-native project handoff", async ({
     .getByLabel("Acceptance criteria")
     .fill("Accepted pull requests with verified tests.");
   await page.getByLabel("Maximum monthly pool, digital dollars").fill("2500");
-  await page
-    .getByLabel("Project-controlled Solana USDC address (optional)")
-    .fill("11111111111111111111111111111111");
+  await page.getByLabel(/Payout network/).selectOption("solana");
 
   const handoff = page.getByRole("link", { name: /Continue on GitHub/u });
   await expect(handoff).toHaveAttribute(

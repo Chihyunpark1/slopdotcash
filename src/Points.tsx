@@ -1,3 +1,4 @@
+import { ChevronDown } from "lucide-react";
 import {
   createContext,
   type ReactNode,
@@ -8,6 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { identityPublicOrigin } from "../workers/identity/contracts";
 import { readBoundedJson, readBoundedText } from "./lib/browser-json";
 import type { CycleIndex } from "./lib/cycle-index";
 import {
@@ -231,6 +233,10 @@ export function PointsNav({ onNavigate }: { onNavigate?: () => void }) {
         me.welcome +
         (me.socialPoints ?? 0)
       : null;
+  const signedIn = me !== null;
+  useEffect(() => {
+    if (signedIn) requestPoints();
+  }, [signedIn, requestPoints]);
   const navigate = () => {
     setOpen(false);
     onNavigate?.();
@@ -299,6 +305,10 @@ export function PointsNav({ onNavigate }: { onNavigate?: () => void }) {
             onError={() => setFailedImage(avatar)}
           />
         )}
+        {total !== null ? (
+          <span className="account-points">{total.toLocaleString()} pts</span>
+        ) : null}
+        <ChevronDown aria-hidden="true" className="account-chevron" />
       </button>
       {open ? (
         <section
@@ -326,6 +336,9 @@ export function PointsNav({ onNavigate }: { onNavigate?: () => void }) {
             onClick={navigate}
           >
             View profile
+          </a>
+          <a href="/earnings" onClick={navigate}>
+            Earnings and wallets
           </a>
           <a href="/points" onClick={navigate}>
             Account settings
@@ -562,15 +575,20 @@ function JoinPoints({
     );
     if (popup) popup.opener = null;
     try {
-      const flow = (await requestJson(
-        "https://identity.slop.cash/v1/oauth/start",
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ audience: "slop-points-web" }),
-          signal: c.signal,
-        },
-      )) as {
+      const identityOrigin = identityPublicOrigin(
+        [
+          "https://staging.slop.cash",
+          "https://slop-staging.pages.dev",
+        ].includes(window.location.origin)
+          ? import.meta.env.VITE_IDENTITY_PUBLIC_ORIGIN
+          : undefined,
+      );
+      const flow = (await requestJson(`${identityOrigin}/v1/oauth/start`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ audience: "slop-points-web" }),
+        signal: c.signal,
+      })) as {
         authorizationUrl: string;
         flowId: string;
         pollCapability: string;
@@ -578,7 +596,7 @@ function JoinPoints({
       };
       const url = new URL(flow.authorizationUrl);
       if (
-        url.origin !== "https://identity.slop.cash" ||
+        url.origin !== identityOrigin ||
         url.pathname !== "/v1/oauth/authorize" ||
         !/^flow_[A-Za-z0-9_-]{20,64}$/.test(flow.flowId) ||
         !/^[A-Za-z0-9_-]{40,128}$/.test(flow.pollCapability) ||
@@ -599,19 +617,16 @@ function JoinPoints({
           }
           c.signal.addEventListener("abort", abort, { once: true });
         });
-        const response = await fetch(
-          "https://identity.slop.cash/v1/oauth/poll",
-          {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              audience: "slop-points-web",
-              flowId: flow.flowId,
-              pollCapability: flow.pollCapability,
-            }),
-            signal: c.signal,
-          },
-        );
+        const response = await fetch(`${identityOrigin}/v1/oauth/poll`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            audience: "slop-points-web",
+            flowId: flow.flowId,
+            pollCapability: flow.pollCapability,
+          }),
+          signal: c.signal,
+        });
         if (response.status === 202) continue;
         if (!response.ok)
           throw new Error("Sign-in expired. Please start again.");
@@ -631,7 +646,10 @@ function JoinPoints({
         setMe(signedIn);
         if (redirectToProfile)
           window.location.assign(
-            `/contributors/${encodeURIComponent(signedIn.actor.login)}`,
+            new URLSearchParams(window.location.search).get("next") ===
+              "earnings"
+              ? "/earnings"
+              : `/contributors/${encodeURIComponent(signedIn.actor.login)}`,
           );
         setMessage("You’re signed in. Your welcome points are recorded.");
         return;
@@ -924,15 +942,28 @@ export function PointsStandings({
                   .slice(currentPage * pageSize, (currentPage + 1) * pageSize)
                   .map((m) => (
                     <tr key={m.actor.id}>
-                      <td>{ranks.get(m.actor.id)}</td>
+                      <td className="points-rank">{ranks.get(m.actor.id)}</td>
                       <td>
                         <a
+                          className="points-person"
                           href={`/contributors/${encodeURIComponent(m.actor.login)}`}
                         >
+                          <img
+                            alt=""
+                            height={40}
+                            loading="lazy"
+                            onError={(event) => {
+                              event.currentTarget.hidden = true;
+                            }}
+                            src={`https://avatars.githubusercontent.com/${encodeURIComponent(m.actor.login)}?size=80`}
+                            width={40}
+                          />
                           {m.actor.login}
                         </a>
                       </td>
-                      <td>{metric(m).toLocaleString()} pts</td>
+                      <td className="points-value">
+                        {metric(m).toLocaleString()} pts
+                      </td>
                     </tr>
                   ))}
               </tbody>
@@ -941,7 +972,7 @@ export function PointsStandings({
           {rows.length === 0 ? (
             <p>No recorded contributions match this view.</p>
           ) : null}
-          <div className="points-controls">
+          <div className="points-controls points-pagination">
             <button
               type="button"
               disabled={currentPage === 0}
