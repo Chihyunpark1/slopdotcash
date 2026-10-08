@@ -36,16 +36,12 @@ import { Link, useInitialHashScroll } from "./Link";
 import { SlopMark, Wordmark } from "./Logo";
 import {
   allocationFundingMinor,
-  deriveAllocationFundingBasis,
   type PromotionCycle,
   projectPromotionEligible,
 } from "./lib/allocation-funding";
 import { CONTACT_EMAIL, CONTACT_MAILTO } from "./lib/contact";
 import { copyText } from "./lib/copy-text";
-import {
-  currentProjectFundingRecords,
-  projectFundingTotals,
-} from "./lib/funding";
+import { currentProjectFundingRecords } from "./lib/funding";
 import { commitmentVerifiedNetMinor } from "./lib/funding-commitment";
 import { homeProjects } from "./lib/home-projects";
 import { createInstallCommand } from "./lib/install-command";
@@ -59,7 +55,6 @@ import {
   PROJECTS,
   type ProjectDefinition,
 } from "./lib/projects.mjs";
-import { feeForPrincipal, PLATFORM_FEE_BASIS_POINTS } from "./lib/rewards";
 import {
   type PublicSignerReport,
   publicSignerStatus,
@@ -120,6 +115,11 @@ export {
 export { readBoundedJson } from "./lib/browser-json";
 
 const ProjectProposalPage = lazy(() => import("./ProjectProposalPage"));
+const ProjectUpdatePage = lazy(() =>
+  import("./ProjectProposalPage").then((module) => ({
+    default: module.ProjectUpdatePage,
+  })),
+);
 
 const FundingReview = lazy(() =>
   import("./FundingReview").then((module) => ({
@@ -891,7 +891,9 @@ function ProjectPaymentHistory({
     <section className="section payment-history">
       <div className="simple-heading">
         <h2>Payment history</h2>
-        <Link href={`/projects/${project.slug}/funding`}>Manage payouts</Link>
+        <Link href={`/projects/${project.slug}/funding#payouts`}>
+          Manage payouts
+        </Link>
         <Link href={`/projects/${project.slug}/manage`}>
           Draft a project update
         </Link>
@@ -1169,6 +1171,29 @@ export function SignerReports({
   );
 }
 
+type FundingView = "records" | "payouts";
+const FUNDING_VIEWS: { id: FundingView; label: string }[] = [
+  { id: "records", label: "Funding records" },
+  { id: "payouts", label: "Manage payouts" },
+];
+const FUNDING_RECORD_GROUPS = [
+  { state: "verified-on-chain", title: "Verified on-chain" },
+  { state: "self-reported", title: "Self-reported" },
+  { state: "disputed", title: "Disputed" },
+] as const;
+
+function fundingViewFromHash(): FundingView {
+  return window.location.hash === "#payouts" ? "payouts" : "records";
+}
+
+function fundingStateLabel(project: ProjectDefinition): string {
+  if (project.reward.kind === "external-prize-share")
+    return "External prize, not held by Slop";
+  return project.reward.fundingState === "committed"
+    ? "Committed"
+    : "Pledged, not committed";
+}
+
 function ProjectFundingPage({
   project,
   state,
@@ -1177,6 +1202,24 @@ function ProjectFundingPage({
   state: DataState;
 }) {
   const funding = useFundingIndex();
+  const [view, setView] = useState<FundingView>(fundingViewFromHash);
+  useEffect(() => {
+    const sync = () => setView(fundingViewFromHash());
+    window.addEventListener("hashchange", sync);
+    window.addEventListener("popstate", sync);
+    return () => {
+      window.removeEventListener("hashchange", sync);
+      window.removeEventListener("popstate", sync);
+    };
+  }, []);
+  const select = (next: FundingView) => {
+    setView(next);
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `${window.location.pathname}${window.location.search}${next === "payouts" ? "#payouts" : ""}`,
+    );
+  };
   const records =
     funding.status === "ready"
       ? currentProjectFundingRecords(
@@ -1185,116 +1228,232 @@ function ProjectFundingPage({
           ),
         )
       : [];
-  const totals = projectFundingTotals(records);
+  const now = Date.now();
+  const activeAddresses = project.funding.addresses.filter(
+    (route) =>
+      Date.parse(route.effectiveAt) <= now &&
+      (route.replacedAt === null || now < Date.parse(route.replacedAt)),
+  );
+  const projectVaults = (project.funding.commitments ?? []).filter(
+    (instrument) =>
+      instrument.kind === "squads-project-vault" &&
+      instrument.replacedAt === null,
+  );
+  const signerReports =
+    funding.status === "ready"
+      ? (funding.index.signerReports ?? []).filter(
+          (report) => report.projectId === project.id,
+        )
+      : [];
   return (
     <main className="shell route-main funding-page">
       <p className="breadcrumb">
         <Link href={`/projects/${project.slug}`}>{project.name}</Link>
         <span>/</span>Funding
       </p>
-      <section className="simple-heading">
-        <div>
-          <h1>Project funding</h1>
+      <h1>{project.name} funding</h1>
+      <div aria-label="Funding views" className="funding-tabs" role="tablist">
+        {FUNDING_VIEWS.map((option, index) => (
+          <button
+            aria-controls={`funding-panel-${option.id}`}
+            aria-selected={view === option.id}
+            id={`funding-tab-${option.id}`}
+            key={option.id}
+            onClick={() => select(option.id)}
+            onKeyDown={(event) => {
+              const next =
+                event.key === "ArrowRight" || event.key === "ArrowLeft"
+                  ? FUNDING_VIEWS[(index + 1) % FUNDING_VIEWS.length]
+                  : event.key === "Home"
+                    ? FUNDING_VIEWS[0]
+                    : event.key === "End"
+                      ? FUNDING_VIEWS[FUNDING_VIEWS.length - 1]
+                      : null;
+              if (!next) return;
+              event.preventDefault();
+              select(next.id);
+              document.getElementById(`funding-tab-${next.id}`)?.focus();
+            }}
+            role="tab"
+            tabIndex={view === option.id ? 0 : -1}
+            type="button"
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+      {view === "records" ? (
+        <section
+          aria-labelledby="funding-tab-records"
+          className="funding-records"
+          id="funding-panel-records"
+          role="tabpanel"
+        >
+          <dl className="funding-status-grid">
+            <div>
+              <dt>
+                {project.reward.kind === "monthly-pool"
+                  ? "Monthly target"
+                  : "Advertised prize"}
+              </dt>
+              <dd>
+                {project.reward.kind === "monthly-pool"
+                  ? project.reward.monthlyCapDisplay
+                  : (project.reward.externalOpportunity
+                      ?.advertisedAmountDisplay ?? "External")}
+              </dd>
+            </div>
+            <div>
+              <dt>Funding</dt>
+              <dd>{fundingStateLabel(project)}</dd>
+            </div>
+            <div>
+              <dt>Committed</dt>
+              <dd>{formatMicroUsdc(project.reward.committedMinor)}</dd>
+            </div>
+            <div>
+              <dt>Payments</dt>
+              <dd>
+                {project.reward.paymentMode === "enabled"
+                  ? "Enabled"
+                  : "Disabled"}
+              </dd>
+            </div>
+            <div>
+              <dt>Project vault</dt>
+              <dd>
+                {project.escrow?.deployments.length || projectVaults.length
+                  ? "Reviewed deployment published"
+                  : "Not deployed"}
+              </dd>
+            </div>
+            <div>
+              <dt>Direct addresses</dt>
+              <dd>
+                {activeAddresses.length === 0
+                  ? "None published"
+                  : `${activeAddresses.length} published`}
+              </dd>
+            </div>
+          </dl>
           <p>{project.funding.disclosure}</p>
-        </div>
-      </section>
-      <Suspense fallback={<p role="status">Loading funding review…</p>}>
-        <FundingReview
-          key={project.id}
-          project={project}
-          sourceRepositoryUrl={SOURCE_REPOSITORY}
-          cycleIndex={state.status === "ready" ? state.cycleIndex : null}
-          funding={funding.status === "ready" ? funding.index : null}
-        />
-      </Suspense>
-      <h2>Funding records</h2>
-      <p>
-        Verified and self-reported amounts are always shown separately. A GitHub
-        login or submitted transaction ID does not prove wallet ownership or
-        payment.
-      </p>
-      <p>
-        On-chain balance does not establish signer capability or payout
-        availability. Published signer reports do not activate payments;
-        settlement and funding safeguards must also be satisfied.
-      </p>
-      {funding.status === "ready" &&
-        funding.index.signerReports?.some(
-          (r) => r.projectId === project.id,
-        ) && (
-          <SignerReports
-            reports={funding.index.signerReports.filter(
-              (r) => r.projectId === project.id,
-            )}
-          />
-        )}
-      {funding.status === "loading" ? (
-        <div className="data-notice" role="status">
-          <span className="pulse" /> Reading funding records…
-        </div>
-      ) : funding.status === "error" ? (
-        <div className="data-notice data-error" role="alert">
-          <CircleAlert aria-hidden="true" size={18} />
-          Funding records unavailable: {funding.message}
-        </div>
-      ) : records.length === 0 ? (
-        <EmptyState text="No reviewed public funding transactions have been published yet." />
+          {funding.status === "loading" ? (
+            <div className="data-notice" role="status">
+              <span className="pulse" /> Reading funding records…
+            </div>
+          ) : funding.status === "error" ? (
+            <div className="data-notice data-error" role="alert">
+              <CircleAlert aria-hidden="true" size={18} />
+              Funding records unavailable: {funding.message}
+            </div>
+          ) : records.length === 0 ? (
+            <EmptyState text="No reviewed public funding transactions have been published yet." />
+          ) : (
+            FUNDING_RECORD_GROUPS.map((group) => {
+              const groupRecords = records.filter(
+                (record) => record.state === group.state,
+              );
+              if (groupRecords.length === 0 && group.state === "disputed")
+                return null;
+              const assets = [
+                ...new Set(groupRecords.map((record) => record.asset)),
+              ];
+              return (
+                <section
+                  aria-labelledby={`funding-${group.state}`}
+                  className="funding-record-group"
+                  key={group.state}
+                >
+                  <h2 id={`funding-${group.state}`}>{group.title}</h2>
+                  {groupRecords.length === 0 ? (
+                    <p>No records.</p>
+                  ) : (
+                    <>
+                      <p className="money-summary">
+                        {assets.map((asset) => (
+                          <strong key={asset}>
+                            {formatFundingAmount(
+                              asset,
+                              groupRecords
+                                .filter((record) => record.asset === asset)
+                                .reduce(
+                                  (sum, record) =>
+                                    sum + BigInt(record.amountMinor),
+                                  0n,
+                                )
+                                .toString(),
+                            )}
+                          </strong>
+                        ))}
+                      </p>
+                      <div className="plain-table-wrap">
+                        <table className="plain-table">
+                          <caption className="visually-hidden">
+                            {project.name} {group.title.toLowerCase()} funding
+                            transactions
+                          </caption>
+                          <thead>
+                            <tr>
+                              <th scope="col">Transaction</th>
+                              <th scope="col">Amount</th>
+                              <th scope="col">Attribution</th>
+                              <th scope="col">Network</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {groupRecords.map((record) => (
+                              <tr key={record.recordId}>
+                                <th scope="row">
+                                  <ExternalLinkAnchor
+                                    href={fundingTransactionExplorer(record)}
+                                  >
+                                    {record.transactionId.slice(0, 12)}…
+                                  </ExternalLinkAnchor>
+                                </th>
+                                <td>{formatFundingMinor(record)}</td>
+                                <td>
+                                  {record.donor.attribution === "github"
+                                    ? `@${record.donor.login}`
+                                    : "Anonymous"}
+                                </td>
+                                <td>{record.network}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  )}
+                </section>
+              );
+            })
+          )}
+          {signerReports.length > 0 ? (
+            <SignerReports reports={signerReports} />
+          ) : null}
+          <p className="funding-records-note">
+            A GitHub login or a submitted transaction ID does not prove wallet
+            ownership or payment. A balance does not prove signer capability.
+            Monthly payout states are in the{" "}
+            <Link href="/cycles">cycle archive</Link>.
+          </p>
+        </section>
       ) : (
-        <>
-          {totals.map((assetTotals) => (
-            <p className="money-summary" key={assetTotals.asset}>
-              <strong>
-                {formatFundingAmount(
-                  assetTotals.asset,
-                  assetTotals.verifiedMinor,
-                )}{" "}
-                verified on-chain
-              </strong>
-              <span>
-                {formatFundingAmount(
-                  assetTotals.asset,
-                  assetTotals.selfReportedMinor,
-                )}{" "}
-                self-reported
-              </span>
-            </p>
-          ))}
-          <div className="plain-table-wrap">
-            <table className="plain-table">
-              <caption className="visually-hidden">
-                {project.name} funding transactions
-              </caption>
-              <thead>
-                <tr>
-                  <th scope="col">Transaction</th>
-                  <th scope="col">Amount</th>
-                  <th scope="col">Attribution</th>
-                  <th scope="col">State</th>
-                </tr>
-              </thead>
-              <tbody>
-                {records.map((record) => (
-                  <tr key={record.recordId}>
-                    <th scope="row">
-                      <ExternalLinkAnchor
-                        href={fundingTransactionExplorer(record)}
-                      >
-                        {record.transactionId.slice(0, 12)}…
-                      </ExternalLinkAnchor>
-                    </th>
-                    <td>{formatFundingMinor(record)}</td>
-                    <td>
-                      {record.donor.attribution === "github"
-                        ? `@${record.donor.login}`
-                        : "Anonymous"}
-                    </td>
-                    <td>{record.state.replaceAll("-", " ")}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
+        <section
+          aria-labelledby="funding-tab-payouts"
+          id="funding-panel-payouts"
+          role="tabpanel"
+        >
+          <Suspense fallback={<p role="status">Loading funding review…</p>}>
+            <FundingReview
+              key={project.id}
+              project={project}
+              sourceRepositoryUrl={SOURCE_REPOSITORY}
+              cycleIndex={state.status === "ready" ? state.cycleIndex : null}
+              funding={funding.status === "ready" ? funding.index : null}
+            />
+          </Suspense>
+        </section>
       )}
     </main>
   );
@@ -1452,455 +1611,6 @@ function ProjectPage({
           />
         ) : null}
       </div>
-    </main>
-  );
-}
-
-function exactUsdc(value: string): string | null {
-  if (!/^(?:0|[1-9]\d{0,9})(?:\.\d{1,6})?$/u.test(value)) return null;
-  const [whole, fraction = ""] = value.split(".");
-  return (
-    BigInt(whole) * 1_000_000n +
-    BigInt(fraction.padEnd(6, "0"))
-  ).toString();
-}
-
-function microUsdcInput(value: string): string {
-  const minor = BigInt(value);
-  const whole = minor / 1_000_000n;
-  const fraction = (minor % 1_000_000n).toString().padStart(6, "0");
-  return fraction === "000000"
-    ? whole.toString()
-    : `${whole}.${fraction.replace(/0+$/u, "")}`;
-}
-
-interface AllocationDraftRow {
-  review?: { amount: string; suggestedMinor: string };
-  login: string;
-  suggestedMinor: string;
-  amount: string;
-  reason: string;
-}
-
-export function ProjectManagePage({
-  project,
-  state,
-}: {
-  project: ProjectDefinition;
-  state: Extract<DataState, { status: "ready" }>;
-}) {
-  const view = state.views.find(
-    (candidate) => candidate.project.id === project.id,
-  );
-  const currentRecord = state.cycleIndex.cycles.find(
-    (cycle) =>
-      cycle.projectId === project.id && cycle.cycleId === view?.cycle.id,
-  );
-  const sourceRows: AllocationDraftRow[] = currentRecord
-    ? currentRecord.contributors.map((contributor) => ({
-        login: contributor.actor.login,
-        suggestedMinor:
-          contributor.lines?.sharedPool.suggestedMinor ??
-          contributor.suggestedMinor,
-        amount: microUsdcInput(
-          contributor.lines?.sharedPool.approvedMinor ??
-            contributor.approvedMinor,
-        ),
-        ...(contributor.lines
-          ? {
-              review: {
-                suggestedMinor: contributor.lines.reviewBudget.suggestedMinor,
-                amount: microUsdcInput(
-                  contributor.lines.reviewBudget.approvedMinor,
-                ),
-              },
-            }
-          : {}),
-        reason: "",
-      }))
-    : (view?.leaders ?? []).map((leader) => ({
-        login: leader.actor.login,
-        suggestedMinor: leader.projectedMinor ?? "0",
-        amount: microUsdcInput(leader.projectedMinor ?? "0"),
-        reason: "",
-      }));
-  const [headline, setHeadline] = useState(project.headline);
-  const [goal, setGoal] = useState(project.description);
-  const [criteria, setCriteria] = useState(
-    "Describe exactly what must be accepted on GitHub to qualify.",
-  );
-  const [rows, setRows] = useState(sourceRows);
-  const initialTotal = sourceRows.reduce(
-    (total, row) =>
-      total +
-      BigInt(exactUsdc(row.amount) ?? "0") +
-      BigInt(exactUsdc(row.review?.amount ?? "0") ?? "0"),
-    0n,
-  );
-  const [total, setTotal] = useState(microUsdcInput(initialTotal.toString()));
-  const [copyStatus, setCopyStatus] = useState<{
-    kind: "allocation" | "project";
-    status: "copied" | "error";
-  } | null>(null);
-  const [allocationQuery, setAllocationQuery] = useState("");
-  const matchingRows = rows.filter((row) =>
-    row.login.toLowerCase().includes(allocationQuery.trim().toLowerCase()),
-  );
-  const visibleRows = matchingRows.slice(0, 10);
-  const parsedRows = rows.map((row) => {
-    const sharedMinor = exactUsdc(row.amount);
-    const reviewMinor = exactUsdc(row.review?.amount ?? "0");
-    return {
-      ...row,
-      sharedMinor,
-      reviewMinor,
-      approvedMinor:
-        sharedMinor === null || reviewMinor === null
-          ? null
-          : (BigInt(sharedMinor) + BigInt(reviewMinor)).toString(),
-    };
-  });
-  const parsedTotal = exactUsdc(total);
-  const allocated = parsedRows.reduce(
-    (sum, row) => sum + BigInt(row.approvedMinor ?? "0"),
-    0n,
-  );
-  const changedRowsHaveReasons = parsedRows.every(
-    (row) =>
-      row.approvedMinor === null ||
-      (row.sharedMinor === row.suggestedMinor &&
-        row.reviewMinor === (row.review?.suggestedMinor ?? "0")) ||
-      row.reason.trim().length > 0,
-  );
-  const sharedPrincipalMinor = currentRecord
-    ? BigInt(currentRecord.reward.capMinor)
-    : project.reward.kind === "monthly-pool" && view
-      ? allocationFundingMinor(
-          deriveAllocationFundingBasis(project, view.cycle.id),
-        )
-      : 0n;
-  const carriedMinor = BigInt(currentRecord?.reward.carriedMinor ?? "0");
-  const reviewPrincipalMinor = currentRecord?.reward.lines
-    ? BigInt(currentRecord.reward.reviewBudgetCapMinor ?? "0")
-    : 0n;
-  const allocationLimitMinor = (
-    sharedPrincipalMinor +
-    carriedMinor +
-    reviewPrincipalMinor
-  ).toString();
-  const sharedAllocated = parsedRows.reduce(
-    (sum, row) => sum + BigInt(row.sharedMinor ?? "0"),
-    0n,
-  );
-  const reviewAllocated = parsedRows.reduce(
-    (sum, row) => sum + BigInt(row.reviewMinor ?? "0"),
-    0n,
-  );
-  const validAllocation =
-    sharedAllocated <= sharedPrincipalMinor + carriedMinor &&
-    reviewAllocated <= reviewPrincipalMinor &&
-    parsedTotal !== null &&
-    BigInt(parsedTotal) <= BigInt(allocationLimitMinor) &&
-    parsedRows.every((row) => row.approvedMinor !== null) &&
-    allocated === BigInt(parsedTotal) &&
-    changedRowsHaveReasons;
-  const feeMinor = feeForPrincipal(
-    parsedTotal ?? "0",
-    PLATFORM_FEE_BASIS_POINTS,
-  );
-  const cycleId = currentRecord?.cycleId ?? view?.cycle.id ?? "next-cycle";
-  const payoutDraftingEnabled =
-    project.reward.kind === "monthly-pool" &&
-    project.reward.paymentMode === "enabled";
-  const allocationDraft = JSON.stringify(
-    {
-      projectId: project.id,
-      cycleId,
-      approvedPrincipalMinor: parsedTotal ?? "invalid",
-      feeBasisPoints: PLATFORM_FEE_BASIS_POINTS,
-      feeMinor,
-      allocations: parsedRows.map((row) => ({
-        login: row.login,
-        suggestedMinor: (
-          BigInt(row.suggestedMinor) + BigInt(row.review?.suggestedMinor ?? "0")
-        ).toString(),
-        approvedMinor: row.approvedMinor ?? "invalid",
-        ...(row.review
-          ? {
-              lines: {
-                sharedPool: {
-                  suggestedMinor: row.suggestedMinor,
-                  approvedMinor: row.sharedMinor ?? "invalid",
-                },
-                reviewBudget: {
-                  suggestedMinor: row.review.suggestedMinor,
-                  approvedMinor: row.reviewMinor ?? "invalid",
-                },
-              },
-            }
-          : {}),
-        reason: row.reason.trim() || null,
-      })),
-    },
-    null,
-    2,
-  );
-  const projectBrief = `Update ${project.id} through a reviewed Slop PR.\n\nHeadline: ${headline}\nGoal: ${goal}\nAcceptance criteria: ${criteria}\n\nKeep the project manifest, contributor skill, reviewer skill, goals, and criteria synchronized. Any model may contribute, but every run must publish its exact provider, model, and client. Signed receipts and permanent operator-private traces are optional; unavailable trace intake must never block ordinary GitHub contribution.`;
-  const copy = async (kind: "allocation" | "project", value: string) => {
-    try {
-      await copyText(value);
-      setCopyStatus({ kind, status: "copied" });
-    } catch {
-      setCopyStatus({ kind, status: "error" });
-    }
-  };
-  return (
-    <main className="shell route-main manage-page">
-      <p className="breadcrumb">
-        <Link href={`/projects/${project.slug}`}>{project.name}</Link>
-        <span>/</span>Draft update
-      </p>
-      <div className="manage-intro">
-        <h1>Propose changes to {project.name}.</h1>
-        <p>
-          This public tool does not save or publish changes. Copy a proposal and
-          open a reviewed GitHub pull request; the repository remains the source
-          of truth.
-        </p>
-      </div>
-
-      <section className="owner-section">
-        <h2>Project brief</h2>
-        <div className="owner-form">
-          <label>
-            Headline
-            <input
-              value={headline}
-              onChange={(event) => setHeadline(event.target.value)}
-            />
-          </label>
-          <label>
-            Goal
-            <textarea
-              value={goal}
-              onChange={(event) => setGoal(event.target.value)}
-            />
-          </label>
-          <label>
-            Acceptance criteria
-            <textarea
-              value={criteria}
-              onChange={(event) => setCriteria(event.target.value)}
-            />
-          </label>
-          <button
-            className="text-button"
-            onClick={() => void copy("project", projectBrief)}
-            type="button"
-          >
-            {copyStatus?.kind === "project"
-              ? copyStatus.status === "copied"
-                ? "Brief copied"
-                : "Copy unavailable; select the fields"
-              : "Copy GitHub brief"}
-          </button>
-        </div>
-      </section>
-
-      {payoutDraftingEnabled ? (
-        <section className="owner-section allocation-editor">
-          <h2>{cycleId} allocation</h2>
-          <div className="owner-section-body">
-            <p>
-              Draft only. This page cannot save, approve, sign, or send USDC.
-              Changed amounts need a public reason; the 1% fee applies only if a
-              reviewed cycle is later paid.
-            </p>
-            <label className="total-field">
-              Draft total, USDC
-              <input
-                inputMode="decimal"
-                min="0"
-                step="0.000001"
-                type="number"
-                value={total}
-                onChange={(event) => setTotal(event.target.value)}
-              />
-            </label>
-            <details className="allocation-details">
-              <summary>
-                Edit {rows.length} contributor allocation
-                {rows.length === 1 ? "" : "s"}
-              </summary>
-              {rows.length > 10 ? (
-                <label className="allocation-search">
-                  Find contributor
-                  <input
-                    onChange={(event) => setAllocationQuery(event.target.value)}
-                    placeholder="GitHub login"
-                    type="search"
-                    value={allocationQuery}
-                  />
-                </label>
-              ) : null}
-              {rows.length === 0 ? (
-                <EmptyState text="No contributors are available for this cycle." />
-              ) : visibleRows.length === 0 ? (
-                <EmptyState text="No contributor matches that login." />
-              ) : (
-                <div className="allocation-rows">
-                  {visibleRows.map((row) => (
-                    <fieldset key={row.login}>
-                      <legend>{row.login}</legend>
-                      <label>
-                        {row.review ? "Shared reward, USDC" : "Amount, USDC"}
-                        <input
-                          aria-label={`${row.login} ${row.review ? "shared reward" : "amount"} in USDC`}
-                          inputMode="decimal"
-                          min="0"
-                          step="0.000001"
-                          type="number"
-                          value={row.amount}
-                          onChange={(event) =>
-                            setRows((current) =>
-                              current.map((candidate) =>
-                                candidate.login === row.login
-                                  ? {
-                                      ...candidate,
-                                      amount: event.target.value,
-                                    }
-                                  : candidate,
-                              ),
-                            )
-                          }
-                        />
-                      </label>
-                      {row.review ? (
-                        <label>
-                          Review reward, USDC
-                          <input
-                            aria-label={`${row.login} review reward in USDC`}
-                            inputMode="decimal"
-                            min="0"
-                            step="0.000001"
-                            type="number"
-                            value={row.review.amount}
-                            onChange={(event) =>
-                              setRows((current) =>
-                                current.map((candidate) =>
-                                  candidate.login === row.login &&
-                                  candidate.review
-                                    ? {
-                                        ...candidate,
-                                        review: {
-                                          ...candidate.review,
-                                          amount: event.target.value,
-                                        },
-                                      }
-                                    : candidate,
-                                ),
-                              )
-                            }
-                          />
-                        </label>
-                      ) : null}
-                      <label>
-                        Reason
-                        <input
-                          aria-label={`${row.login} reason`}
-                          value={row.reason}
-                          onChange={(event) =>
-                            setRows((current) =>
-                              current.map((candidate) =>
-                                candidate.login === row.login
-                                  ? {
-                                      ...candidate,
-                                      reason: event.target.value,
-                                    }
-                                  : candidate,
-                              ),
-                            )
-                          }
-                        />
-                      </label>
-                    </fieldset>
-                  ))}
-                </div>
-              )}
-              {matchingRows.length > visibleRows.length ? (
-                <p className="allocation-count">
-                  Showing the first 10 contributors. Search by GitHub login to
-                  edit another.
-                </p>
-              ) : null}
-            </details>
-            <div className="payout-totals" aria-live="polite">
-              <span>{formatMicroUsdc(allocated.toString())} allocated</span>
-              <span>{formatMicroUsdc(feeMinor)} fee</span>
-              <strong>
-                {formatMicroUsdc(
-                  (BigInt(parsedTotal ?? "0") + BigInt(feeMinor)).toString(),
-                )}{" "}
-                total debit
-              </strong>
-            </div>
-            {!validAllocation && rows.length > 0 ? (
-              <p className="form-error" role="alert">
-                Allocations must equal the total and stay within the{" "}
-                {formatMicroUsdc(allocationLimitMinor)} draft limit.
-                {currentRecord?.reward.lines
-                  ? ` Shared rewards cannot exceed ${formatMicroUsdc((sharedPrincipalMinor + carriedMinor).toString())}; review rewards cannot exceed ${formatMicroUsdc(reviewPrincipalMinor.toString())}.`
-                  : ""}{" "}
-                Add a reason for every changed amount.
-              </p>
-            ) : null}
-            <button
-              className="button primary-button"
-              disabled={!validAllocation || rows.length === 0}
-              onClick={() => void copy("allocation", allocationDraft)}
-              type="button"
-            >
-              {copyStatus?.kind === "allocation"
-                ? copyStatus.status === "copied"
-                  ? "Allocation copied"
-                  : "Copy unavailable"
-                : "Copy unsigned allocation"}
-            </button>
-            <div className="payout-action">
-              {currentRecord?.files.executionPlan ? (
-                <ExternalLinkAnchor
-                  href={currentRecord.files.executionPlan.url}
-                >
-                  View unsigned plan{" "}
-                  <ExternalLink aria-hidden="true" size={14} />
-                </ExternalLinkAnchor>
-              ) : (
-                <span>No reviewed execution plan exists for this cycle.</span>
-              )}
-              <p>
-                Settlement happens outside this page and counts as paid only
-                after finalized USDC balance changes pass verification.
-              </p>
-            </div>
-          </div>
-        </section>
-      ) : (
-        <section className="owner-section">
-          <h2>Payouts</h2>
-          <div className="owner-section-body payout-status">
-            <strong>
-              {project.reward.kind === "external-prize-share"
-                ? "External award"
-                : "Payouts disabled"}
-            </strong>
-            <p>
-              {project.reward.kind === "external-prize-share"
-                ? "This project publishes contribution shares only. Slop cannot draft, approve, sign, or pay the external award."
-                : "Slop cannot draft, approve, sign, or pay allocations while the public project manifest keeps payouts disabled."}
-            </p>
-          </div>
-        </section>
-      )}
     </main>
   );
 }
@@ -3380,6 +3090,7 @@ function AppContent({ route }: { route: Route }) {
     "earnings",
     "how-it-works",
     "new-project",
+    "manage-project",
     "wallet",
     "unknown",
     "verification",
@@ -3407,13 +3118,7 @@ function AppContent({ route }: { route: Route }) {
   else if (route.kind === "manage-project") {
     const project = findProject(route.projectId ?? "");
     content = project ? (
-      state.status === "ready" ? (
-        <ProjectManagePage key={project.id} project={project} state={state} />
-      ) : (
-        <main className="shell route-main">
-          <DataNotice retry={retry} state={state} />
-        </main>
-      )
+      <ProjectUpdatePage key={project.id} project={project} />
     ) : (
       <NotFound title="Project not found" />
     );

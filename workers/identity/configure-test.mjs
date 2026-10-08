@@ -90,14 +90,14 @@ if (args["frontend-directory"]) {
     "utf8",
   );
   const target =
-    "connect-src 'self' https://api.slop.cash https://identity.slop.cash;";
+    "connect-src 'self' https://api.slop.cash https://identity.slop.cash https://api.github.com;";
   if (!headers.includes(target))
     throw new Error("CSP source changed; inspect before preparing test output");
   await writeFile(
     resolve(frontend, "_headers"),
     headers.replace(
       target,
-      `connect-src 'self' https://api.slop.cash ${origin};`,
+      `connect-src 'self' https://api.slop.cash ${origin} https://api.github.com;`,
     ),
   );
 }
