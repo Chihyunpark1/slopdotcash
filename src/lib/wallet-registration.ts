@@ -1,12 +1,12 @@
 /** Browser adapter for the canonical wallet-claim/run-receipt OAuth protocol. */
+import {
+  type IdentityAuthorization,
+  requestIdentityAssertion,
+} from "./identity-flow";
 import { isWalletAddress, isWalletChain, type WalletChain } from "./wallets";
 
-const IDENTITY = "https://identity.slop.cash";
 const API = "https://api.slop.cash";
 const AUDIENCE = "private-trace-api";
-// The service issues a flow that expires exactly five minutes after its own
-// clock. Allow a visitor's clock to run this far behind before refusing it.
-const CLOCK_SKEW_MS = 2 * 60_000;
 export interface WalletRegistrationIdentity {
   githubActorId: string;
   githubLogin: string;
@@ -36,13 +36,7 @@ export interface WalletRegistrationSession {
   confirm: () => Promise<RegisteredWalletClaim>;
   cancel: () => void;
 }
-export interface WalletAuthorization {
-  flowId: string;
-  pollCapability: string;
-  authorizationUrl: string;
-  expiresAt: string;
-  pollAfterSeconds: number;
-}
+export type WalletAuthorization = IdentityAuthorization;
 export interface WalletRegistrationOptions {
   chain?: WalletChain;
   /** Short-lived per-tab state for same-tab navigation; never an API session token. */
@@ -188,21 +182,6 @@ async function boundedJson(response: Response) {
     return invalid();
   }
 }
-function delay(ms: number, signal: AbortSignal) {
-  return new Promise<void>((resolve, reject) => {
-    signal.throwIfAborted();
-    const abort = () => {
-      clearTimeout(timer);
-      reject(new Error("Wallet sign-in cancelled or timed out."));
-    };
-    const timer = setTimeout(() => {
-      signal.removeEventListener("abort", abort);
-      resolve();
-    }, ms);
-    signal.addEventListener("abort", abort, { once: true });
-  });
-}
-
 /** No registry write until the returned confirm function is explicitly invoked. */
 export async function prepareWalletRegistration(
   address: string,
@@ -262,95 +241,15 @@ export async function prepareWalletRegistration(
     };
   }
   try {
-    const started = options.resume
-      ? record(options.resume)
-      : ((
-          await request(
-            `${IDENTITY}/v1/oauth/start`,
-            post({ audience: AUDIENCE }),
-          )
-        )?.body ?? invalid());
-    const expires = timestamp(started.expiresAt);
-    if (
-      expires <= now() ||
-      expires > now() + 5 * 60_000 + CLOCK_SKEW_MS ||
-      typeof started.flowId !== "string" ||
-      !/^flow_[A-Za-z0-9_-]{20,64}$/u.test(started.flowId) ||
-      typeof started.pollCapability !== "string" ||
-      !/^[A-Za-z0-9_-]{40,128}$/u.test(started.pollCapability) ||
-      typeof started.authorizationUrl !== "string"
-    )
-      invalid();
-    let authorization: URL;
-    try {
-      authorization = new URL(started.authorizationUrl);
-    } catch {
-      invalid();
-    }
-    if (
-      authorization.origin !== IDENTITY ||
-      authorization.pathname !== "/v1/oauth/authorize" ||
-      authorization.username ||
-      authorization.password ||
-      authorization.hash ||
-      authorization.searchParams.size !== 2 ||
-      authorization.searchParams.get("flow_id") !== started.flowId ||
-      !/^[A-Za-z0-9_-]{40,128}$/u.test(
-        authorization.searchParams.get("state") ?? "",
-      )
-    )
-      invalid();
-    let interval = Number(started.pollAfterSeconds);
-    if (!Number.isSafeInteger(interval) || interval < 1 || interval > 10)
-      invalid();
-    options.saveAuthorization?.({
-      flowId: started.flowId as string,
-      pollCapability: started.pollCapability as string,
-      authorizationUrl: authorization.href,
-      expiresAt: started.expiresAt as string,
-      pollAfterSeconds: interval,
+    let assertion = await requestIdentityAssertion({
+      audience: AUDIENCE,
+      signal,
+      now,
+      resume: options.resume,
+      saveAuthorization: options.saveAuthorization,
+      authorize: options.authorize,
+      request,
     });
-    if (!options.resume) options.authorize(authorization.href);
-    let assertion = "";
-    while (now() < expires) {
-      await delay(Math.min(interval * 1000, expires - now()), signal);
-      if (now() >= expires) break;
-      const polled = await request(
-        `${IDENTITY}/v1/oauth/poll`,
-        post({
-          flowId: started.flowId,
-          pollCapability: started.pollCapability,
-          audience: AUDIENCE,
-        }),
-      );
-      const body = polled?.body ?? invalid();
-      if (polled?.status === 202 && body.status === "pending") {
-        interval = Number(body.retryAfterSeconds);
-        if (
-          !Number.isSafeInteger(interval) ||
-          interval < Number(started.pollAfterSeconds) ||
-          interval > 10
-        )
-          invalid();
-        continue;
-      }
-      if (
-        polled?.status !== 200 ||
-        body.status !== "complete" ||
-        body.assertionType !== "SlopIdentity" ||
-        typeof body.assertion !== "string" ||
-        !/^slop_assert_v1_[A-Za-z0-9_-]{40,128}$/u.test(body.assertion) ||
-        timestamp(body.expiresAt) <= now()
-      )
-        invalid();
-      assertion = body.assertion;
-      break;
-    }
-    if (!assertion)
-      throw new Error(
-        "GitHub sign-in expired. Your address is saved; sign in again.",
-      );
-    options.saveAuthorization?.(null);
     const authenticated =
       (
         await request(`${API}/api/v1/auth/session`, {

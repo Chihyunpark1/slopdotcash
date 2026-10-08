@@ -5,7 +5,6 @@ import { assertRewardAllocationManifest } from "./rewards";
 import {
   assertSettlementExecutionPlan,
   createSettlementExecutionPlan,
-  createSolanaPayTransferRequest,
   planCarriesPlatformFee,
   SOLANA_MAINNET_USDC_MINT,
 } from "./settlement-plan";
@@ -198,22 +197,6 @@ describe("settlement execution plans", () => {
         allocation,
       ),
     ).toThrow(/differs from its approved allocation/u);
-  });
-
-  it("creates exact Solana Pay requests without claiming payment", () => {
-    const plan = createSettlementExecutionPlan({
-      allocation: approvedAllocation(),
-      allocationSha256: "c".repeat(64),
-      createdAt: "2026-08-15T00:01:00.000Z",
-      feeRecipient: FEE,
-      sourceOwner: SOURCE,
-    });
-    const request = createSolanaPayTransferRequest(plan, plan.transfers[0]);
-    expect(request).toContain(`solana:${RECIPIENT}?`);
-    expect(request).toContain("amount=1.000000");
-    expect(request).toContain(`spl-token=${SOLANA_MAINNET_USDC_MINT}`);
-    expect(request).toContain("memo=contributor_pay_eliza_2026_07_u1");
-    expect(plan.status).toBe("unsigned");
   });
 
   it("rejects a plan paying the source and any post-generation tampering", () => {

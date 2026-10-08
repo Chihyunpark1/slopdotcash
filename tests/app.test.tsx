@@ -42,7 +42,11 @@ import {
   WHO_BUILDS_SNAPSHOT,
   whoBuildsDateLabel,
 } from "../src/lib/who-builds";
-import { cycleIndexFixture, snapshotFixture } from "./fixtures";
+import {
+  archivedPaidCycleIndex,
+  cycleIndexFixture,
+  snapshotFixture,
+} from "./fixtures";
 
 function route(path: string): void {
   window.history.replaceState({}, "", path);
@@ -311,67 +315,6 @@ function septemberRollingSnapshot() {
   return snapshot;
 }
 
-function archivedPaidCycleIndex() {
-  const index = cycleIndexFixture();
-  const prefix = "/data/cycles/eliza/2026-07";
-  const file = (name: string) => ({
-    sha256: "a".repeat(64),
-    url: `${prefix}/${name}.json`,
-  });
-  index.cycles = [
-    {
-      projectId: "eliza",
-      cycleId: "2026-07",
-      kind: "monthly-pool",
-      state: "paid",
-      generatedAt: "2026-08-02T00:00:00.000Z",
-      contributionWindow: {
-        from: "2026-07-07T00:00:00.000Z",
-        to: "2026-08-01T00:00:00.000Z",
-      },
-      reviewEndsAt: "2026-08-15T00:00:00.000Z",
-      approvedAt: "2026-08-16T00:00:00.000Z",
-      settledAt: "2026-08-16T00:00:00.000Z",
-      reward: {
-        currency: "USDC",
-        capMinor: "10000000000",
-        suggestedMinor: "1000000",
-        approvedMinor: "1000000",
-        paidMinor: "1000000",
-        feeMinor: "10000",
-        sharePartsPerMillion: null,
-      },
-      contributors: [
-        {
-          actor: { id: "U_archived", login: "archive-only" },
-          score: 7,
-          state: "paid",
-          suggestedMinor: "1000000",
-          approvedMinor: "1000000",
-          paidMinor: "1000000",
-          sharePartsPerMillion: null,
-          wallet: {
-            address: "11111111111111111111111111111111",
-            chain: "solana",
-            observedAt: "2026-08-01T00:00:00.000Z",
-            sourceCommit: "b".repeat(40),
-            sourceUrl: `https://github.com/archive-only/archive-only/blob/${"b".repeat(40)}/README.md`,
-          },
-        },
-      ],
-      files: {
-        sourceSnapshot: file("source-snapshot"),
-        proposal: file("proposal"),
-        allocation: file("allocation"),
-        executionPlan: file("execution-plan"),
-        settlement: file("settlement"),
-        windup: null,
-      },
-    },
-  ];
-  return index;
-}
-
 function draftFundingInstrument(
   cycleId: string,
   amountMinor: string,
@@ -455,19 +398,11 @@ describe("discovery", () => {
     expect(screen.queryByText(/No accepted outcomes/u)).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Eliza" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "Delta Star" })).toBeVisible();
-    expect(vi.mocked(fetch).mock.calls.map(([url]) => String(url))).not.toEqual(
-      expect.arrayContaining([
-        expect.stringContaining("/data/leaderboard.json"),
-      ]),
-    );
+    expect(screen.getByText("Loading records…")).toBeVisible();
     expect(
       vi
         .mocked(fetch)
-        .mock.calls.some(
-          ([url]) =>
-            String(url).includes("/data/cycles/") ||
-            String(url).includes("github"),
-        ),
+        .mock.calls.some(([url]) => String(url).includes("github")),
     ).toBe(false);
   });
 
@@ -503,6 +438,15 @@ describe("discovery", () => {
     snapshot.attributions = [];
     mockSnapshot(snapshot);
     render(<App />);
+    expect(
+      await screen.findByText(/No score records cover this period/),
+    ).toBeVisible();
+    expect(
+      screen.queryByText("No recorded contributions match this view."),
+    ).toBeNull();
+    fireEvent.change(screen.getByLabelText("Period"), {
+      target: { value: "lifetime" },
+    });
 
     expect(
       await screen.findByText("No recorded contributions match this view."),
@@ -712,7 +656,9 @@ describe("discovery", () => {
     serveValidData = true;
     fireEvent.click(retry);
     expect(
-      await screen.findByRole("heading", { name: /leaderboard\./u }),
+      await screen.findByRole("heading", {
+        name: "Contributor standings",
+      }),
     ).toBeVisible();
     await waitFor(() =>
       expect(screen.queryByRole("alert")).not.toBeInTheDocument(),
@@ -751,7 +697,7 @@ describe("discovery", () => {
     expect(
       await screen.findByRole(
         "heading",
-        { name: /leaderboard\./u },
+        { name: "Contributor standings" },
         { timeout: 5_000 },
       ),
     ).toBeVisible();
@@ -1101,7 +1047,9 @@ describe("public records", () => {
     expect(
       await screen.findByRole("heading", { name: "finish-line" }),
     ).toBeInTheDocument();
-    const totals = document.querySelector("main > .profile-totals");
+    const totals = screen
+      .getByRole("region", { name: "Contributor profile" })
+      .querySelector(".profile-totals");
     expect(totals).not.toBeNull();
     expect(totals).toHaveTextContent("recorded score");
     expect(totals).not.toHaveTextContent(/all-time/u);
@@ -1119,7 +1067,10 @@ describe("public records", () => {
       await screen.findByRole("heading", { name: "finish-line" }),
     ).toBeInTheDocument();
     expect(screen.getByText("34")).toBeInTheDocument();
-    expect(screen.getAllByText("$0").length).toBeGreaterThan(0);
+    expect(screen.getByText("$5,000")).toBeInTheDocument();
+    expect(
+      screen.getByText("verified payments received · USDC").parentElement,
+    ).toHaveTextContent("$0.00");
     expect(screen.getByText("Eliza")).toBeInTheDocument();
     expect(screen.getByText("Delta Star")).toBeInTheDocument();
     expect(
@@ -1895,7 +1846,7 @@ describe("direct project funding", () => {
       await vi.advanceTimersByTimeAsync(12_000);
     });
     expect(screen.getByRole("alert")).toHaveTextContent(
-      "Funding records unavailable: funding request timed out",
+      "Funding records unavailable: Request timed out",
     );
   });
 

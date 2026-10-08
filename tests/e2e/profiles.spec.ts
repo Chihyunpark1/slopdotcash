@@ -67,7 +67,12 @@ test("a contributor with only open and closed PRs has a searchable individual pr
   await expect(profile.locator(".profile-totals").first()).toContainText(
     "2PRs closed without merging",
   );
-  await expect(page.locator(".points-total")).toHaveText("0 pts");
+  await expect(
+    page
+      .getByText("Points · recorded history", { exact: true })
+      .locator("..")
+      .locator("strong"),
+  ).toHaveText("0");
   await expect(
     profile.getByRole("link", { name: "GitHub · @profile-only-contributor" }),
   ).toHaveAttribute("href", "https://github.com/profile-only-contributor");

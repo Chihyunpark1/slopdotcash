@@ -64,11 +64,7 @@ test("renders bundled projects with data stalled and GitHub blocked", async ({
     // back to the bundled initial and never delays the project list.
     const avatar = /^https:\/\/avatars\.githubusercontent\.com\//u;
     expect(
-      requests.filter(
-        (url) =>
-          !avatar.test(url) &&
-          /github|\/data\/leaderboard\.json|\/data\/cycles\//.test(url),
-      ),
+      requests.filter((url) => !avatar.test(url) && /github/.test(url)),
     ).toEqual([]);
     await expect(page.locator("img.project-avatar")).toHaveCount(0);
     expect(
