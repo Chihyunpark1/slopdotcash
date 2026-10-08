@@ -558,7 +558,24 @@ test("never presents Delta Star's external prize as platform money", async ({
     page.getByText("No platform pool · no dollar projection"),
   ).toBeVisible();
   await expect(
-    page.getByText(/prize sponsor controls eligibility and payment/u),
+    page.getByText("Organizer rules decide eligibility, amount, and payment."),
+  ).toBeVisible();
+  const history = page.locator(".payment-history");
+  await expect(
+    history.getByRole("heading", { name: "Cycle history" }),
+  ).toBeVisible();
+  await expect(history).not.toContainText("$");
+  await expect(
+    history.getByRole("link", { name: "Manage payouts" }),
+  ).toHaveCount(0);
+  await history
+    .getByRole("link", { name: /^\d{4}-\d{2}$/u })
+    .first()
+    .click();
+  await expect(
+    page.getByText(
+      "External prize shares; this cycle does not enter Slop settlement.",
+    ),
   ).toBeVisible();
 });
 
@@ -1187,6 +1204,13 @@ test("shows an explicit error for invalid data and retries", async ({
   await expect(page.getByRole("alert")).toContainText(
     "Live totals unavailable",
   );
+  await expect(page.locator(".reward-card")).toContainText(
+    "Funding history unavailable",
+  );
+  await expect(page.locator(".reward-card")).not.toContainText("$0");
+  await expect(page.locator(".reward-card")).not.toContainText(
+    "Funding promotion paused",
+  );
   const errorAccessibility = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
     .analyze();
@@ -1402,10 +1426,32 @@ for (const route of [
     );
     if (project?.status === "paused") {
       await expect(
-        page.getByRole("heading", { name: "Project paused" }),
+        page.getByRole("heading", {
+          name:
+            project.participation?.state === "archived"
+              ? "Archived"
+              : project.participation?.state === "permission-required"
+                ? "Permission required"
+                : "Project paused",
+          exact: true,
+        }),
       ).toBeVisible();
       await expect(page.getByText(/after two unfunded cycles/u)).toHaveCount(0);
       await expect(page.getByLabel("Manual install command")).toHaveCount(0);
+      await expect(page.locator(".reward-card")).toHaveCount(0);
+      if (project.participation?.state === "archived") {
+        const successorId = project.participation.successorProjectId;
+        const successor = PROJECTS.find((entry) => entry.id === successorId);
+        await expect(
+          page
+            .locator("#start")
+            .getByRole("link", { name: successor?.name, exact: true }),
+        ).toHaveAttribute(
+          "href",
+          `/projects/${project.participation.successorProjectId}`,
+        );
+      }
+
       await test.info().attach(`${project.id}-paused-project`, {
         body: await page.screenshot({ fullPage: true }),
         contentType: "image/png",
@@ -1432,6 +1478,27 @@ for (const route of [
       () => document.documentElement.scrollWidth - window.innerWidth,
     );
     expect(overflow, `${path} horizontal page overflow`).toBeLessThanOrEqual(1);
+    if (project?.participation?.state === "archived") {
+      const successorId = project.participation.successorProjectId;
+      const successor = PROJECTS.find((entry) => entry.id === successorId);
+      await page.locator("#start").getByRole("link").focus();
+      await page.keyboard.press("Enter");
+      await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+        successor?.name ?? "",
+      );
+      if (successor?.participation?.state === "permission-required") {
+        await expect(
+          page.getByRole("heading", {
+            name: "Permission required",
+            exact: true,
+          }),
+        ).toBeVisible();
+        await expect(page.locator("#start").getByRole("link")).toHaveAttribute(
+          "href",
+          successor.steward.github.profileUrl,
+        );
+      }
+    }
   });
 }
 
