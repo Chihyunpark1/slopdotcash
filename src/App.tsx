@@ -74,6 +74,7 @@ import {
   whoBuildsDateLabel,
 } from "./lib/who-builds";
 import {
+  AccountPage,
   ContributorStandings,
   LoginPage,
   PointsNav,
@@ -156,6 +157,7 @@ interface Route {
     | "verification"
     | "cycle-archive"
     | "unknown"
+    | "account"
     | "points"
     | "login"
     | "earnings";
@@ -176,8 +178,14 @@ function internalRoute(pathname: string): Route {
     return { kind: "earnings" };
   if (segments.length === 1 && segments[0] === "login")
     return { kind: "login" };
+  if (segments.length === 1 && segments[0] === "account")
+    return { kind: "account" };
   if (segments.length === 1 && segments[0] === "points")
-    return { kind: "points" };
+    return {
+      kind: new URLSearchParams(window.location.search).has("x")
+        ? "account"
+        : "points",
+    };
   if (segments.length === 1 && segments[0] === "wallet")
     return { kind: "wallet" };
   if (segments.length === 1 && segments[0] === "how-it-works") {
@@ -3364,6 +3372,7 @@ function AppContent({ route }: { route: Route }) {
   const needsSnapshot = ![
     "home",
     "points",
+    "account",
     "login",
     "earnings",
     "how-it-works",
@@ -3378,6 +3387,7 @@ function AppContent({ route }: { route: Route }) {
   let content: ReactNode;
   if (route.kind === "home") content = <HomePage />;
   else if (route.kind === "points") content = <PointsPage />;
+  else if (route.kind === "account") content = <AccountPage />;
   else if (route.kind === "login") content = <LoginPage />;
   else if (route.kind === "earnings") content = <EarningsPage />;
   else if (route.kind === "how-it-works") content = <HowItWorksPage />;
