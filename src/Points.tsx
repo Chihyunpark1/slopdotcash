@@ -1049,7 +1049,7 @@ export function ContributorStandings({
                           {m.actor.login}
                         </a>
                       </td>
-                      <td>
+                      <td className="points-value">
                         {m.score === null ? scoreMissing : formatScore(m.score)}
                       </td>
                       <td className="points-value">
@@ -1057,7 +1057,7 @@ export function ContributorStandings({
                           ? pointsMissing
                           : `${m.points.toLocaleString()} pts`}
                       </td>
-                      <td>
+                      <td className="points-value">
                         {m.money === null
                           ? scoreMissing
                           : formatMicroUsdc(m.money.toString())}
