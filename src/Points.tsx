@@ -1,3 +1,4 @@
+import { ChevronDown } from "lucide-react";
 import {
   createContext,
   type ReactNode,
@@ -224,6 +225,10 @@ export function PointsNav({ onNavigate }: { onNavigate?: () => void }) {
         me.welcome +
         (me.socialPoints ?? 0)
       : null;
+  const signedIn = me !== null;
+  useEffect(() => {
+    if (signedIn) requestPoints();
+  }, [signedIn, requestPoints]);
   const navigate = () => {
     setOpen(false);
     onNavigate?.();
@@ -292,6 +297,10 @@ export function PointsNav({ onNavigate }: { onNavigate?: () => void }) {
             onError={() => setFailedImage(avatar)}
           />
         )}
+        {total !== null ? (
+          <span className="account-points">{total.toLocaleString()} pts</span>
+        ) : null}
+        <ChevronDown aria-hidden="true" className="account-chevron" />
       </button>
       {open ? (
         <section
@@ -869,6 +878,9 @@ export function ContributorStandings({
     period === "month" ? new Date().toISOString().slice(0, 7) : null,
     project,
   );
+  // Loading and failed sources stay distinct in each column.
+  const scoreMissing = scores.status === "loading" ? "Loading…" : "Unavailable";
+  const pointsMissing = state.status === "loading" ? "Loading…" : "Unavailable";
   const ranked = projection.rows
     .filter(
       (m) =>
@@ -1018,27 +1030,36 @@ export function ContributorStandings({
                   .slice(currentPage * pageSize, (currentPage + 1) * pageSize)
                   .map((m) => (
                     <tr key={m.actor.id}>
-                      <td>{ranks.get(m.actor.id)}</td>
+                      <td className="points-rank">{ranks.get(m.actor.id)}</td>
                       <td>
                         <a
+                          className="points-person"
                           href={`/contributors/${encodeURIComponent(m.actor.login)}`}
                         >
+                          <img
+                            alt=""
+                            height={40}
+                            loading="lazy"
+                            onError={(event) => {
+                              event.currentTarget.hidden = true;
+                            }}
+                            src={`https://avatars.githubusercontent.com/${encodeURIComponent(m.actor.login)}?size=80`}
+                            width={40}
+                          />
                           {m.actor.login}
                         </a>
                       </td>
                       <td>
-                        {m.score === null
-                          ? "Unavailable"
-                          : formatScore(m.score)}
+                        {m.score === null ? scoreMissing : formatScore(m.score)}
                       </td>
-                      <td>
+                      <td className="points-value">
                         {m.points === null
-                          ? "Unavailable"
+                          ? pointsMissing
                           : `${m.points.toLocaleString()} pts`}
                       </td>
                       <td>
                         {m.money === null
-                          ? "Unavailable"
+                          ? scoreMissing
                           : formatMicroUsdc(m.money.toString())}
                       </td>
                     </tr>
@@ -1049,7 +1070,7 @@ export function ContributorStandings({
           {rows.length === 0 ? (
             <p>No recorded contributions match this view.</p>
           ) : null}
-          <div className="points-controls">
+          <div className="points-controls points-pagination">
             <button
               type="button"
               disabled={currentPage === 0}

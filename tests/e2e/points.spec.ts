@@ -159,7 +159,7 @@ test("ranks archived work separately from the month its payment settled", async 
   );
   await page.goto("/?sort=money#leaderboard");
   const standings = page.getByRole("region", {
-    name: "Leaderboard",
+    name: "Top sloperators",
     exact: true,
   });
   const recipient = standings.getByRole("row").filter({
