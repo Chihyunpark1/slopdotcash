@@ -745,6 +745,36 @@ export function ProjectParticipation({
   cycles: readonly PromotionCycle[] | null;
   displayCycleId: string | null;
 }) {
+  if (project.participation?.state === "archived") {
+    const successor = findProject(project.participation.successorProjectId);
+    return (
+      <section className="section" id="start">
+        <h2>Archived</h2>
+        <p>
+          Continue with{" "}
+          <Link href={`/projects/${project.participation.successorProjectId}`}>
+            {successor?.name ?? project.participation.successorProjectId}
+          </Link>
+          .
+        </p>
+      </section>
+    );
+  }
+  if (project.participation?.state === "permission-required") {
+    return (
+      <section className="section" id="start">
+        <h2>Permission required</h2>
+        <p>
+          Contact{" "}
+          <ExternalLinkAnchor href={project.steward.github.profileUrl}>
+            {project.steward.displayName}
+          </ExternalLinkAnchor>{" "}
+          about permission before contributing. Project activation remains
+          paused.
+        </p>
+      </section>
+    );
+  }
   if (project.status === "paused") {
     return (
       <section className="section" id="start">
@@ -887,34 +917,41 @@ function ProjectPaymentHistory({
     (total, cycle) => total + BigInt(cycle.reward.feeMinor),
     0n,
   );
+  const externalPrize = project.reward.kind === "external-prize-share";
   return (
     <section className="section payment-history">
       <div className="simple-heading">
-        <h2>Payment history</h2>
-        <Link href={`/projects/${project.slug}/funding`}>Manage payouts</Link>
+        <h2>{externalPrize ? "Cycle history" : "Payment history"}</h2>
+        {externalPrize ? null : (
+          <Link href={`/projects/${project.slug}/funding`}>Manage payouts</Link>
+        )}
         <Link href={`/projects/${project.slug}/manage`}>
           Draft a project update
         </Link>
       </div>
-      <p className="money-summary">
-        <strong>{formatMicroUsdc(paid.toString())} paid</strong>
-        <span>{formatMicroUsdc(approved.toString())} approved</span>
-        <span>{formatMicroUsdc(fees.toString())} in 1% payout fees</span>
-      </p>
+      {externalPrize ? null : (
+        <p className="money-summary">
+          <strong>{formatMicroUsdc(paid.toString())} paid</strong>
+          <span>{formatMicroUsdc(approved.toString())} approved</span>
+          <span>{formatMicroUsdc(fees.toString())} in 1% payout fees</span>
+        </p>
+      )}
       {cycles.length === 0 ? (
-        <EmptyState text="No payment cycles have closed yet." />
+        <EmptyState text="No cycles have closed yet." />
       ) : (
         <div className="plain-table-wrap">
           <table className="plain-table">
-            <caption className="visually-hidden">
-              {project.name} payment cycles
-            </caption>
+            <caption className="visually-hidden">{project.name} cycles</caption>
             <thead>
               <tr>
                 <th scope="col">Cycle</th>
-                <th scope="col">Approved</th>
-                <th scope="col">Fee</th>
-                <th scope="col">Paid</th>
+                {externalPrize ? null : (
+                  <>
+                    <th scope="col">Approved</th>
+                    <th scope="col">Fee</th>
+                    <th scope="col">Paid</th>
+                  </>
+                )}
                 <th scope="col">State</th>
               </tr>
             </thead>
@@ -926,9 +963,13 @@ function ProjectPaymentHistory({
                       {cycle.cycleId}
                     </Link>
                   </th>
-                  <td>{formatMicroUsdc(cycle.reward.approvedMinor)}</td>
-                  <td>{formatMicroUsdc(cycle.reward.feeMinor)}</td>
-                  <td>{formatMicroUsdc(cycle.reward.paidMinor)}</td>
+                  {externalPrize ? null : (
+                    <>
+                      <td>{formatMicroUsdc(cycle.reward.approvedMinor)}</td>
+                      <td>{formatMicroUsdc(cycle.reward.feeMinor)}</td>
+                      <td>{formatMicroUsdc(cycle.reward.paidMinor)}</td>
+                    </>
+                  )}
                   <td>{cycle.state.replaceAll("-", " ")}</td>
                 </tr>
               ))}
@@ -1016,29 +1057,28 @@ export function ProjectFunding({ project }: { project: ProjectDefinition }) {
       Date.parse(route.effectiveAt) <= now &&
       (route.replacedAt === null || now < Date.parse(route.replacedAt)),
   );
+  if (activeRoutes.length === 0) {
+    return project.reward.kind === "external-prize-share" ? null : (
+      <p className="project-funding-unavailable">
+        Direct funding unavailable. No reviewed receiving address is published.
+      </p>
+    );
+  }
   return (
     <section className="section project-funding">
-      <details open={activeRoutes.length === 0}>
+      <details>
         <summary>Fund this project</summary>
         <p>
           Funding: {project.reward.fundingState} · Committed:{" "}
           {formatMicroUsdc(project.reward.committedMinor)} · Payments:{" "}
           {project.reward.paymentMode}
         </p>
-        {activeRoutes.length === 0 ? (
-          <p>
-            Not accepting direct funding yet. The steward publishes an address
-            through a reviewed manifest change.
-          </p>
-        ) : null}
         <p>{project.funding.disclosure}</p>
-        {activeRoutes.length > 0 ? (
-          <p>
-            Check the network, asset, and full address in your wallet before
-            sending. Transfers are irreversible. GitHub identity does not prove
-            wallet ownership.
-          </p>
-        ) : null}
+        <p>
+          Check the network, asset, and full address in your wallet before
+          sending. Transfers are irreversible. GitHub identity does not prove
+          wallet ownership.
+        </p>
         <div className="funding-routes">
           {activeRoutes.map((route) => {
             const key = `${route.network}:${route.asset}:${route.address}:${route.effectiveAt}`;
@@ -1335,7 +1375,9 @@ function ProjectPage({
           <div className="project-hero-grid">
             <div>
               <h1>
-                {headlineAction ? (
+                {project.status === "paused" ? (
+                  project.name
+                ) : headlineAction ? (
                   <>
                     Make money{" "}
                     <span className="project-headline-action">
@@ -1347,6 +1389,15 @@ function ProjectPage({
                 )}
               </h1>
               <p className="hero-copy">{project.description}</p>
+              {project.status === "paused" ? (
+                <ProjectParticipation
+                  project={project}
+                  displayCycleId={view?.cycle.id ?? null}
+                  cycles={
+                    state.status === "ready" ? state.cycleIndex.cycles : null
+                  }
+                />
+              ) : null}
               <p className="project-terms-line">
                 By{" "}
                 <ExternalLinkAnchor href={project.steward.github.profileUrl}>
@@ -1360,8 +1411,14 @@ function ProjectPage({
                 {project.steward.github.type === "User" ? (
                   <PublicXLink actorId={project.steward.github.nodeId} />
                 ) : null}
-                {" · "}
-                <a href="/points#people">Meet contributors and maintainers</a>
+                {view ? (
+                  <>
+                    {" · "}
+                    <Link href={`/projects/${project.slug}#contributors`}>
+                      Contributors
+                    </Link>
+                  </>
+                ) : null}
               </p>
               {project.terms.externalPrize ? (
                 <p className="project-policy-warning">
@@ -1369,7 +1426,18 @@ function ProjectPage({
                 </p>
               ) : null}
             </div>
-            {promotionEligible ? (
+            {project.status === "paused" ? null : state.status !== "ready" ? (
+              <aside className="reward-card">
+                <strong>
+                  {state.status === "loading"
+                    ? "Loading funding history…"
+                    : "Funding history unavailable"}
+                </strong>
+                <p>
+                  Funding promotion cannot be determined until the records load.
+                </p>
+              </aside>
+            ) : promotionEligible ? (
               <aside className="reward-card">
                 <strong
                   className={
@@ -1391,7 +1459,7 @@ function ProjectPage({
                     ? monthlyPoolUnfunded(project.reward)
                       ? `Target ${project.reward.monthlyCapDisplay} per month. No payments scheduled.`
                       : `${formatMicroUsdc(project.reward.committedMinor)} committed against a ${project.reward.monthlyCapDisplay} monthly target. Accessibility is unknown; no payment is enabled.`
-                    : "10% of an award actually received is allocated to Slop Cash; the remaining 90% is shared among accepted contributors. The prize sponsor controls eligibility and payment."}
+                    : project.terms.externalPrize?.allocationAuthority}
                 </p>
                 <div>
                   {project.reward.reviewBudget ? (
@@ -1412,24 +1480,25 @@ function ProjectPage({
               </aside>
             ) : (
               <aside className="reward-card">
-                <span>FUNDING PROMOTION PAUSED</span>
-                <strong>$0</strong>
+                <strong>Funding promotion paused</strong>
                 <p>
-                  {project.status === "paused"
-                    ? "Project activation requires a reviewed manifest change on GitHub."
-                    : "Accepted work and cycle history remain available."}
+                  Accepted work and cycle history remain available. No payment
+                  is enabled.
                 </p>
               </aside>
             )}
           </div>
+          {project.status !== "paused" && state.status === "ready" ? (
+            <ProjectParticipation
+              project={project}
+              displayCycleId={view?.cycle.id ?? null}
+              cycles={state.cycleIndex.cycles}
+            />
+          ) : null}
+          <ProjectFunding project={project} />
         </div>
       </section>
       <div className="shell">
-        <ProjectParticipation
-          project={project}
-          displayCycleId={view?.cycle.id ?? null}
-          cycles={state.status === "ready" ? state.cycleIndex.cycles : null}
-        />
         {state.status === "ready" &&
         project.repositories.some(
           (repository) =>
@@ -1441,7 +1510,6 @@ function ProjectPage({
             Activity for this project has not been collected yet.
           </p>
         ) : null}
-        <ProjectFunding project={project} />
         <ProjectPaymentHistory project={project} state={state} />
         {view && state.status === "ready" ? (
           <ProjectLeaderboard
