@@ -31,10 +31,11 @@ import {
   type PointsMember,
   pointMembers,
 } from "./lib/points";
+import { profileCounts } from "./lib/profiles";
 import { findProject, PROJECTS } from "./lib/projects.mjs";
 import { type DataState, useSnapshot } from "./lib/use-snapshot";
 import { DataNotice, formatMicroUsdc, formatScore } from "./Presentation";
-import { ContributorDirectory, ProfileActivity, useProfiles } from "./Profiles";
+import { ProfileActivity, useProfiles } from "./Profiles";
 
 const productOrigin = () =>
   ["https://slop.cash", "https://slop.tech", "https://eliza.army"].includes(
@@ -777,6 +778,19 @@ export function AccountPage() {
     </main>
   );
 }
+/** Categories from protocol/points-v1.md: activity, points, earned standings. */
+const POINT_CATEGORIES: readonly (readonly [string, string, boolean])[] = [
+  [
+    "Accepted work: micro, small, medium, large, XL, exceptional",
+    "10 · 30 · 90 · 240 · 450 · 750",
+    true,
+  ],
+  ["Reviews: triage, standard, deep, specialist", "10 · 30 · 90 · 240", true],
+  ["Historical merged PR before scoring records", "10 each", true],
+  ["Finalized payout cycle", "25 per project and month", true],
+  ["Join with GitHub", "5 once", false],
+  ["First X connection", "10 once", false],
+];
 export function PointsPage() {
   return (
     <main className="shell route-main points-page">
@@ -789,22 +803,35 @@ export function PointsPage() {
       <ContributorStandings />
       <section className="points-panel" id="rules">
         <h2>Ways to earn</h2>
-        <p>
-          Accepted code, documentation, tests, research, reviews, and approved
-          useful support all count.
-        </p>
-        <p>
-          Tiered contributions earn 10, 30, 90, 240, 450, or 750 points.
-          Historical merges start at 10 points unless a verified score provides
-          a different amount. Each finalized project payout cycle earns its
-          recipient 25 points, regardless of amount or transaction count.
-          Welcome and X connection points appear on profiles and in the
-          community directory; they do not affect earned-point standings.
-        </p>
-        <p>
-          Points persist across months. Corrections are recorded in the history.
-          Historic review coverage is limited to verified score and evaluation
-          records.
+        <section
+          className="points-table"
+          aria-label="Point categories"
+          // biome-ignore lint/a11y/noNoninteractiveTabindex: Keyboard users must be able to scroll all table columns.
+          tabIndex={0}
+        >
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Activity</th>
+                <th scope="col">Points</th>
+                <th scope="col">Earned-point standings</th>
+              </tr>
+            </thead>
+            <tbody>
+              {POINT_CATEGORIES.map(([activity, points, ranked]) => (
+                <tr key={activity}>
+                  <th scope="row">{activity}</th>
+                  <td>{points}</td>
+                  <td>{ranked ? "Included" : "Not included"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+        <p className="points-meta">
+          Points never change Slop Score or Money received. Points persist
+          across months, and corrections stay in the history. Review coverage
+          before scoring records is limited.
         </p>
         <a href="/protocol/points-v1.md">Read the points rules</a> ·{" "}
         <a href="/#projects">Find a project</a> ·{" "}
@@ -812,8 +839,7 @@ export function PointsPage() {
           Download points index
         </a>
       </section>
-      <CommunityPeople />
-      <ContributorDirectory />
+      <People />
     </main>
   );
 }
@@ -836,12 +862,16 @@ export function ContributorStandings({
     const params = new URLSearchParams(window.location.search);
     const sort = params.get("sort");
     const period = params.get("period");
+    // `period=new` was the earlier combined control: the new-earner cohort
+    // over recorded history.
     return {
       sort:
         sort === "points" || sort === "money"
           ? sort
           : ("score" as StandingsSort),
-      period: period === "lifetime" || period === "new" ? period : "month",
+      period: period === "lifetime" || period === "new" ? "lifetime" : "month",
+      cohort:
+        params.get("cohort") === "new" || period === "new" ? "new" : "all",
       query: params.get("q") ?? "",
       project: projectId ?? findProject(params.get("project") ?? "")?.id ?? "",
       page: Math.max(
@@ -851,11 +881,13 @@ export function ContributorStandings({
     };
   }, [projectId]);
   const [filters, setFilters] = useState(readFilters);
-  const { sort, period, query, project, page } = filters;
+  const { sort, period, cohort, query, project, page } = filters;
   const setSort = (sort: StandingsSort) =>
     setFilters((v) => ({ ...v, sort, page: 0 }));
   const setPeriod = (period: string) =>
     setFilters((v) => ({ ...v, period, page: 0 }));
+  const setCohort = (cohort: string) =>
+    setFilters((v) => ({ ...v, cohort, page: 0 }));
   const setQuery = (query: string) =>
     setFilters((v) => ({ ...v, query, page: 0 }));
   const setProject = (project: string) =>
@@ -871,6 +903,7 @@ export function ContributorStandings({
     for (const [key, value] of Object.entries({
       sort: sort === "score" ? "" : sort,
       period: period === "month" ? "" : period,
+      cohort: cohort === "all" ? "" : cohort,
       q: query,
       project: projectId ? "" : project,
       page: page ? String(page + 1) : "",
@@ -879,7 +912,7 @@ export function ContributorStandings({
       else url.searchParams.delete(key);
     }
     window.history.replaceState(window.history.state, "", url);
-  }, [sort, period, query, project, page, projectId]);
+  }, [sort, period, cohort, query, project, page, projectId]);
   const { state } = useContext(Context);
   const members = useMemo(() => {
     if (state.status !== "ready") return [];
@@ -904,7 +937,7 @@ export function ContributorStandings({
   const ranked = projection.rows
     .filter(
       (m) =>
-        period !== "new" ||
+        cohort !== "new" ||
         (m.firstContributionAt !== null &&
           Date.parse(m.firstContributionAt) >= Date.now() - 30 * 86400000),
     )
@@ -984,7 +1017,17 @@ export function ContributorStandings({
           >
             <option value="month">This month (UTC)</option>
             <option value="lifetime">Recorded history</option>
-            <option value="new">New earners · 30 days</option>
+          </select>
+        </label>
+        <label>
+          Cohort
+          <select
+            aria-label="Cohort"
+            value={cohort}
+            onChange={(e) => setCohort(e.target.value)}
+          >
+            <option value="all">All contributors</option>
+            <option value="new">New · first contribution in 30 days</option>
           </select>
         </label>
         {!projectId ? (
@@ -1117,7 +1160,12 @@ export function ContributorStandings({
         received is verified finalized USDC principal. Equal values share a
         rank. Historical review coverage follows verified records.
       </p>
-      {compact ? <a href="/points">Full standings and earning rules</a> : null}
+      {compact ? (
+        <p>
+          <a href="/points">Full standings and earning rules</a> ·{" "}
+          <a href="/points#people">Find people</a>
+        </p>
+      ) : null}
     </section>
   );
 }
@@ -1352,138 +1400,214 @@ type Person = {
   socialPoints: number;
   x: XAccount | null;
 };
-function CommunityPeople() {
+type MemberState =
+  | { status: "loading" | "error" | "preview" }
+  | { status: "ready"; people: Person[] };
+function validPerson(p: Person) {
+  if (
+    !/^[A-Za-z0-9_=-]{4,256}$/.test(p.actor?.id) ||
+    !/^[A-Za-z0-9][A-Za-z0-9-]{0,38}$/.test(p.actor.login) ||
+    p.welcome !== 5 ||
+    ![0, 10].includes(p.socialPoints)
+  )
+    throw new Error("Invalid community member");
+  if (p.x) xAccount(p.x);
+}
+/** Reads every public-member page; cursors must strictly advance. */
+async function loadMembers(signal: AbortSignal): Promise<Person[]> {
+  const people: Person[] = [];
+  let cursor = "";
+  for (;;) {
+    const v = (await requestJson(
+      `/api/v1/points/people?after=${encodeURIComponent(cursor)}`,
+      { signal },
+    )) as { people: Person[]; next: string | null };
+    if (
+      !Array.isArray(v.people) ||
+      v.people.length > 25 ||
+      (v.next !== null &&
+        (!/^[A-Za-z0-9_=-]{4,256}$/.test(v.next) || v.next <= cursor))
+    )
+      throw new Error("Invalid community page");
+    for (const p of v.people) validPerson(p);
+    people.push(...v.people);
+    if (v.next === null) return people;
+    cursor = v.next;
+  }
+}
+const PEOPLE_PAGE_SIZE = 24;
+/**
+ * One people view: public members and everyone with a recorded pull request.
+ * People without score stay discoverable without receiving a rank.
+ */
+function People() {
   const { state, me } = useContext(Context);
-  const [people, setPeople] = useState<Person[]>([]);
-  const [cursor, setCursor] = useState("");
-  const [prior, setPrior] = useState<string[]>([]);
-  const [next, setNext] = useState<string | null>(null);
-  const [status, setStatus] = useState("loading");
+  const census = useProfiles();
+  const [members, setMembers] = useState<MemberState>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
+  const [query, setQuery] = useState("");
+  const [page, setPage] = useState(0);
   // biome-ignore lint/correctness/useExhaustiveDependencies: retries and membership changes refresh public visibility.
   useEffect(() => {
     if (!productOrigin()) {
-      setStatus("preview");
+      setMembers({ status: "preview" });
       return;
     }
     const c = new AbortController();
-    setStatus("loading");
-    void requestJson(
-      `/api/v1/points/people?after=${encodeURIComponent(cursor)}`,
-      { signal: c.signal },
-    )
-      .then((value) => {
-        const v = value as { people: Person[]; next: string | null };
-        if (
-          !Array.isArray(v.people) ||
-          v.people.length > 25 ||
-          (v.next !== null && !/^[A-Za-z0-9_=-]{4,256}$/.test(v.next))
-        )
-          throw new Error("Invalid community page");
-        for (const p of v.people) {
-          if (
-            !/^[A-Za-z0-9_=-]{4,256}$/.test(p.actor?.id) ||
-            !/^[A-Za-z0-9][A-Za-z0-9-]{0,38}$/.test(p.actor.login) ||
-            p.welcome !== 5 ||
-            ![0, 10].includes(p.socialPoints)
-          )
-            throw new Error("Invalid community member");
-          if (p.x) xAccount(p.x);
-        }
-        setPeople(v.people);
-        setNext(v.next);
-        setStatus("ready");
-      })
+    setMembers({ status: "loading" });
+    void loadMembers(c.signal)
+      .then((people) => setMembers({ status: "ready", people }))
       .catch(() => {
-        if (!c.signal.aborted) setStatus("error");
+        if (!c.signal.aborted) setMembers({ status: "error" });
       });
     return () => c.abort();
-  }, [cursor, attempt, me]);
+  }, [attempt, me]);
+  const people = useMemo(() => {
+    const byId = new Map<
+      string,
+      { id: string; login: string; merged: number | null; member?: Person }
+    >();
+    if (census.state.status === "ready")
+      for (const p of census.state.index.people)
+        byId.set(p.id, {
+          id: p.id,
+          login: p.login,
+          merged: profileCounts(p).merged,
+        });
+    if (members.status === "ready")
+      for (const p of members.people) {
+        const known = byId.get(p.actor.id);
+        byId.set(p.actor.id, {
+          id: p.actor.id,
+          login: known?.login ?? p.actor.login,
+          merged: known?.merged ?? (census.state.status === "ready" ? 0 : null),
+          member: p,
+        });
+      }
+    return [...byId.values()].sort((a, b) => a.login.localeCompare(b.login));
+  }, [census.state, members]);
+  const matches = people.filter((p) =>
+    p.login.toLowerCase().includes(query.trim().toLowerCase()),
+  );
+  const pages = Math.max(1, Math.ceil(matches.length / PEOPLE_PAGE_SIZE));
+  const current = Math.min(page, pages - 1);
   return (
-    <section
-      className="points-panel"
-      id="people"
-      aria-label="Community members"
-    >
-      <h2>Meet the community</h2>
+    <section className="points-panel" id="people" aria-labelledby="people-h">
+      <h2 id="people-h">People</h2>
       <p>
-        Everyone who chooses a public membership can appear here, including
-        people still getting started.
+        Public members and everyone with a recorded pull request, including
+        people without a score yet.
       </p>
-      {status === "preview" ? (
-        <a href="https://slop.cash/points#people">
-          View public members on slop.cash
-        </a>
-      ) : status === "loading" ? (
+      <label>
+        GitHub username{" "}
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setPage(0);
+          }}
+        />
+      </label>
+      {census.state.status === "loading" ? (
+        <p role="status">Loading contributors…</p>
+      ) : census.state.status === "error" ? (
+        <p role="status">
+          Contributor records are unavailable.{" "}
+          <button type="button" onClick={census.retry}>
+            Retry contributors
+          </button>
+        </p>
+      ) : null}
+      {members.status === "preview" ? (
+        <p>
+          Public members load only on slop.cash.{" "}
+          <a href="https://slop.cash/points#people">View public members</a>
+        </p>
+      ) : members.status === "loading" ? (
         <p role="status">Loading members…</p>
-      ) : status === "error" ? (
-        <>
-          <p role="status">Community members are unavailable.</p>
+      ) : members.status === "error" ? (
+        <p role="status">
+          Public members are unavailable.{" "}
           <button type="button" onClick={() => setAttempt((v) => v + 1)}>
             Retry members
           </button>
-        </>
-      ) : (
+        </p>
+      ) : null}
+      {census.state.status === "ready" || members.status === "ready" ? (
         <>
+          <p>{matches.length.toLocaleString()} people</p>
           <ul className="points-people">
-            {people.map((p) => {
-              const earned =
-                state.status === "ready"
-                  ? (state.members.find((m) => m.actor.id === p.actor.id)
-                      ?.total ?? 0)
-                  : null;
-              const steward = PROJECTS.filter(
-                (project) =>
-                  project.authority.state === "verified" &&
-                  project.steward.github.nodeId === p.actor.id,
-              );
-              return (
-                <li key={p.actor.id}>
-                  <a
-                    href={`/contributors/${encodeURIComponent(p.actor.login)}`}
-                  >
-                    {p.actor.login}
-                  </a>
-                  <span>
-                    {earned === null
-                      ? `${p.welcome + p.socialPoints} participation pts · earned points unavailable`
-                      : `${(earned + p.welcome + p.socialPoints).toLocaleString()} pts`}
-                  </span>
-                  {steward.length ? (
-                    <small>
-                      Project steward · {steward.map((p) => p.name).join(", ")}
-                    </small>
-                  ) : null}
-                  {p.x ? <XAccountLink account={p.x} /> : null}
-                </li>
-              );
-            })}
+            {matches
+              .slice(
+                current * PEOPLE_PAGE_SIZE,
+                (current + 1) * PEOPLE_PAGE_SIZE,
+              )
+              .map((p) => {
+                const earned =
+                  state.status === "ready"
+                    ? (state.members.find((m) => m.actor.id === p.id)?.total ??
+                      0)
+                    : null;
+                const steward = PROJECTS.filter(
+                  (project) =>
+                    project.authority.state === "verified" &&
+                    project.steward.github.nodeId === p.id,
+                );
+                const participation = p.member
+                  ? p.member.welcome + p.member.socialPoints
+                  : 0;
+                return (
+                  <li key={p.id}>
+                    <a href={`/contributors/${encodeURIComponent(p.login)}`}>
+                      {p.login}
+                    </a>
+                    <span>
+                      {p.merged === null
+                        ? "PR count unavailable"
+                        : p.merged === 0
+                          ? "No merged PRs"
+                          : `${p.merged.toLocaleString()} merged PR${p.merged === 1 ? "" : "s"}`}
+                    </span>
+                    <span>
+                      {earned === null
+                        ? "Points unavailable"
+                        : `${(earned + participation).toLocaleString()} pts`}
+                    </span>
+                    {p.member ? <small>Public member</small> : null}
+                    {steward.length ? (
+                      <small>
+                        Project steward ·{" "}
+                        {steward.map((s) => s.name).join(", ")}
+                      </small>
+                    ) : null}
+                    {p.member?.x ? <XAccountLink account={p.member.x} /> : null}
+                  </li>
+                );
+              })}
           </ul>
-          {!people.length ? <p>No public members on this page yet.</p> : null}
+          {matches.length === 0 ? <p>No people match this username.</p> : null}
           <div className="points-controls">
             <button
               type="button"
-              disabled={!prior.length}
-              onClick={() => {
-                setCursor(prior.at(-1) ?? "");
-                setPrior((p) => p.slice(0, -1));
-              }}
+              disabled={current === 0}
+              onClick={() => setPage(current - 1)}
             >
-              Previous members
+              Previous people
             </button>
+            <span>
+              Page {current + 1} of {pages}
+            </span>
             <button
               type="button"
-              disabled={!next}
-              onClick={() => {
-                setPrior((p) => [...p, cursor]);
-                setCursor(next ?? "");
-              }}
+              disabled={current + 1 >= pages}
+              onClick={() => setPage(current + 1)}
             >
-              Next members
+              Next people
             </button>
           </div>
         </>
-      )}
+      ) : null}
     </section>
   );
 }

@@ -699,6 +699,29 @@ test("renders contributor and cycle records from validated public data", {
       timeZone: "UTC",
     }).format(new Date(`${archived.cycleId}-01T00:00:00Z`));
     const project = PROJECTS.find((entry) => entry.id === archived.projectId);
+    const projectIds = new Set(cycles.cycles.map((cycle) => cycle.projectId));
+    if (projectIds.size > 1) {
+      // Filters are shareable and keep complete coverage visible.
+      await page
+        .getByLabel("Project", { exact: true })
+        .selectOption(archived.projectId);
+      await expect(page).toHaveURL(
+        new RegExp(`[?&]project=${archived.projectId}(?:&|$)`, "u"),
+      );
+      const shown = cycles.cycles.filter(
+        (cycle) => cycle.projectId === archived.projectId,
+      ).length;
+      await expect(
+        page.getByText(
+          `Showing ${shown} of ${cycles.cycles.length} published cycles`,
+        ),
+      ).toBeVisible();
+      await page.reload({ waitUntil: "networkidle" });
+      await expect(page.getByLabel("Project", { exact: true })).toHaveValue(
+        archived.projectId,
+      );
+      await expect(page.locator(".cycle-record")).toHaveCount(shown);
+    }
     await page
       .getByRole("link", {
         name: `${project?.name ?? archived.projectId} · ${month}`,
@@ -720,7 +743,7 @@ test("renders contributor and cycle records from validated public data", {
     await records.focus();
     await page.keyboard.press("Enter");
     const frozen = page.getByRole("link", {
-      name: new RegExp("Frozen source", "u"),
+      name: /Frozen source/u,
     });
     await expect(frozen).toHaveAttribute(
       "href",
