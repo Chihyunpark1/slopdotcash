@@ -36,7 +36,7 @@ function saveAuthorization(value: WalletAuthorization | null) {
   }
 }
 
-/** Standalone route or profile section; routing belongs to the parent. */
+/** Account Wallets section; /wallet is a compatibility route to it. */
 export function WalletRegistration() {
   const addressId = useId();
   const [address, setAddress] = useState(savedAddress);
@@ -183,21 +183,37 @@ export function WalletRegistration() {
     return () => window.removeEventListener("pageshow", resume);
   });
   const busy = phase === "signing-in" || phase === "registering";
+  const step = registered ? 3 : session && phase !== "idle" ? 2 : 1;
   return (
     <section
       aria-labelledby={`${addressId}-heading`}
-      className="funding-workbench"
+      className="funding-workbench account-wallets"
+      id="wallets"
     >
-      <h1 id={`${addressId}-heading`}>Register your wallet</h1>
+      <h2 id={`${addressId}-heading`}>Wallets</h2>
       <p>
-        Link your GitHub account to a public Base or Solana address for USDC
-        rewards. No wallet connection, private keys, or signing required.
+        Register a public Base or Solana address for USDC awards. Registration
+        records a receiving address; it does not authorize payment.
       </p>
-      <p>
-        Your GitHub identity and address become a public, permanent claim.
-        Registration does not prove control of the address or authorize a
-        payment. Existing cycle wallets stay locked.
-      </p>
+      <details>
+        <summary>About wallet registration</summary>
+        <p>
+          You do not connect a wallet, share private keys, or sign anything.
+          GitHub confirms your identity again for each change. Registration does
+          not prove control of the address. A changed address appends a
+          successor record, and wallets in existing cycles stay locked.
+        </p>
+      </details>
+      <ol className="wallet-steps" aria-label="Registration steps">
+        {["Address", "Confirm", "Saved"].map((label, index) => (
+          <li
+            key={label}
+            aria-current={step === index + 1 ? "step" : undefined}
+          >
+            <span>{index + 1}</span> {label}
+          </li>
+        ))}
+      </ol>
       {authorizationUrl && (
         <div role="status">
           <a
@@ -260,7 +276,7 @@ export function WalletRegistration() {
         />
         {(phase === "idle" || phase === "done") && (
           <button className="button primary-button" type="submit">
-            Continue with GitHub
+            Verify with GitHub
           </button>
         )}
       </form>
@@ -271,37 +287,60 @@ export function WalletRegistration() {
         </p>
       )}
       {session && phase === "preview" && (
-        <div>
-          <h2>Confirm your public registration</h2>
-          <p>
-            GitHub: <strong>{session.preview.identity.githubLogin}</strong> (ID{" "}
-            {session.preview.identity.githubActorId})
-          </p>
-          <p>
-            {chainLabel} address:{" "}
-            <code className="wallet-address">{session.preview.address}</code>
-          </p>
-          <p>
-            {session.preview.current ? (
-              <>
-                Current address:{" "}
+        <div className="wallet-confirmation">
+          <h3>Confirm your public registration</h3>
+          <dl>
+            <div>
+              <dt>GitHub</dt>
+              <dd>
+                <strong>{session.preview.identity.githubLogin}</strong> (ID{" "}
+                {session.preview.identity.githubActorId})
+              </dd>
+            </div>
+            <div>
+              <dt>Network</dt>
+              <dd>{chainLabel}</dd>
+            </div>
+            <div>
+              <dt>New address</dt>
+              <dd>
                 <code className="wallet-address">
-                  {session.preview.current.address}
+                  {session.preview.address}
                 </code>
-                . A changed address appends a successor claim.
-              </>
-            ) : (
-              "No current wallet claim."
-            )}
+              </dd>
+            </div>
+            <div>
+              <dt>Current address</dt>
+              <dd>
+                {session.preview.current ? (
+                  <code className="wallet-address">
+                    {session.preview.current.address}
+                  </code>
+                ) : (
+                  "None"
+                )}
+              </dd>
+            </div>
+          </dl>
+          <p>
+            Sign-in is complete. You can close the GitHub sign-in window. This
+            preview expires at {session.preview.expiresAt}.
           </p>
-          <p>Sign-in is complete. You can close the GitHub sign-in window.</p>
-          <p>This preview expires at {session.preview.expiresAt}.</p>
+          <p className="wallet-consequence">
+            <strong>
+              Your GitHub identity and this address become a public, permanent
+              record.
+            </strong>{" "}
+            {session.preview.current
+              ? "The new address appends a successor record; the earlier record stays public."
+              : "Later changes append a successor record; this record stays public."}
+          </p>
           <button
             className="button primary-button"
             type="button"
             onClick={() => void confirm()}
           >
-            Confirm register
+            Register address
           </button>
         </div>
       )}
@@ -332,23 +371,38 @@ export function WalletRegistration() {
       {message && <p role="alert">{message}</p>}
       {registered && (
         <div role="status">
-          <h2>Wallet registered</h2>
-          <p>
-            {registered.githubLogin}:{" "}
-            <code className="wallet-address">{registered.address}</code>
-          </p>
-          <p>Observed: {registered.observedAt}</p>
-          <p>
-            Record digest:{" "}
-            <code className="wallet-address">{registered.recordDigest}</code>
-          </p>
+          <h3>Wallet registered</h3>
+          <dl>
+            <div>
+              <dt>Network</dt>
+              <dd>{chainLabel}</dd>
+            </div>
+            <div>
+              <dt>Address</dt>
+              <dd>
+                <code className="wallet-address">{registered.address}</code>
+              </dd>
+            </div>
+            <div>
+              <dt>Status</dt>
+              <dd>Saved for {registered.githubLogin}</dd>
+            </div>
+          </dl>
           <a
             href={`${browserDeployment.api}/api/v1/wallet-claims/${registered.claimId}`}
             target="_blank"
             rel="noreferrer"
           >
-            View public claim
+            View public record
           </a>
+          <details>
+            <summary>Technical details</summary>
+            <p>Observed: {registered.observedAt}</p>
+            <p>
+              Record digest:{" "}
+              <code className="wallet-address">{registered.recordDigest}</code>
+            </p>
+          </details>
         </div>
       )}
     </section>

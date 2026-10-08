@@ -703,7 +703,7 @@ test("renders contributor and cycle records from validated public data", {
     await records.focus();
     await page.keyboard.press("Enter");
     const frozen = page.getByRole("link", {
-      name: new RegExp("Frozen source", "u"),
+      name: /Frozen source/u,
     });
     await expect(frozen).toHaveAttribute(
       "href",
@@ -1224,7 +1224,7 @@ for (const scenario of [
     for (const path of [
       "/models",
       "/sponsors",
-      "/verification",
+      "/how-it-works",
       "/",
       ...PROJECTS.map((project) => `/projects/${project.id}`),
       "/projects/new",
@@ -1360,6 +1360,8 @@ for (const route of [
   "/receipts",
   "/sponsors",
   "/verification",
+  "/how-it-works",
+  "/account",
   "/",
   ...PROJECTS.map((project) => `/projects/${project.id}`),
   "/projects/eliza/funding",
@@ -1607,6 +1609,48 @@ test("lands direct hash links on their section", async ({ page }) => {
     ).toBeGreaterThanOrEqual(0);
     expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
   }
+});
+
+test("legacy verification links open the How it works payment section", async ({
+  page,
+}) => {
+  for (const path of ["/verification", "/verification/"]) {
+    await page.goto(path, { waitUntil: "networkidle" });
+    await expect(page).toHaveURL(/\/how-it-works#verification$/u);
+    await expect(
+      page.getByRole("heading", { exact: true, name: "How Slop works" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", {
+        exact: true,
+        name: "Settlement verification",
+      }),
+    ).toBeInViewport();
+    await expect(
+      page.getByRole("button", { name: "Derive addresses" }),
+    ).toBeHidden();
+  }
+  const stages = page.getByRole("list", { name: "Payment stages" });
+  await expect(stages.getByRole("listitem")).toHaveText([
+    /^Projected/u,
+    /Under review/u,
+    /Approved/u,
+    /Scheduled/u,
+    /Paid/u,
+  ]);
+  const branches = page.getByRole("region", {
+    name: "Unresolved outcomes: not steps toward payment",
+  });
+  for (const state of ["Held", "Unclaimed", "Excluded"]) {
+    await expect(branches.getByText(state, { exact: true })).toBeVisible();
+    await expect(stages.getByText(state, { exact: true })).toHaveCount(0);
+  }
+  await expect(
+    page.getByRole("heading", { exact: true, name: "For contributors" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { exact: true, name: "For maintainers" }),
+  ).toBeVisible();
 });
 
 test("derives Solana addresses on the settlement verification page", async ({

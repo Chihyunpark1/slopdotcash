@@ -122,13 +122,8 @@ function BindingState({ bindings }: { bindings: Bindings }): ReactNode {
   );
 }
 
-export function SettlementVerification({
-  embedded = false,
-}: {
-  embedded?: boolean;
-}) {
-  const Container = embedded ? "section" : "main";
-  const Heading = embedded ? "h2" : "h1";
+/** The How it works payment section; /verification is a compatibility route. */
+export function SettlementVerification() {
   const headingId = useId();
   const addressId = useId();
   const indexId = useId();
@@ -218,13 +213,9 @@ export function SettlementVerification({
   };
 
   return (
-    <Container
-      className={embedded ? "model-outcomes-section" : "shell route-main"}
-      id={embedded ? "verification" : undefined}
-      aria-labelledby={embedded ? undefined : headingId}
-    >
+    <section className="model-outcomes-section" id="verification">
       <section aria-labelledby={headingId} className="funding-workbench">
-        <Heading id={headingId}>Settlement verification</Heading>
+        <h2 id={headingId}>Settlement verification</h2>
         <p>
           Slop does not take your word for a payment, and you do not have to
           take ours. Every monthly execution is bound to one external Squads v4
@@ -405,6 +396,6 @@ export function SettlementVerification({
           )}
         </details>
       </section>
-    </Container>
+    </section>
   );
 }
