@@ -1644,6 +1644,8 @@ describe("rate-efficient query plan", () => {
       author,
       additions: 1,
       deletions: 0,
+      baseRefName: "develop",
+      commits: [],
     });
     const candidates = Array.from({ length: 7 }, (_, index) => ({
       outcome: outcome(
@@ -1708,6 +1710,8 @@ describe("rate-efficient query plan", () => {
       author: actor("alice"),
       additions: 1,
       deletions: 0,
+      baseRefName: "develop",
+      commits: [],
     });
     // Six PRs by the same author, project, and month merged in the same second
     // (batch merge / merge queue produce identical second-precision timestamps).
