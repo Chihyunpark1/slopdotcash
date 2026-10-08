@@ -333,7 +333,7 @@ export function PointsNav({ onNavigate }: { onNavigate?: () => void }) {
           <a href="/earnings" onClick={navigate}>
             Earnings and wallets
           </a>
-          <a href="/points" onClick={navigate}>
+          <a href="/account" onClick={navigate}>
             Account settings
           </a>
           <button type="button" onClick={() => void signout()} disabled={busy}>
@@ -545,17 +545,19 @@ export function ProfilePoints({
       <p>{POINTS_NOTICE}</p>
       {own ? (
         <p>
-          <a href="/points">Manage account and social connections</a>
+          <a href="/account">Manage account and social connections</a>
         </p>
       ) : null}
-      <a href="/points">How to earn points</a>
+      <a href="/points#rules">How to earn points</a>
     </section>
   );
 }
 function JoinPoints({
   redirectToProfile = false,
+  showHeading = true,
 }: {
   redirectToProfile?: boolean;
+  showHeading?: boolean;
 }) {
   const { me, setMe, session } = useContext(Context);
   const [busy, setBusy] = useState(false);
@@ -656,7 +658,7 @@ function JoinPoints({
   if (!productOrigin())
     return (
       <section className="points-panel">
-        <h2>Sign in to Slop</h2>
+        {showHeading ? <h2>Sign in to Slop</h2> : null}
         <p>
           Sign in with your GitHub account. New members receive 5 welcome
           points.
@@ -666,7 +668,9 @@ function JoinPoints({
     );
   return (
     <section className="points-panel">
-      <h2>{me ? `Welcome, ${me.actor.login}` : "Sign in to Slop"}</h2>
+      {showHeading ? (
+        <h2>{me ? `@${me.actor.login}` : "Sign in to Slop"}</h2>
+      ) : null}
       {!me && session === "error" ? (
         <p role="status">
           We couldn’t check your session. Sign in with GitHub to try again.
@@ -693,7 +697,12 @@ function JoinPoints({
                   headers: { "content-type": "application/json" },
                   body: JSON.stringify({ public: e.target.checked }),
                 }).then(
-                  (v) => setMe(member(v)),
+                  (v) => {
+                    setMe(member(v));
+                    setMessage(
+                      "Membership visibility saved. Public contribution records are unchanged.",
+                    );
+                  },
                   () => setMessage("Could not update visibility."),
                 );
               }}
@@ -704,9 +713,8 @@ function JoinPoints({
       ) : (
         <>
           <p>
-            GitHub is the only way to sign in. New members receive 5 welcome
-            points. Your accepted contributions are recorded even before you
-            join. No wallet needed.
+            Use GitHub to sign in. New members receive 5 welcome points. No
+            wallet needed.
           </p>
           <label>
             <input
@@ -752,11 +760,20 @@ export function LoginPage() {
   return (
     <main className="shell route-main points-page">
       <h1>Log in</h1>
+      <JoinPoints redirectToProfile showHeading={false} />
+    </main>
+  );
+}
+export function AccountPage() {
+  return (
+    <main className="shell route-main points-page">
+      <h1>Account</h1>
+      <JoinPoints />
+      <SocialConnections />
       <p>
-        Use your GitHub account to access your profile and manage your
-        connections.
+        <a href="/wallet">Manage payout wallets</a> ·{" "}
+        <a href="/points#rules">Points and earning rules</a>
       </p>
-      <JoinPoints redirectToProfile />
     </main>
   );
 }
@@ -764,14 +781,13 @@ export function PointsPage() {
   return (
     <main className="shell route-main points-page">
       <h1>Slop Points</h1>
-      <p>Record your participation and accepted contributions.</p>
       <p>{POINTS_NOTICE}</p>
-      <JoinPoints />
-      <SocialConnections />
-      <CommunityPeople />
-      <ContributorDirectory />
+      <p>
+        <a href="/account">Account settings</a> ·{" "}
+        <a href="#people">Find people</a> · <a href="#rules">Ways to earn</a>
+      </p>
       <ContributorStandings />
-      <section className="points-panel">
+      <section className="points-panel" id="rules">
         <h2>Ways to earn</h2>
         <p>
           Accepted code, documentation, tests, research, reviews, and approved
@@ -796,6 +812,8 @@ export function PointsPage() {
           Download points index
         </a>
       </section>
+      <CommunityPeople />
+      <ContributorDirectory />
     </main>
   );
 }
@@ -1099,7 +1117,7 @@ export function ContributorStandings({
         received is verified finalized USDC principal. Equal values share a
         rank. Historical review coverage follows verified records.
       </p>
-      {compact ? <a href="/points">Your profile and ways to earn</a> : null}
+      {compact ? <a href="/points">Full standings and earning rules</a> : null}
     </section>
   );
 }
@@ -1228,11 +1246,8 @@ function SocialConnections() {
   }
   return (
     <section className="points-panel" aria-label="Connect X">
-      <h2>Connect your X account</h2>
-      <p>
-        Sloperators, maintainers, reviewers, and supporters can all connect.
-        Earn 10 points once and help people find you.
-      </p>
+      <h2>X account</h2>
+
       {outcome === "connected" ? (
         <p role="status">X connected. Your connection points are recorded.</p>
       ) : outcome === "cancelled" ? (
@@ -1292,19 +1307,25 @@ function SocialConnections() {
           ) : null}
           {data.configured ? (
             <>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={publish}
-                  disabled={busy}
-                  onChange={(e) => setPublish(e.target.checked)}
-                />
-                Show this X connection with my public membership
-              </label>
+              {!data.account ? (
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={publish}
+                    disabled={busy}
+                    onChange={(e) => setPublish(e.target.checked)}
+                  />
+                  Show this X connection with my public membership
+                </label>
+              ) : null}
               <button
                 type="button"
                 disabled={busy}
-                onClick={() => void action("start", { public: publish })}
+                onClick={() =>
+                  void action("start", {
+                    public: data.account ? data.account.public === 1 : publish,
+                  })
+                }
               >
                 {busy
                   ? "Connecting…"

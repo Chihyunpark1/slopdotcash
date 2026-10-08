@@ -15,6 +15,7 @@ test(
     await expect(
       page.getByRole("heading", { name: "Log in", exact: true }),
     ).toBeVisible();
+    await expect(page.locator("main h1, main h2")).toHaveCount(1);
     const header = page.getByRole("banner");
     await expect(
       header.getByRole("link", { name: "Receipts", exact: true }),
