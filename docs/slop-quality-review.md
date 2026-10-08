@@ -38,16 +38,16 @@ The strongest first pass is: accurate money labels, one points leaderboard, one 
 
 ## Fix first: presentation that can mislead or obstruct
 
-| Priority | Observed issue | Recommended correction |
-|---|---|---|
-| P0 | Home project cards prominently advertise `$5k/mo` without an adjacent unfunded label; the project page explains that the amount is a target and no funding is committed. | Show `Monthly target $5,000` and `Unfunded` together. Separate target, committed amount, and payment availability. Never rely on a later paragraph to qualify the headline. |
-| P0 | At 390px, the Models table squeezes “Merged PRs” and numeric values into vertical characters. | Use compact mobile rows with model, merged count, and share; expand secondary metrics. If retaining a table, give columns minimum widths and a keyboard-accessible horizontal scroller. Never wrap a number digit by digit. |
-| P0 | The profile showed `1744.6666666666667` as the 35-day score. | Use a shared score formatter (e.g. `1,744.67`) with exact precision in details. Keep money calculations in integer units. |
-| P0 | A project displays “Contribution points” and a second monthly “leaderboard,” with different scopes and values. Profile pages add an “overall rank” based on another measure. | Make public rank points-based everywhere. Put allocation scoring in a separately labeled allocation view with an explicit period. Preserve the separate calculations. |
-| P0 | Profile project rows display dollar figures even when the overview says projected/unfunded and paid is zero. The cycle hero calls $10,000 a “current cycle amount.” | Label each amount at the point of display: `Simulated`, `Suggested`, `Approved`, or `Paid`. Avoid the ambiguous “current cycle amount.” |
-| P1 | Many data-driven routes initially render an introduction or nearly empty main area; `DataNotice` returns nothing while loading. | Reserve the content area and show a useful loading state. Keep identity and route title stable while data loads. Never substitute zero or a paused state for unknown data. |
-| P1 | Receipts say “Verified receipt,” while their seal describes only a device signature. | Use “Device-signed receipt” or the precise verified property. Do not imply model-provider verification. |
-| P1 | “Fund a project” on the homepage links to the new-project form. | Route it to project funding selection/Sponsors. Keep “Add a project” for onboarding a new repository. |
+| Priority | Observed issue                                                                                                                                                               | Recommended correction                                                                                                                                                                                                      |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P0       | Home project cards prominently advertise `$5k/mo` without an adjacent unfunded label; the project page explains that the amount is a target and no funding is committed.     | Show `Monthly target $5,000` and `Unfunded` together. Separate target, committed amount, and payment availability. Never rely on a later paragraph to qualify the headline.                                                 |
+| P0       | At 390px, the Models table squeezes “Merged PRs” and numeric values into vertical characters.                                                                                | Use compact mobile rows with model, merged count, and share; expand secondary metrics. If retaining a table, give columns minimum widths and a keyboard-accessible horizontal scroller. Never wrap a number digit by digit. |
+| P0       | The profile showed `1744.6666666666667` as the 35-day score.                                                                                                                 | Use a shared score formatter (e.g. `1,744.67`) with exact precision in details. Keep money calculations in integer units.                                                                                                   |
+| P0       | A project displays “Contribution points” and a second monthly “leaderboard,” with different scopes and values. Profile pages add an “overall rank” based on another measure. | Make public rank points-based everywhere. Put allocation scoring in a separately labeled allocation view with an explicit period. Preserve the separate calculations.                                                       |
+| P0       | Profile project rows display dollar figures even when the overview says projected/unfunded and paid is zero. The cycle hero calls $10,000 a “current cycle amount.”          | Label each amount at the point of display: `Simulated`, `Suggested`, `Approved`, or `Paid`. Avoid the ambiguous “current cycle amount.”                                                                                     |
+| P1       | Many data-driven routes initially render an introduction or nearly empty main area; `DataNotice` returns nothing while loading.                                              | Reserve the content area and show a useful loading state. Keep identity and route title stable while data loads. Never substitute zero or a paused state for unknown data.                                                  |
+| P1       | Receipts say “Verified receipt,” while their seal describes only a device signature.                                                                                         | Use “Device-signed receipt” or the precise verified property. Do not imply model-provider verification.                                                                                                                     |
+| P1       | “Fund a project” on the homepage links to the new-project form.                                                                                                              | Route it to project funding selection/Sponsors. Keep “Add a project” for onboarding a new repository.                                                                                                                       |
 
 P0 means the first implementation pass, not an assertion of a security vulnerability.
 
@@ -119,16 +119,16 @@ P0 means the first implementation pass, not an assertion of a security vulnerabi
 
 ### Project-specific content
 
-| Project | Specific edit |
-|---|---|
-| Eliza | Shorten purpose to “Build and improve elizaOS.” Prioritize unfunded target labeling and merge the two ranking blocks. |
-| ASI | First line: “Improve continual-learning benchmarks.” Put Alberta Plan, seeded comparisons, baselines, and method-porting requirements in contribution details. |
-| Darling arm64 | First line: “Help macOS apps run on Linux arm64.” Keep paused state visible; move control/A-B-A/harness requirements into contribution guidance. |
-| Heir Elements SDK | Lead with “Archived — replaced by Heir Desk SDK,” plus a direct successor link. Remove the money headline and duplicate activation notices. Retain historical records. |
-| Heir Desk SDK | Lead with “Permission required” and the proprietary-license restriction. Avoid suggesting unrestricted open-source participation or earnings. |
-| Delta Star | Keep the external prize structurally distinct from monthly pools. Label the advertised prize on the card; show the 90/10 split as a small allocation graphic with “of an award actually received.” Remove inapplicable monthly-payment UI. |
-| MONNA Agent Permission Diff | Shorten to “Compare agent permissions offline.” Move redaction/parser/execution restrictions into requirements; keep paused status. |
-| Visual Strategy Canvas | Shorten to “Turn a brief into an editable strategy canvas.” Put provider setup and export-test requirements in details; keep paused status. |
+| Project                     | Specific edit                                                                                                                                                                                                                              |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Eliza                       | Shorten purpose to “Build and improve elizaOS.” Prioritize unfunded target labeling and merge the two ranking blocks.                                                                                                                      |
+| ASI                         | First line: “Improve continual-learning benchmarks.” Put Alberta Plan, seeded comparisons, baselines, and method-porting requirements in contribution details.                                                                             |
+| Darling arm64               | First line: “Help macOS apps run on Linux arm64.” Keep paused state visible; move control/A-B-A/harness requirements into contribution guidance.                                                                                           |
+| Heir Elements SDK           | Lead with “Archived — replaced by Heir Desk SDK,” plus a direct successor link. Remove the money headline and duplicate activation notices. Retain historical records.                                                                     |
+| Heir Desk SDK               | Lead with “Permission required” and the proprietary-license restriction. Avoid suggesting unrestricted open-source participation or earnings.                                                                                              |
+| Delta Star                  | Keep the external prize structurally distinct from monthly pools. Label the advertised prize on the card; show the 90/10 split as a small allocation graphic with “of an award actually received.” Remove inapplicable monthly-payment UI. |
+| MONNA Agent Permission Diff | Shorten to “Compare agent permissions offline.” Move redaction/parser/execution restrictions into requirements; keep paused status.                                                                                                        |
+| Visual Strategy Canvas      | Shorten to “Turn a brief into an editable strategy canvas.” Put provider setup and export-test requirements in details; keep paused status.                                                                                                |
 
 ## 4. Public profile — `/contributors/:login`
 
@@ -299,54 +299,54 @@ The current page reads like multiple protocol documents concatenated into one la
 
 ## Consolidation map
 
-| Repeated material | Canonical home | Other surfaces |
-|---|---|---|
-| Points ranking | Leaderboard | Project-filtered view; profile total |
-| Community + contributor discovery | People view within leaderboard | Links from project/profile |
-| Membership and X settings | Account settings | Avatar menu entry |
-| Earning rules | Leaderboard explanation + protocol | Short “How points work” link |
-| Money-state definitions | How it works | Compact local badges with explanation links |
-| Funding custody/authority explanation | How it works / sponsor details | One contextual sentence at actual funding action |
-| Project proposals | Shared proposal form | New and update modes |
-| Allocation editing | Manage payouts | Link from project/cycle |
-| PR, points, and payment activity | Profile activity views | One summary strip |
-| Signature/model caveats | Models methodology + receipt details | Precise local status labels |
-| Verification tools | How it works → Verification | Compatibility route and direct anchors |
+| Repeated material                     | Canonical home                       | Other surfaces                                   |
+| ------------------------------------- | ------------------------------------ | ------------------------------------------------ |
+| Points ranking                        | Leaderboard                          | Project-filtered view; profile total             |
+| Community + contributor discovery     | People view within leaderboard       | Links from project/profile                       |
+| Membership and X settings             | Account settings                     | Avatar menu entry                                |
+| Earning rules                         | Leaderboard explanation + protocol   | Short “How points work” link                     |
+| Money-state definitions               | How it works                         | Compact local badges with explanation links      |
+| Funding custody/authority explanation | How it works / sponsor details       | One contextual sentence at actual funding action |
+| Project proposals                     | Shared proposal form                 | New and update modes                             |
+| Allocation editing                    | Manage payouts                       | Link from project/cycle                          |
+| PR, points, and payment activity      | Profile activity views               | One summary strip                                |
+| Signature/model caveats               | Models methodology + receipt details | Precise local status labels                      |
+| Verification tools                    | How it works → Verification          | Compatibility route and direct anchors           |
 
 ## Visuals worth building
 
-| Replace | With | Why |
-|---|---|---|
-| Long contribution process prose | 3–4 step flow | Shows where GitHub review happens |
-| Repeated payment-state definitions | Branched lifecycle timeline | Makes approved vs paid obvious |
-| Allocation example paragraph | Annotated fraction/equation | Shows the calculation without implementation units |
-| Fee paragraph plus repeated totals | Awards + fee = total | Communicates the separate fee clearly |
-| Models comparison prose | Ranked bars + compact table | Makes counts and share readable |
-| Model coverage paragraph | Declared / undeclared bar | Displays missing coverage honestly |
-| Long profile stat blocks | One five-metric strip | Answers the user's requested profile questions immediately |
-| Long earning paragraph | Small activity/points table | Makes earning rules scannable |
-| Sponsor audience tables | Focus-area bars + report link | Keeps the evidence without dominating conversion |
-| Payout-preparation instructions | Readiness checklist | Shows what is blocking the next step |
+| Replace                            | With                          | Why                                                        |
+| ---------------------------------- | ----------------------------- | ---------------------------------------------------------- |
+| Long contribution process prose    | 3–4 step flow                 | Shows where GitHub review happens                          |
+| Repeated payment-state definitions | Branched lifecycle timeline   | Makes approved vs paid obvious                             |
+| Allocation example paragraph       | Annotated fraction/equation   | Shows the calculation without implementation units         |
+| Fee paragraph plus repeated totals | Awards + fee = total          | Communicates the separate fee clearly                      |
+| Models comparison prose            | Ranked bars + compact table   | Makes counts and share readable                            |
+| Model coverage paragraph           | Declared / undeclared bar     | Displays missing coverage honestly                         |
+| Long profile stat blocks           | One five-metric strip         | Answers the user's requested profile questions immediately |
+| Long earning paragraph             | Small activity/points table   | Makes earning rules scannable                              |
+| Sponsor audience tables            | Focus-area bars + report link | Keeps the evidence without dominating conversion           |
+| Payout-preparation instructions    | Readiness checklist           | Shows what is blocking the next step                       |
 
 Avoid decorative charts, fabricated trend arrows, revenue-style points graphics, pie charts with overlapping shares, and contribution heatmaps that reward activity over accepted work. Keep charts labeled and supply accessible text/table equivalents.
 
 ## Suggested copy replacements
 
-| Current | Proposed |
-|---|---|
-| Accepted work in. Auditable allocations out. | How Slop works |
-| Which models merge. By the receipts. | Models |
-| Signed runs, without the private trace. | Run receipts |
-| Every pool gets a dated public record. | Payment cycles |
-| Money has exact states. | Payment stages |
-| One reproducible allocation. | How allocations are calculated |
-| Read the contracts. Inspect the record. | Technical references |
-| Propose changes to Eliza. | Edit Eliza proposal |
-| Current cycle amount | Suggested / Approved / Paid amount, derived from state |
-| Funding promotion paused · $0 | Paused, Archived, or Loading funding status, derived from actual cause |
-| Outcomes from busiest contributor | Top contributor share, with X of Y in details |
-| Confirm register | Register address |
-| Your profile and ways to earn | Separate Your profile and How points work links |
+| Current                                      | Proposed                                                               |
+| -------------------------------------------- | ---------------------------------------------------------------------- |
+| Accepted work in. Auditable allocations out. | How Slop works                                                         |
+| Which models merge. By the receipts.         | Models                                                                 |
+| Signed runs, without the private trace.      | Run receipts                                                           |
+| Every pool gets a dated public record.       | Payment cycles                                                         |
+| Money has exact states.                      | Payment stages                                                         |
+| One reproducible allocation.                 | How allocations are calculated                                         |
+| Read the contracts. Inspect the record.      | Technical references                                                   |
+| Propose changes to Eliza.                    | Edit Eliza proposal                                                    |
+| Current cycle amount                         | Suggested / Approved / Paid amount, derived from state                 |
+| Funding promotion paused · $0                | Paused, Archived, or Loading funding status, derived from actual cause |
+| Outcomes from busiest contributor            | Top contributor share, with X of Y in details                          |
+| Confirm register                             | Register address                                                       |
+| Your profile and ways to earn                | Separate Your profile and How points work links                        |
 
 ## Implementation order and acceptance
 
@@ -372,7 +372,8 @@ This is a review and proposed edit plan. No application changes or policy change
 ## Participation metadata delivery
 
 UX-04 uses optional reviewed `participation` metadata in the project manifest.
-`archived` names a `successorProjectId` from the same registry;
+`archived` names a `successorProjectId` from the same registry that is not
+itself archived;
 `permission-required` records a restriction without inferring permission from a
 license identifier. Both remain paused. Omitted metadata preserves existing
 activation policy and does not assert unrestricted permission.

@@ -1038,19 +1038,14 @@ function validateProjectDefinition(
   } = {},
 ) {
   const project = record(value, "project");
+  const optional = ["escrow", "participation"].filter((key) =>
+    Object.hasOwn(project, key),
+  );
   exactKeys(
     project,
     allowLegacyMissingListingTier && !("listingTier" in project)
-      ? [
-          ...PROJECT_KEYS.filter((key) => key !== "listingTier"),
-          ...(Object.hasOwn(project, "escrow") ? ["escrow"] : []),
-          ...(Object.hasOwn(project, "participation") ? ["participation"] : []),
-        ]
-      : [
-          ...PROJECT_KEYS,
-          ...(Object.hasOwn(project, "escrow") ? ["escrow"] : []),
-          ...(Object.hasOwn(project, "participation") ? ["participation"] : []),
-        ],
+      ? [...PROJECT_KEYS.filter((key) => key !== "listingTier"), ...optional]
+      : [...PROJECT_KEYS, ...optional],
     "project",
   );
   if (project.escrow !== undefined) {
@@ -1272,17 +1267,17 @@ export function assertProjectRegistry(values) {
       throw new TypeError(`project registry contains duplicate ${field}`);
     }
   }
+  const byId = new Map(projects.map((project) => [project.id, project]));
   for (const project of projects) {
-    if (
-      project.participation?.state === "archived" &&
-      !projects.some(
-        (candidate) =>
-          candidate.id === project.participation.successorProjectId,
-      )
-    ) {
+    if (project.participation?.state !== "archived") continue;
+    const successor = byId.get(project.participation.successorProjectId);
+    if (!successor) {
       throw new TypeError(
         "archived project successor is not in the project registry",
       );
+    }
+    if (successor.participation?.state === "archived") {
+      throw new TypeError("archived project successor cannot be archived");
     }
   }
   return projects;
