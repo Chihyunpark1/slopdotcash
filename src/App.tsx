@@ -97,7 +97,6 @@ import {
 import { ProfilePage } from "./ProfilePage";
 import { ProjectLeaderboard } from "./ProjectLeaderboard";
 import { SettlementVerification } from "./SettlementVerification";
-import { WalletRegistration } from "./WalletRegistration";
 
 export { DonorFundingProfile } from "./FundingRecords";
 
@@ -143,7 +142,6 @@ export function publicFooterDomain(
 interface Route {
   kind:
     | "cycle"
-    | "wallet"
     | "funding-project"
     | "home"
     | "how-it-works"
@@ -154,7 +152,6 @@ interface Route {
     | "receipts"
     | "models"
     | "sponsors"
-    | "verification"
     | "cycle-archive"
     | "unknown"
     | "account"
@@ -186,8 +183,6 @@ function internalRoute(pathname: string): Route {
         ? "account"
         : "points",
     };
-  if (segments.length === 1 && segments[0] === "wallet")
-    return { kind: "wallet" };
   if (segments.length === 1 && segments[0] === "how-it-works") {
     return { kind: "how-it-works" };
   }
@@ -199,9 +194,6 @@ function internalRoute(pathname: string): Route {
   }
   if (segments.length === 1 && segments[0] === "sponsors") {
     return { kind: "sponsors" };
-  }
-  if (segments.length === 1 && segments[0] === "verification") {
-    return { kind: "verification" };
   }
   if (segments.length === 1 && segments[0] === "cycles") {
     return { kind: "cycle-archive" };
@@ -235,10 +227,31 @@ function internalRoute(pathname: string): Route {
   return { kind: "unknown" };
 }
 
+/** Legacy pages now live as sections of their canonical routes. */
+const LEGACY_SECTIONS = new Map([
+  ["wallet", "/account#wallets"],
+  ["verification", "/how-it-works#verification"],
+]);
+
+function canonicalPath(): string {
+  const legacy = LEGACY_SECTIONS.get(
+    window.location.pathname.replace(/^\/|\/$/gu, ""),
+  );
+  if (legacy) {
+    const [path, hash] = legacy.split("#");
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `${path}${window.location.search}#${hash}`,
+    );
+  }
+  return window.location.pathname;
+}
+
 function useRoute(): Route {
-  const [path, setPath] = useState(() => window.location.pathname);
+  const [path, setPath] = useState(canonicalPath);
   useEffect(() => {
-    const update = () => setPath(window.location.pathname);
+    const update = () => setPath(canonicalPath());
     window.addEventListener("popstate", update);
     return () => window.removeEventListener("popstate", update);
   }, []);
@@ -1986,51 +1999,75 @@ function HowItWorksPage() {
           score and payment record.
         </p>
       </section>
-      <ol className="mechanism-flow" aria-label="Contribution path">
-        <li>
-          <strong>1. Choose work</strong>
-          <p>
-            Find an active <Link href="/#projects">project</Link>, read its
-            skill and choose unblocked work. No token is required.
-          </p>
-        </li>
-        <li>
-          <strong>2. Submit a PR</strong>
-          <p>
-            Use any agent. Test the result and disclose the exact provider,
-            model and client.
-          </p>
-        </li>
-        <li>
-          <strong>3. Maintainer review</strong>
-          <p>
-            The repository decides what merges. Open PRs and agent activity do
-            not earn accepted-work credit.
-          </p>
-        </li>
-        <li>
-          <strong>4. Score and reward review</strong>
-          <p>
-            Accepted outcomes receive Slop Score. Points are nonfinancial; a
-            payment requires separate funding, approval and verified settlement.
-          </p>
-        </li>
-      </ol>
-      <details className="how-details">
-        <summary>For project maintainers</summary>
-        <p>
-          Add a project through a reviewed manifest PR. New projects start
-          paused. The manifest records repository authority, terms, funding and
-          the contributor and reviewer skills.
-        </p>
-        <p>
-          Review proposed awards within the funded cap. Record changes and holds
-          with public reasons. Follow the project's approved signing policy; a
-          score or approval alone does not prove payment.
-        </p>
-        <Link href="/projects/new">Add a project</Link> ·{" "}
-        <Link href="/sponsors">Funding options</Link>
-      </details>
+      <div className="how-paths">
+        <section aria-labelledby="contributor-path">
+          <h2 id="contributor-path">For contributors</h2>
+          <ol className="mechanism-flow">
+            <li>
+              <strong>1. Choose work</strong>
+              <p>
+                Find an active <Link href="/#projects">project</Link>, read its
+                skill and choose unblocked work. No token is required.
+              </p>
+            </li>
+            <li>
+              <strong>2. Submit a PR</strong>
+              <p>
+                Use any agent. Test the result and disclose the exact provider,
+                model and client.
+              </p>
+            </li>
+            <li>
+              <strong>3. Maintainer review</strong>
+              <p>
+                The repository decides what merges. Open PRs and agent activity
+                do not earn accepted-work credit.
+              </p>
+            </li>
+            <li>
+              <strong>4. Score and reward review</strong>
+              <p>
+                Accepted outcomes receive Slop Score. Points are nonfinancial; a
+                payment requires separate funding, approval and verified
+                settlement.
+              </p>
+            </li>
+          </ol>
+        </section>
+        <section aria-labelledby="maintainer-path">
+          <h2 id="maintainer-path">For maintainers</h2>
+          <ol className="mechanism-flow">
+            <li>
+              <strong>1. Propose a project</strong>
+              <p>
+                <Link href="/projects/new">Add a project</Link> through a
+                reviewed manifest PR. New projects start paused.
+              </p>
+            </li>
+            <li>
+              <strong>2. Fund the pool</strong>
+              <p>
+                A cap is a target. Only a verified commitment funds awards.{" "}
+                <Link href="/sponsors">Funding options</Link>
+              </p>
+            </li>
+            <li>
+              <strong>3. Review awards</strong>
+              <p>
+                Check each monthly proposal within the funded cap. Record
+                changes and holds with public reasons.
+              </p>
+            </li>
+            <li>
+              <strong>4. Send payment</strong>
+              <p>
+                Follow the approved signing policy. Approval alone does not
+                prove payment.
+              </p>
+            </li>
+          </ol>
+        </section>
+      </div>
       <section className="worked-example score-contract">
         <div>
           <h2>Slop Score</h2>
@@ -2149,42 +2186,62 @@ function HowItWorksPage() {
       <section className="custody-proof money-states">
         <h2>Payment stages</h2>
         <p>
-          Projected → Under review → Approved → Scheduled → Paid. Each step
-          needs its own evidence; progression is not automatic.
+          Each stage needs its own evidence. A person or a verifier must act
+          before the next stage; nothing moves forward automatically.
         </p>
-        <dl>
-          <div>
-            <dt>Projected</dt>
-            <dd>
+        <ol className="payment-stages" aria-label="Payment stages">
+          <li>
+            <strong>Projected</strong>
+            <span>
               A live estimate from accepted score at the published cap. Not a
               balance, wage, or guarantee.
-            </dd>
-          </div>
-          <div>
-            <dt>Under review</dt>
-            <dd>A frozen monthly proposal in its 14-day public window.</dd>
-          </div>
-          <div>
-            <dt>Approved</dt>
-            <dd>Immutable payout intents after the creator signs off.</dd>
-          </div>
-          <div>
-            <dt>Scheduled</dt>
-            <dd>An unsigned transfer plan exists. No money has moved.</dd>
-          </div>
-          <div>
-            <dt>Paid</dt>
-            <dd>
+            </span>
+          </li>
+          <li>
+            <small className="payment-gate">Monthly freeze</small>
+            <strong>Under review</strong>
+            <span>A frozen monthly proposal in its 14-day public window.</span>
+          </li>
+          <li>
+            <small className="payment-gate">Creator approval</small>
+            <strong>Approved</strong>
+            <span>Immutable payout intents after the creator signs off.</span>
+          </li>
+          <li>
+            <small className="payment-gate">Unsigned plan</small>
+            <strong>Scheduled</strong>
+            <span>An unsigned transfer plan exists. No money has moved.</span>
+          </li>
+          <li>
+            <small className="payment-gate">Finalized evidence</small>
+            <strong>Paid</strong>
+            <span>
               Finalized Solana evidence reconciles the exact transfers and fee.
-            </dd>
-          </div>
-        </dl>
-        <p>
-          <strong>Other outcomes:</strong> Unclaimed means a required wallet is
-          missing. Held means a decision or requirement remains unresolved.
-          Excluded rows keep their public reason. These are not steps toward
-          payment.
-        </p>
+            </span>
+          </li>
+        </ol>
+        <section
+          className="payment-branches"
+          aria-labelledby="payment-branches-title"
+        >
+          <h3 className="payment-branches-title" id="payment-branches-title">
+            Unresolved outcomes: not steps toward payment
+          </h3>
+          <dl>
+            <div>
+              <dt>Held</dt>
+              <dd>A decision or requirement remains unresolved.</dd>
+            </div>
+            <div>
+              <dt>Unclaimed</dt>
+              <dd>A required wallet is missing. The row carries forward.</dd>
+            </div>
+            <div>
+              <dt>Excluded</dt>
+              <dd>The row keeps its public reason and is not paid.</dd>
+            </div>
+          </dl>
+        </section>
         <details>
           <summary>Funding and cycle rules</summary>
           <p>
@@ -2282,12 +2339,12 @@ function HowItWorksPage() {
         <details>
           <summary>How do I get paid?</summary>
           <p>
-            Register a public Solana address on the{" "}
-            <Link href="/wallet">wallet page</Link> with your GitHub account. No
-            wallet connection or signing is needed. Payments are USDC on Solana,
-            sent by the project creator, never by Slop. A wallet must be
-            registered before a month freezes to apply to that month. Without
-            one, your row stays unclaimed and carries forward.
+            Register a public Base or Solana address in{" "}
+            <Link href="/account#wallets">Account wallets</Link> with your
+            GitHub account. No wallet connection or signing is needed. Payments
+            are USDC on Solana, sent by the project creator, never by Slop. A
+            wallet must be registered before a month freezes to apply to that
+            month. Without one, your row stays unclaimed and carries forward.
           </p>
         </details>
         <details>
@@ -2361,6 +2418,8 @@ function HowItWorksPage() {
             <Link href="/how-it-works#verification">
               Settlement verification
             </Link>
+          </li>
+          <li>
             <Link href="/sponsors">Sponsors</Link>
           </li>
           <li>
@@ -2373,7 +2432,7 @@ function HowItWorksPage() {
         open={window.location.hash === "#verification"}
       >
         <summary>Verify a payment</summary>
-        <SettlementVerification embedded />
+        <SettlementVerification />
       </details>
     </main>
   );
@@ -3470,7 +3529,6 @@ function AppContent({ route }: { route: Route }) {
     content = <ReceiptsPage retry={retry} state={state} />;
   else if (route.kind === "models")
     content = <ModelsPage retry={retry} state={state} />;
-  else if (route.kind === "verification") content = <SettlementVerification />;
   else if (route.kind === "cycle-archive")
     content = <CycleArchivePage retry={retryArchive} state={archive} />;
   else if (route.kind === "new-project") content = <ProjectProposalPage />;
@@ -3493,12 +3551,6 @@ function AppContent({ route }: { route: Route }) {
       <ProjectPage project={project} retry={retry} state={state} />
     ) : (
       <NotFound title="Project not found" />
-    );
-  } else if (route.kind === "wallet") {
-    content = (
-      <main className="shell route-main">
-        <WalletRegistration />
-      </main>
     );
   } else if (route.kind === "funding-project") {
     const project = findProject(route.projectId ?? "");

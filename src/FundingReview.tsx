@@ -786,7 +786,7 @@ export function FundingReview({
                     >
                       {published ? "Open proposal PR" : "Open GitHub review"}
                     </a>
-                    <a href="/wallet">Register your payout wallet</a>
+                    <a href="/account#wallets">Register your payout wallet</a>
                     {!published && (
                       <a
                         href={`${repo}/actions/workflows/prepare-funding-review.yml`}

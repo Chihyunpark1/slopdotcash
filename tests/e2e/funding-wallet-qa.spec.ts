@@ -14,20 +14,27 @@ const address = "11111111111111111111111111111111";
 const sha = (value: unknown) =>
   createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
-test("serves wallet registration on direct navigation and reload", {
+test("legacy wallet links open Account Wallets on direct navigation and reload", {
   tag: ["@pages"],
 }, async ({ page }) => {
   for (const path of ["/wallet", "/wallet/"]) {
     const response = await page.goto(path, { waitUntil: "networkidle" });
     expect(response?.status()).toBe(200);
+    await expect(page).toHaveURL(/\/account#wallets$/u);
     await expect(
-      page.getByRole("heading", { name: "Register your wallet" }),
+      page.getByRole("heading", { name: "Account", exact: true }),
     ).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Wallets", exact: true }),
+    ).toBeInViewport();
     const reloaded = await page.reload({ waitUntil: "networkidle" });
     expect(reloaded?.status()).toBe(200);
     await expect(
-      page.getByRole("button", { name: "Continue with GitHub" }),
+      page.getByRole("button", { name: "Verify with GitHub" }),
     ).toBeVisible();
+    await expect(
+      page.getByRole("listitem").filter({ hasText: "Address" }),
+    ).toHaveAttribute("aria-current", "step");
   }
 });
 
@@ -292,7 +299,7 @@ for (const sameTab of [false, true]) {
         });
       } else throw new Error(`Unexpected API request ${path}`);
     });
-    await page.goto("/wallet", { waitUntil: "networkidle" });
+    await page.goto("/account#wallets", { waitUntil: "networkidle" });
     await keyboardTo(page, page.getByLabel("Solana public address"));
     await page.keyboard.type(address);
     await page.keyboard.press("Enter");
@@ -328,15 +335,30 @@ for (const sameTab of [false, true]) {
     expect(writes).toBe(0);
     await keyboardTo(
       page,
-      page.getByRole("button", { name: "Continue with GitHub" }),
+      page.getByRole("button", { name: "Verify with GitHub" }),
     );
     await page.keyboard.press("Enter");
     await returnFromSameTab();
     const confirm = page.getByRole("button", {
-      name: "Confirm register",
+      name: "Register address",
       exact: true,
     });
     await expect(confirm).toBeVisible();
+    const consequence = page.getByText(
+      "Your GitHub identity and this address become a public, permanent record.",
+    );
+    await expect(consequence).toBeVisible();
+    // The public-registration consequence sits immediately before the action.
+    expect(
+      await consequence.evaluate(
+        (text) =>
+          text.closest("p")?.nextElementSibling?.textContent ===
+          "Register address",
+      ),
+    ).toBe(true);
+    await expect(
+      page.getByRole("listitem").filter({ hasText: "Confirm" }),
+    ).toHaveAttribute("aria-current", "step");
     await keyboardTo(page, confirm);
     await page.keyboard.press("Enter");
     await expect(
@@ -344,8 +366,14 @@ for (const sameTab of [false, true]) {
     ).toBeVisible();
     expect(writes).toBe(1);
     expect(starts).toBe(2);
+    await expect(page.getByText(/^Record digest:/u)).toBeHidden();
     await expect(
-      page.getByRole("link", { name: "View public claim" }),
+      page.getByRole("listitem").filter({ hasText: "Saved" }),
+    ).toHaveAttribute("aria-current", "step");
+    await page.getByText("Technical details", { exact: true }).click();
+    await expect(page.getByText(/^Record digest:/u)).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "View public record" }),
     ).toHaveAttribute(
       "href",
       `${deployment.api}/api/v1/wallet-claims/qa_new_claim`,

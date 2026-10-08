@@ -35,6 +35,7 @@ import { findProject, PROJECTS } from "./lib/projects.mjs";
 import { type DataState, useSnapshot } from "./lib/use-snapshot";
 import { DataNotice, formatMicroUsdc, formatScore } from "./Presentation";
 import { ContributorDirectory, ProfileActivity, useProfiles } from "./Profiles";
+import { WalletRegistration } from "./WalletRegistration";
 
 const productOrigin = () =>
   ["https://slop.cash", "https://slop.tech", "https://eliza.army"].includes(
@@ -92,6 +93,22 @@ async function loadPoints(signal: AbortSignal) {
     }),
   );
   return assemblePoints(index, parts);
+}
+/** Same-origin path from `next`; anything else falls back to the profile. */
+export function returnPath(search = window.location.search): string | null {
+  const next = new URLSearchParams(search).get("next");
+  if (!next) return null;
+  if (next === "earnings") return "/earnings";
+  if (!next.startsWith("/") || next.startsWith("//") || next.includes("\\"))
+    return null;
+  try {
+    const url = new URL(next, window.location.origin);
+    if (url.origin !== window.location.origin || url.pathname === "/login")
+      return null;
+    return `${url.pathname}${url.search}${url.hash}`;
+  } catch {
+    return null;
+  }
 }
 function member(value: unknown): Membership {
   const m = value as Membership;
@@ -187,6 +204,9 @@ export function PointsProvider({
     </Context.Provider>
   );
 }
+const currentPath = () =>
+  `${window.location.pathname}${window.location.search}${window.location.hash}`;
+
 export function PointsNav({ onNavigate }: { onNavigate?: () => void }) {
   const { state, me, session, setMe, requestPoints, refresh } =
     useContext(Context);
@@ -230,6 +250,16 @@ export function PointsNav({ onNavigate }: { onNavigate?: () => void }) {
   useEffect(() => {
     if (signedIn) requestPoints();
   }, [signedIn, requestPoints]);
+  const [loginReturn, setLoginReturn] = useState(currentPath);
+  useEffect(() => {
+    const update = () => setLoginReturn(currentPath());
+    window.addEventListener("popstate", update);
+    window.addEventListener("hashchange", update);
+    return () => {
+      window.removeEventListener("popstate", update);
+      window.removeEventListener("hashchange", update);
+    };
+  }, []);
   const navigate = () => {
     setOpen(false);
     onNavigate?.();
@@ -261,7 +291,11 @@ export function PointsNav({ onNavigate }: { onNavigate?: () => void }) {
     return (
       <a
         className="account-control account-login"
-        href="/login"
+        href={
+          window.location.pathname === "/login" || loginReturn === "/"
+            ? "/login"
+            : `/login?next=${encodeURIComponent(loginReturn)}`
+        }
         onClick={navigate}
       >
         Log in
@@ -628,9 +662,8 @@ function JoinPoints({
       setMe(signedIn);
       if (redirectToProfile)
         window.location.assign(
-          new URLSearchParams(window.location.search).get("next") === "earnings"
-            ? "/earnings"
-            : `/contributors/${encodeURIComponent(signedIn.actor.login)}`,
+          returnPath() ??
+            `/contributors/${encodeURIComponent(signedIn.actor.login)}`,
         );
       setMessage("You’re signed in. Your welcome points are recorded.");
     } catch (e) {
@@ -659,10 +692,7 @@ function JoinPoints({
     return (
       <section className="points-panel">
         {showHeading ? <h2>Sign in to Slop</h2> : null}
-        <p>
-          Sign in with your GitHub account. New members receive 5 welcome
-          points.
-        </p>
+        <p>Use GitHub to manage your profile.</p>
         <a href="https://slop.cash/login">Continue with GitHub on slop.cash</a>
       </section>
     );
@@ -712,10 +742,15 @@ function JoinPoints({
         </>
       ) : (
         <>
-          <p>
-            Use GitHub to sign in. New members receive 5 welcome points. No
-            wallet needed.
-          </p>
+          <p>Use GitHub to manage your profile.</p>
+          <button
+            className="button primary-button"
+            type="button"
+            disabled={busy || session === "loading"}
+            onClick={() => void start()}
+          >
+            {busy ? "Waiting for GitHub…" : "Continue with GitHub"}
+          </button>
           <label>
             <input
               type="checkbox"
@@ -723,16 +758,9 @@ function JoinPoints({
               disabled={busy}
               onChange={(e) => setPublish(e.target.checked)}
             />
-            Show my membership publicly. Accepted contributions are already
-            public.
+            Optional: show my membership publicly. Accepted contributions are
+            already public.
           </label>
-          <button
-            type="button"
-            disabled={busy || session === "loading"}
-            onClick={() => void start()}
-          >
-            {busy ? "Waiting for GitHub…" : "Continue with GitHub"}
-          </button>
           {busy ? (
             <button
               type="button"
@@ -765,13 +793,24 @@ export function LoginPage() {
   );
 }
 export function AccountPage() {
+  const { me } = useContext(Context);
   return (
     <main className="shell route-main points-page">
       <h1>Account</h1>
-      <JoinPoints />
-      <SocialConnections />
+      <nav className="account-sections" aria-label="Account sections">
+        <a href="#profile">Profile</a>
+        {me ? <a href="#connections">Connections</a> : null}
+        <a href="#wallets">Wallets</a>
+        <a href="/earnings">Earnings</a>
+      </nav>
+      <div id="profile">
+        <JoinPoints />
+      </div>
+      <div id="connections">
+        <SocialConnections />
+      </div>
+      <WalletRegistration />
       <p>
-        <a href="/wallet">Manage payout wallets</a> ·{" "}
         <a href="/points#rules">Points and earning rules</a>
       </p>
     </main>
@@ -1247,7 +1286,7 @@ function SocialConnections() {
   if (!me) return null;
   return (
     <section className="points-panel" aria-label="Connect X">
-      <h2>X account</h2>
+      <h2>Connections</h2>
       {outcome === "connected" ? (
         <p role="status">X connected. Your connection points are recorded.</p>
       ) : outcome === "cancelled" ? (
@@ -1267,33 +1306,23 @@ function SocialConnections() {
         </>
       ) : (
         <>
-          {data.award ? (
-            <p>
-              10 connection points · earned {data.award.awardedAt.slice(0, 10)}
-            </p>
-          ) : null}
-          {data.account ? (
-            <>
-              <p>
-                <XAccountLink account={data.account} />
-              </p>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={data.account.public === 1}
-                  disabled={busy}
-                  onChange={(e) =>
-                    void action("visibility", { public: e.target.checked })
-                  }
-                />
-                Show my X account with my public membership
-              </label>
-              {!me.public ? (
-                <p>
-                  Your membership is private. Publish it above to display your X
-                  link.
-                </p>
-              ) : null}
+          <div className="connection-row">
+            <strong>X</strong>
+            <span>
+              {data.account ? (
+                <>
+                  Connected · <XAccountLink account={data.account} />
+                </>
+              ) : (
+                "Not connected"
+              )}
+            </span>
+            <span>
+              {data.award
+                ? `+10 points · earned ${data.award.awardedAt.slice(0, 10)}`
+                : "+10 points once"}
+            </span>
+            {data.account ? (
               <button
                 type="button"
                 disabled={busy}
@@ -1301,44 +1330,39 @@ function SocialConnections() {
               >
                 Disconnect X
               </button>
-            </>
-          ) : null}
-          {data.configured ? (
-            <>
-              {!data.account ? (
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={publish}
-                    disabled={busy}
-                    onChange={(e) => setPublish(e.target.checked)}
-                  />
-                  Show this X connection with my public membership
-                </label>
-              ) : null}
+            ) : data.configured ? (
               <button
                 type="button"
                 disabled={busy}
-                onClick={() =>
-                  void action("start", {
-                    public: data.account ? data.account.public === 1 : publish,
-                  })
-                }
+                onClick={() => void action("start", { public: publish })}
               >
-                {busy
-                  ? "Connecting…"
-                  : data.account
-                    ? "Reconnect or change X account"
-                    : "Connect X · +10 points once"}
+                {busy ? "Connecting…" : "Connect X"}
               </button>
-            </>
-          ) : (
-            <p>X connections are not enabled yet.</p>
-          )}
-          <p>
-            Connecting verifies your account. Slop does not request posting or
-            messaging permissions. Reconnecting, changing handles, or
-            disconnecting does not create another award.
+            ) : (
+              <span>Not enabled yet</span>
+            )}
+          </div>
+          {data.account || data.configured ? (
+            <label>
+              <input
+                type="checkbox"
+                checked={data.account ? data.account.public === 1 : publish}
+                disabled={busy}
+                onChange={(e) =>
+                  data.account
+                    ? void action("visibility", { public: e.target.checked })
+                    : setPublish(e.target.checked)
+                }
+              />
+              Show my X account with my public membership
+            </label>
+          ) : null}
+          {data.account && !me.public ? (
+            <p>Your membership is private, so your X link stays hidden.</p>
+          ) : null}
+          <p className="points-meta">
+            Slop does not request posting or messaging permissions. A new handle
+            or connection does not create another award.
           </p>
           <p role="status">{message}</p>
         </>
