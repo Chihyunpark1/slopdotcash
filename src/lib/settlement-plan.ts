@@ -324,7 +324,7 @@ export function createSettlementExecutionPlan(
   };
 }
 
-function projectInstruments(
+export function projectInstruments(
   projectId: string,
 ): readonly FundingCommitmentInstrument[] {
   return findProject(projectId)?.funding.commitments ?? [];
