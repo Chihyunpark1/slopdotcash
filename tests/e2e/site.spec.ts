@@ -560,6 +560,23 @@ test("never presents Delta Star's external prize as platform money", async ({
   await expect(
     page.getByText(/prize sponsor controls eligibility and payment/u),
   ).toBeVisible();
+  const history = page.locator(".payment-history");
+  await expect(
+    history.getByRole("heading", { name: "Cycle history" }),
+  ).toBeVisible();
+  await expect(history).not.toContainText("$");
+  await expect(
+    history.getByRole("link", { name: "Manage payouts" }),
+  ).toHaveCount(0);
+  await history
+    .getByRole("link", { name: /^\d{4}-\d{2}$/u })
+    .first()
+    .click();
+  await expect(
+    page.getByText(
+      "External prize shares; this cycle does not enter Slop settlement.",
+    ),
+  ).toBeVisible();
 });
 
 test("renders contributor and cycle records from validated public data", {
@@ -1461,6 +1478,27 @@ for (const route of [
       () => document.documentElement.scrollWidth - window.innerWidth,
     );
     expect(overflow, `${path} horizontal page overflow`).toBeLessThanOrEqual(1);
+    if (project?.participation?.state === "archived") {
+      const successorId = project.participation.successorProjectId;
+      const successor = PROJECTS.find((entry) => entry.id === successorId);
+      await page.locator("#start").getByRole("link").focus();
+      await page.keyboard.press("Enter");
+      await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+        successor?.name ?? "",
+      );
+      if (successor?.participation?.state === "permission-required") {
+        await expect(
+          page.getByRole("heading", {
+            name: "Permission required",
+            exact: true,
+          }),
+        ).toBeVisible();
+        await expect(page.locator("#start").getByRole("link")).toHaveAttribute(
+          "href",
+          successor.steward.github.profileUrl,
+        );
+      }
+    }
   });
 }
 

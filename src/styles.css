@@ -1160,6 +1160,23 @@ small {
   font-size: clamp(54px, 7vw, 98px);
 }
 
+.project-hero .section {
+  padding-block: 16px;
+}
+
+.project-hero #start h2 {
+  font-size: 24px;
+}
+
+.project-hero #start a {
+  text-decoration: underline;
+}
+
+.project-funding-unavailable {
+  margin-block: 24px;
+  color: var(--muted);
+}
+
 .project-headline-action {
   color: var(--orange-dark);
 }

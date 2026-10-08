@@ -916,34 +916,41 @@ function ProjectPaymentHistory({
     (total, cycle) => total + BigInt(cycle.reward.feeMinor),
     0n,
   );
+  const externalPrize = project.reward.kind === "external-prize-share";
   return (
     <section className="section payment-history">
       <div className="simple-heading">
-        <h2>Payment history</h2>
-        <Link href={`/projects/${project.slug}/funding`}>Manage payouts</Link>
+        <h2>{externalPrize ? "Cycle history" : "Payment history"}</h2>
+        {externalPrize ? null : (
+          <Link href={`/projects/${project.slug}/funding`}>Manage payouts</Link>
+        )}
         <Link href={`/projects/${project.slug}/manage`}>
           Draft a project update
         </Link>
       </div>
-      <p className="money-summary">
-        <strong>{formatMicroUsdc(paid.toString())} paid</strong>
-        <span>{formatMicroUsdc(approved.toString())} approved</span>
-        <span>{formatMicroUsdc(fees.toString())} in 1% payout fees</span>
-      </p>
+      {externalPrize ? null : (
+        <p className="money-summary">
+          <strong>{formatMicroUsdc(paid.toString())} paid</strong>
+          <span>{formatMicroUsdc(approved.toString())} approved</span>
+          <span>{formatMicroUsdc(fees.toString())} in 1% payout fees</span>
+        </p>
+      )}
       {cycles.length === 0 ? (
-        <EmptyState text="No payment cycles have closed yet." />
+        <EmptyState text="No cycles have closed yet." />
       ) : (
         <div className="plain-table-wrap">
           <table className="plain-table">
-            <caption className="visually-hidden">
-              {project.name} payment cycles
-            </caption>
+            <caption className="visually-hidden">{project.name} cycles</caption>
             <thead>
               <tr>
                 <th scope="col">Cycle</th>
-                <th scope="col">Approved</th>
-                <th scope="col">Fee</th>
-                <th scope="col">Paid</th>
+                {externalPrize ? null : (
+                  <>
+                    <th scope="col">Approved</th>
+                    <th scope="col">Fee</th>
+                    <th scope="col">Paid</th>
+                  </>
+                )}
                 <th scope="col">State</th>
               </tr>
             </thead>
@@ -955,9 +962,13 @@ function ProjectPaymentHistory({
                       {cycle.cycleId}
                     </Link>
                   </th>
-                  <td>{formatMicroUsdc(cycle.reward.approvedMinor)}</td>
-                  <td>{formatMicroUsdc(cycle.reward.feeMinor)}</td>
-                  <td>{formatMicroUsdc(cycle.reward.paidMinor)}</td>
+                  {externalPrize ? null : (
+                    <>
+                      <td>{formatMicroUsdc(cycle.reward.approvedMinor)}</td>
+                      <td>{formatMicroUsdc(cycle.reward.feeMinor)}</td>
+                      <td>{formatMicroUsdc(cycle.reward.paidMinor)}</td>
+                    </>
+                  )}
                   <td>{cycle.state.replaceAll("-", " ")}</td>
                 </tr>
               ))}
@@ -1047,12 +1058,9 @@ export function ProjectFunding({ project }: { project: ProjectDefinition }) {
   );
   if (activeRoutes.length === 0) {
     return project.reward.kind === "external-prize-share" ? null : (
-      <section className="section project-funding">
-        <p>
-          Direct funding unavailable. No reviewed receiving address is
-          published.
-        </p>
-      </section>
+      <p className="project-funding-unavailable">
+        Direct funding unavailable. No reviewed receiving address is published.
+      </p>
     );
   }
   return (
@@ -1065,13 +1073,11 @@ export function ProjectFunding({ project }: { project: ProjectDefinition }) {
           {project.reward.paymentMode}
         </p>
         <p>{project.funding.disclosure}</p>
-        {activeRoutes.length > 0 ? (
-          <p>
-            Check the network, asset, and full address in your wallet before
-            sending. Transfers are irreversible. GitHub identity does not prove
-            wallet ownership.
-          </p>
-        ) : null}
+        <p>
+          Check the network, asset, and full address in your wallet before
+          sending. Transfers are irreversible. GitHub identity does not prove
+          wallet ownership.
+        </p>
         <div className="funding-routes">
           {activeRoutes.map((route) => {
             const key = `${route.network}:${route.asset}:${route.address}:${route.effectiveAt}`;
@@ -1481,16 +1487,17 @@ function ProjectPage({
               </aside>
             )}
           </div>
+          {project.status !== "paused" && state.status === "ready" ? (
+            <ProjectParticipation
+              project={project}
+              displayCycleId={view?.cycle.id ?? null}
+              cycles={state.cycleIndex.cycles}
+            />
+          ) : null}
+          <ProjectFunding project={project} />
         </div>
       </section>
       <div className="shell">
-        {project.status !== "paused" && state.status === "ready" ? (
-          <ProjectParticipation
-            project={project}
-            displayCycleId={view?.cycle.id ?? null}
-            cycles={state.cycleIndex.cycles}
-          />
-        ) : null}
         {state.status === "ready" &&
         project.repositories.some(
           (repository) =>
@@ -1502,7 +1509,6 @@ function ProjectPage({
             Activity for this project has not been collected yet.
           </p>
         ) : null}
-        <ProjectFunding project={project} />
         <ProjectPaymentHistory project={project} state={state} />
         {view && state.status === "ready" ? (
           <ProjectLeaderboard
