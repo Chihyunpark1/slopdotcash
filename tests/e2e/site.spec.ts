@@ -565,6 +565,14 @@ test("never presents Delta Star's external prize as platform money", async ({
 test("renders contributor and cycle records from validated public data", {
   tag: ["@pages"],
 }, async ({ page, request }) => {
+  await page.goto("/cycles/eliza/2026-99", { waitUntil: "networkidle" });
+  await expect(
+    page.getByRole("heading", { name: "Cycle unavailable", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("link", { name: "See open projects", exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/$/u);
   const snapshot = await loadSnapshot(request);
   const cycles = await loadCycles(request);
   const actor =
@@ -664,24 +672,60 @@ test("renders contributor and cycle records from validated public data", {
     cycle.contributors.some((entry) => entry.actor.id === actor.id),
   );
   if (archived) {
-    await page.goto(`/cycles/${archived.projectId}/${archived.cycleId}`, {
-      waitUntil: "networkidle",
-    });
+    await page.goto("/cycles", { waitUntil: "networkidle" });
+    await expect(
+      page.getByRole("heading", { name: "Payment cycles", exact: true }),
+    ).toBeVisible();
+    const month = new Intl.DateTimeFormat("en-US", {
+      month: "long",
+      year: "numeric",
+      timeZone: "UTC",
+    }).format(new Date(`${archived.cycleId}-01T00:00:00Z`));
+    const project = PROJECTS.find((entry) => entry.id === archived.projectId);
+    await page
+      .getByRole("link", {
+        name: `${project?.name ?? archived.projectId} · ${month}`,
+        exact: true,
+      })
+      .click();
     await expect(
       page.getByRole("heading", {
-        name: new RegExp(`${archived.cycleId}$`, "u"),
+        name: `${project?.name ?? archived.projectId} · ${month}`,
+        exact: true,
       }),
     ).toBeVisible();
     await expect(
-      page.getByRole("heading", { name: "Public files" }),
+      page.getByRole("heading", { name: "Evidence", exact: true }),
     ).toBeVisible();
+    const records = page.getByText("Original records and checksums", {
+      exact: true,
+    });
+    await records.focus();
+    await page.keyboard.press("Enter");
+    const frozen = page.getByRole("link", {
+      name: new RegExp("Frozen source", "u"),
+    });
+    await expect(frozen).toHaveAttribute(
+      "href",
+      archived.files.sourceSnapshot.url,
+    );
+    await expect(frozen).toContainText(archived.files.sourceSnapshot.sha256);
+    const download = await request.get(archived.files.sourceSnapshot.url);
+    expect(download.ok()).toBe(true);
+    expect(
+      createHash("sha256")
+        .update(await download.body())
+        .digest("hex"),
+    ).toBe(archived.files.sourceSnapshot.sha256);
   } else {
     const view = createProjectView(snapshot, "eliza");
     await page.goto(`/cycles/eliza/${view.cycle.id}`, {
       waitUntil: "networkidle",
     });
     await expect(
-      page.getByRole("heading", { name: `Eliza · ${view.cycle.id}` }),
+      page.getByRole("heading", {
+        name: `Eliza · ${new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${view.cycle.id}-01T00:00:00Z`))}`,
+      }),
     ).toBeVisible();
     await expect(page.getByText("Review", { exact: true })).toBeVisible();
     await expect(page.getByText("Cycle evidence.")).toHaveCount(0);
@@ -1568,6 +1612,18 @@ test("lands direct hash links on their section", async ({ page }) => {
 test("derives Solana addresses on the settlement verification page", async ({
   page,
 }, testInfo) => {
+  await page.goto("/how-it-works", { waitUntil: "networkidle" });
+  const verification = page.getByRole("heading", {
+    exact: true,
+    name: "Settlement verification",
+  });
+  await expect(verification).not.toBeVisible();
+  await page
+    .getByRole("link", { name: "Verification", exact: true })
+    .first()
+    .focus();
+  await page.keyboard.press("Enter");
+  await expect(verification).toBeVisible();
   await page.goto("/how-it-works#verification", { waitUntil: "networkidle" });
   await expect(
     page.getByRole("heading", { exact: true, name: "Settlement verification" }),
@@ -1578,6 +1634,7 @@ test("derives Solana addresses on the settlement verification page", async ({
     page.getByText("No execution has been bound yet.", { exact: false }),
   ).toBeVisible();
 
+  await page.getByText("Advanced verification", { exact: true }).click();
   // A real August 2026 recipient. Its canonical USDC associated token account
   // is fixed by the Solana address derivation, so the value below is checkable
   // against any explorer and pins the in-repo derivation to mainnet reality.
