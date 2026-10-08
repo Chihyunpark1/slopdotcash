@@ -153,7 +153,7 @@ test("public funding records and the payout workspace are separate tabs", async 
   await expect(panel).toContainText(
     "No reviewed public funding transactions have been published yet.",
   );
-  await expect(page.locator(".funding-workbench")).toHaveCount(0);
+  await expect(page.locator(".funding-workbench")).toBeHidden();
   await page.reload();
   await expect(records).toHaveAttribute("aria-selected", "true");
   await page.goto("/projects/eliza/funding#payouts");
