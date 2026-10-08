@@ -134,14 +134,7 @@ jobs:
           if [ "${{ github.event_name }}" = "push" ]; then
             node scripts/check-project-transitions.mjs "$PROJECT_POLICY_BASE_SHA" "$PROJECT_POLICY_HEAD_SHA"
           fi
-          bun run projects:check
-          bun run skills:check
-          bun run evaluations:check
-          for skill in skills/*; do
-            test -d "$skill"
-            python scripts/skill-validation/quick_validate.py "$skill"
-          done
-          bun test ./skill-tests
+          bun run verify:contracts
 
       - name: Authenticate signer history before trusted publication
         if: github.event_name != 'pull_request'
@@ -208,23 +201,13 @@ jobs:
           SOLANA_RPC_URL: ${{ secrets.SOLANA_RPC_URL }}
         run: bun run cycles:verify
 
-      - name: Check types
-        run: |
-          bun run typecheck
-          bun run check:unused
-
-      - name: Check formatting and lint
-        run: |
-          bun run format:check
-          bun run lint:check
-
-      - name: Run unit tests
-        run: |
-          bun run test:evidence
-          bun run test
+      - name: Check code and run tests
+        run: bun run verify:code
 
       - name: Build production site
         env:
+          # Trusted refreshes use the census produced above; PR builds use the captured seed.
+          SLOP_PROFILES_INPUT: ${{ github.event_name == 'pull_request' && 'data/profiles/seed.json' || 'public/data/profiles.json' }}
           SLOP_POINTS_ONLINE: ${{ github.event_name != 'pull_request' && '1' || '0' }}
           SLOP_POINTS_BOOTSTRAP: ${{ github.event_name != 'schedule' && '1' || '0' }}
         run: bun run build

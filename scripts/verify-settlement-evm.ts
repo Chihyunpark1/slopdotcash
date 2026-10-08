@@ -15,6 +15,7 @@ import {
   MAX_EVM_SETTLEMENT_TRANSFERS,
 } from "../src/lib/evm-settlement";
 import { isFundingAddress } from "../src/lib/funding-address.mjs";
+import { parseValueArguments } from "./parse-value-arguments";
 import {
   EVM_FUNDING_RPC_AUTHORITIES,
   type EvmAuthorityVerification,
@@ -34,21 +35,7 @@ const CLI_ARGUMENTS = new Set([
 ]);
 
 export function parseEvmSettlementArguments(argv: readonly string[]) {
-  const parsed = new Map<string, string>();
-  for (let index = 0; index < argv.length; index += 2) {
-    const name = argv[index];
-    const value = argv[index + 1];
-    if (
-      !name ||
-      !CLI_ARGUMENTS.has(name) ||
-      !value ||
-      value.startsWith("--") ||
-      parsed.has(name)
-    ) {
-      throw new TypeError(USAGE);
-    }
-    parsed.set(name, value);
-  }
+  const parsed = parseValueArguments(argv, CLI_ARGUMENTS, USAGE);
   return {
     network: parsed.get("--network") ?? null,
     transactionHash: parsed.get("--transaction") ?? null,

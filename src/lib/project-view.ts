@@ -197,46 +197,6 @@ function opportunityPointsWithinCap(
   return opportunity.potentialPoints;
 }
 
-export function formatCapUsageLine(capUsage: CapUsageStatus): string | null {
-  const parts: string[] = [];
-  if (capUsage.mergedPullRequests.used > 0) {
-    parts.push(
-      capUsage.mergedPullRequests.cap === null
-        ? `merges ${capUsage.mergedPullRequests.used} uncapped`
-        : `merges ${capUsage.mergedPullRequests.used}/${capUsage.mergedPullRequests.cap}`,
-    );
-  }
-  if (capUsage.resolvedIssues.used > 0) {
-    parts.push(
-      `issues ${capUsage.resolvedIssues.used}/${capUsage.resolvedIssues.cap}`,
-    );
-  }
-  if (capUsage.materialTestChanges.used > 0) {
-    parts.push(
-      `tests ${capUsage.materialTestChanges.used}/${capUsage.materialTestChanges.cap}`,
-    );
-  }
-  if (capUsage.evidencePoints.used > 0) {
-    parts.push(
-      `evidence ${capUsage.evidencePoints.used}/${capUsage.evidencePoints.cap}`,
-    );
-  }
-  if (capUsage.substantiveReviews.used > 0) {
-    parts.push(
-      `reviews ${capUsage.substantiveReviews.used}/${capUsage.substantiveReviews.cap}`,
-    );
-  }
-  if (capUsage.evaluatedContributions.used > 0) {
-    parts.push(
-      `evaluated ${capUsage.evaluatedContributions.used}/${capUsage.evaluatedContributions.cap}`,
-    );
-  }
-  if (parts.length === 0) {
-    return null;
-  }
-  return `${capUsage.month} scoring · ${parts.join(" · ")}`;
-}
-
 function cycleBounds(cycleId: string): { from: number; to: number } {
   if (!/^\d{4}-(?:0[1-9]|1[0-2])$/u.test(cycleId)) {
     throw new TypeError(`Invalid reward cycle id: ${cycleId}`);

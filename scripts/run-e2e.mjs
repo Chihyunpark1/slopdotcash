@@ -13,23 +13,14 @@ import { childEnvironment } from "./child-environment.mjs";
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const playwright = join(packageRoot, "node_modules", ".bin", "playwright");
-const artifactContract =
-  "serves byte-consistent install and read-only artifacts for every project";
-
-const pagesContracts = [
-  "serves GitHub login on direct navigation and reload",
-  "points history is usable, accessible and independent of payments",
-  artifactContract,
-  "renders contributor and cycle records from validated public data",
-  "serves wallet registration on direct navigation and reload",
-].join("|");
-
 function run(command, args, env = childEnvironment()) {
   const result = spawnSync(command, args, {
     cwd: packageRoot,
     env,
     stdio: "inherit",
-    timeout: 25 * 60_000,
+    // Playwright owns a 35-minute global deadline. Allow it to finish and
+    // write diagnostics before this outer process guard terminates it.
+    timeout: 40 * 60_000,
     killSignal: "SIGKILL",
   });
   if (result.error) throw result.error;
@@ -42,7 +33,7 @@ run("node", ["scripts/dist-manifest.mjs", "verify-local", "dist"]);
 
 run(
   playwright,
-  ["test", "--grep-invert", artifactContract, ...process.argv.slice(2)],
+  ["test", "--grep-invert", "@pages-only", ...process.argv.slice(2)],
   {
     ...childEnvironment(),
     SLOP_E2E_PREBUILT: "1",
@@ -57,7 +48,7 @@ run(
     "test",
     "--project=wide-desktop-chromium",
     "--grep",
-    pagesContracts,
+    "@pages",
     ...process.argv.slice(2),
   ],
   {

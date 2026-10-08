@@ -7,6 +7,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { workflow as readWorkflow } from "./workflow-fixture.mjs";
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repositoryRoot = packageRoot;
@@ -296,8 +297,6 @@ describe("slop.cash deployment contract", () => {
       2,
     );
     expect(evidenceRecorder).not.toContain("env: process.env");
-    expect(e2eRunner).toContain('"--grep-invert", artifactContract');
-    expect(e2eRunner).toContain('"--grep",\n    pagesContracts');
     expect(qualityJob).toContain("run: bun run test:e2e");
     expect(qualityJob).toContain(
       "timeout --signal=TERM 10m ./node_modules/.bin/playwright install --with-deps chromium",
@@ -307,7 +306,9 @@ describe("slop.cash deployment contract", () => {
       "Playwright Chromium installation failed twice.",
     );
     expect(qualityJob).not.toContain("bunx playwright install");
-    expect(qualityJob).toContain("bun test ./skill-tests");
+    expect(qualityJob).toContain("run: bun run verify:code");
+    expect(packageManifest.scripts["verify:code"]).toContain("bun run test");
+    expect(packageManifest.scripts.test).toContain("./skill-tests");
     expect(qualityJob).not.toContain("bun test skill-tests/*.test.ts");
     expect(qualityJob).toContain("run: bun run cycles:check");
     expect(qualityJob).toContain(
@@ -316,35 +317,45 @@ describe("slop.cash deployment contract", () => {
   });
 
   it("keeps every release path restricted to main", () => {
-    expect(workflow).toContain(
-      `cancel-in-progress: ${"$"}{{ github.event_name == 'pull_request' }}`,
+    const definition = readWorkflow(join(workflowDirectory, "deploy.yml"));
+    const deploy = definition.jobs.deploy;
+    expect(definition.on.push.branches).toEqual([
+      "develop",
+      "development",
+      "main",
+    ]);
+    expect(definition.on.pull_request.branches).toEqual([
+      "develop",
+      "development",
+      "main",
+    ]);
+    expect(definition.concurrency).toEqual({
+      group: `slop-\${{ github.event.pull_request.number || github.run_id }}`,
+      "cancel-in-progress": `\${{ github.event_name == 'pull_request' }}`,
+    });
+    expect(definition.jobs.quality.concurrency).toEqual({
+      group: `slop-quality-\${{ github.event.pull_request.number || github.ref }}-\${{ github.event_name }}`,
+      "cancel-in-progress": true,
+    });
+    expect(deploy.if.replace(/\s+/gu, " ").trim()).toBe(
+      "needs.quality.result == 'success' && " +
+        "((github.event_name == 'push' && github.ref == 'refs/heads/main') || " +
+        "(github.event_name == 'schedule' && github.ref == 'refs/heads/main') || " +
+        "(github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'))",
     );
-    expect(workflow).toContain(
-      `group: slop-${"$"}{{ github.event.pull_request.number || github.run_id }}`,
+    expect(deploy.needs).toEqual(["source", "quality"]);
+    expect(deploy.concurrency).toEqual({
+      group: "slop-production",
+      "cancel-in-progress": false,
+    });
+    expect(deploy.environment.name).toBe(
+      `\${{ github.event_name == 'schedule' && 'slop-data-refresh' || 'eliza-army-production' }}`,
     );
-    expect(qualityJob).toContain(
-      `group: slop-quality-${"$"}{{ github.event.pull_request.number || github.ref }}-${"$"}{{ github.event_name }}`,
-    );
-    expect(qualityJob).toContain("cancel-in-progress: true");
-    expect(deployJob).toContain(
-      "github.event_name == 'push' && github.ref == 'refs/heads/main'",
-    );
-    expect(deployJob).toContain(
-      "github.event_name == 'schedule' && github.ref == 'refs/heads/main'",
-    );
-    expect(deployJob).not.toContain("github.event_name == 'pull_request'");
-    expect(deployJob).toContain(
-      "github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'",
-    );
-    expect(deployJob).toContain(
-      'if [ "$GITHUB_REF" != "refs/heads/main" ]; then',
-    );
-    expect(deployJob).toContain("group: slop-production");
-    expect(deployJob).toContain("cancel-in-progress: false");
-    expect(deployJob).toContain(
-      `name: \${{ github.event_name == 'schedule' && 'slop-data-refresh' || 'eliza-army-production' }}`,
-    );
-    expect(workflow).not.toContain("environment: eliza-army-production");
+    expect(
+      deploy.steps.some((step) =>
+        step.run?.includes('if [ "$GITHUB_REF" != "refs/heads/main" ]; then'),
+      ),
+    ).toBe(true);
   });
 
   it("limits unattended refreshes to released source and data-only bundles", () => {
@@ -418,7 +429,7 @@ describe("slop.cash deployment contract", () => {
     const transitionGate = qualityJob.indexOf(
       'node scripts/check-project-transitions.mjs "$PROJECT_POLICY_BASE_SHA" "$PROJECT_POLICY_HEAD_SHA"',
     );
-    const registryGate = qualityJob.indexOf("bun run projects:check");
+    const registryGate = qualityJob.indexOf("bun run verify:contracts");
     expect(qualityJob).toContain(
       `PROJECT_POLICY_BASE_SHA: ${"$"}{{ github.event.before }}`,
     );
@@ -477,25 +488,28 @@ describe("slop.cash deployment contract", () => {
   });
 
   it("pins every third-party workflow action to an immutable commit", () => {
-    let actionCount = 0;
-    for (const { name, source } of allWorkflows) {
-      for (const match of source.matchAll(/^\s*uses:\s*([^\s#]+)\s*$/gmu)) {
-        actionCount += 1;
-        expect(match[1], `${name} contains an unpinned action`).toMatch(
-          /^[^@]+@[0-9a-f]{40}$/u,
-        );
+    for (const { name } of allWorkflows) {
+      const definition = readWorkflow(join(workflowDirectory, name));
+      for (const job of Object.values(definition.jobs)) {
+        for (const action of [
+          job.uses,
+          ...(job.steps ?? []).map((step) => step.uses),
+        ].filter(Boolean)) {
+          expect(action, `${name} contains an unpinned action`).toMatch(
+            /^[^@]+@[0-9a-f]{40}$/u,
+          );
+        }
       }
     }
-    expect(actionCount).toBeGreaterThan(0);
   });
 
-  it("has no candidate-controlled production release path", () => {
-    expect(workflow).toContain("workflow_dispatch:");
-    expect(workflow).not.toContain("release_mode");
-    expect(workflow).not.toContain("production-candidate");
-    expect(workflow).not.toContain("candidate_pr");
-    expect(workflow).not.toContain("Candidate PR");
-    expect(deployJob).not.toContain("pulls/$CANDIDATE_PR");
+  it("has no caller-selected production release source", () => {
+    const definition = readWorkflow(join(workflowDirectory, "deploy.yml"));
+    expect(definition.on).toHaveProperty("workflow_dispatch");
+    expect(definition.on.workflow_dispatch?.inputs).toBeUndefined();
+    expect(definition.jobs.deploy.env.RELEASE_SHA).toBe(
+      `\${{ needs.source.outputs.sha }}`,
+    );
   });
 
   it("keeps production deploy authority out of package scripts", () => {

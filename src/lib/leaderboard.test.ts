@@ -48,7 +48,7 @@ import {
   TARGET_REPOSITORIES,
   type VerifiedEvidenceArtifact,
 } from "./leaderboard";
-import { type ProjectRunReceipt, serializeRunMarker } from "./run-receipts";
+import { type ProjectRunReceipt, runReceiptMarker } from "./run-receipts";
 
 const NOW = "2026-07-30T12:00:00.000Z";
 const WINDOW_FROM = "2026-06-25T12:00:00.000Z";
@@ -290,7 +290,7 @@ function reviewAttribution(
     `Contribution skill revision: ${receipt.skillRevision}`,
     "Attribution status: self-reported",
     "— [review]",
-    serializeRunMarker(receipt),
+    `<!-- slop-contribution-attribution:v1 ${JSON.stringify(runReceiptMarker(receipt))} -->`,
   ].join("\n");
 }
 

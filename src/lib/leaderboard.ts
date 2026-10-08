@@ -1290,13 +1290,6 @@ export function qualifiesResolvedIssue(issue: IssueRecord): boolean {
   );
 }
 
-export function isSubstantiveReview(
-  review: PullRequestReview,
-  pullRequest: PullRequestRecord,
-): boolean {
-  return reviewExclusionReason(review, pullRequest) === null;
-}
-
 function reviewExclusionReason(
   review: PullRequestReview,
   pullRequest: Pick<PullRequestRecord, "author" | "mergedAt">,

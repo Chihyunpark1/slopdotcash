@@ -10,21 +10,140 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-
-function workflow(path) {
-  return JSON.parse(
-    execFileSync(
-      "python3",
-      [
-        "-c",
-        "import yaml,json,sys; print(json.dumps(yaml.safe_load(sys.stdin)))",
-      ],
-      { input: readFileSync(path, "utf8"), encoding: "utf8" },
-    ),
-  );
-}
+import { workflow } from "./workflow-fixture.mjs";
 
 describe("independent release and intake paths", () => {
+  it("runs proposal gates from the trusted checkout and stops before verification when either revision differs", () => {
+    for (const [path, prefix, remoteRef, commands] of [
+      [
+        "funding-records",
+        "FUNDING",
+        "slop-funding-head",
+        ["scripts/check-funding-record-pr.ts"],
+      ],
+      [
+        "unsafe-destination-transitions",
+        "CYCLE",
+        "slop-cycle-head",
+        [
+          "--no-install scripts/check-unsafe-destination-transitions.ts",
+          "--no-install scripts/check-squads-execution-transitions.ts",
+        ],
+      ],
+    ]) {
+      const definition = workflow(`.github/workflows/${path}.yml`);
+      expect(Object.keys(definition.on)).toEqual(["pull_request_target"]);
+      expect(definition.on.pull_request_target.branches).toEqual([
+        "develop",
+        "development",
+        "main",
+      ]);
+      expect(definition.permissions).toEqual({ contents: "read" });
+      const job = definition.jobs[path];
+      expect(job.permissions).toBeUndefined();
+      expect(job.environment).toBeUndefined();
+      const checkouts = job.steps.filter((step) =>
+        step.uses?.startsWith("actions/checkout@"),
+      );
+      expect(checkouts).toHaveLength(1);
+      expect(checkouts[0].with.ref).toBe(
+        `\${{ github.event.pull_request.base.sha }}`,
+      );
+      expect(checkouts[0].with["persist-credentials"]).toBe(false);
+      const gate = job.steps.find((step) => step.env?.[`${prefix}_PR_NUMBER`]);
+      expect(gate.env[`${prefix}_BASE_SHA`]).toBe(
+        `\${{ github.event.pull_request.base.sha }}`,
+      );
+      expect(gate.env[`${prefix}_HEAD_SHA`]).toBe(
+        `\${{ github.event.pull_request.head.sha }}`,
+      );
+      const shells = job.steps
+        .filter((step) => step.run)
+        .map((step) => step.run);
+      expect(shells.join("\n")).not.toMatch(/gh pr (merge|review)/u);
+      const installs = shells.filter((shell) =>
+        /(?:bun|npm) install/u.test(shell),
+      );
+      expect(installs).toEqual(
+        path === "funding-records"
+          ? ["bun install --frozen-lockfile --ignore-scripts"]
+          : [],
+      );
+      if (path === "funding-records") {
+        expect(shells.at(-1)).toContain(
+          "bun --no-install scripts/check-signer-access-transitions.ts",
+        );
+      }
+      const root = mkdtempSync(join(tmpdir(), "slop-proposal-workflow-"));
+      try {
+        const git = (...args) =>
+          execFileSync("git", args, {
+            cwd: root,
+            encoding: "utf8",
+            stdio: ["ignore", "pipe", "pipe"],
+          }).trim();
+        git("init", "-q");
+        git("config", "user.name", "Workflow fixture");
+        git("config", "user.email", "fixture@example.invalid");
+        git("commit", "--allow-empty", "-qm", "trusted base");
+        const base = git("rev-parse", "HEAD");
+        git("commit", "--allow-empty", "-qm", "proposal");
+        const head = git("rev-parse", "HEAD");
+        git("update-ref", "refs/pull/123/head", head);
+        git("remote", "add", "origin", root);
+        git("checkout", "--detach", base);
+        mkdirSync(join(root, "bin"));
+        // Execute the checked-in shell and real Git fetch. Only the already-tested
+        // verifier is replaced so these checks can observe whether it is reached.
+        writeFileSync(
+          join(root, "bin/bun"),
+          '#!/bin/sh\nprintf "%s\\n" "$*" >> "$TRACE"\n',
+          { mode: 0o700 },
+        );
+        const trace = join(root, "trace");
+        for (const [baseSha, headSha, accepted] of [
+          [base, head, true],
+          [head, head, false],
+          [base, base, false],
+        ]) {
+          rmSync(trace, { force: true });
+          const result = spawnSync("bash", ["-eu", "-c", gate.run], {
+            cwd: root,
+            encoding: "utf8",
+            env: {
+              ...process.env,
+              PATH: `${join(root, "bin")}:${process.env.PATH}`,
+              TRACE: trace,
+              RUNNER_TEMP: root,
+              [`${prefix}_BASE_SHA`]: baseSha,
+              [`${prefix}_HEAD_SHA`]: headSha,
+              [`${prefix}_PR_NUMBER`]: "123",
+            },
+          });
+          expect(result.status === 0, result.stderr).toBe(accepted);
+          if (accepted) {
+            const calls = readFileSync(trace, "utf8").trim().split("\n");
+            expect(calls).toHaveLength(commands.length);
+            commands.forEach((command, index) => {
+              expect(calls[index]).toBe(
+                path === "funding-records"
+                  ? `${command} --base-sha ${base} --head-sha ${head} --pr-number 123 --output ${root}/funding-record-decision.json`
+                  : `${command} ${base} ${head}`,
+              );
+            });
+            expect(git("rev-parse", `refs/remotes/origin/${remoteRef}`)).toBe(
+              head,
+            );
+          } else {
+            expect(() => readFileSync(trace)).toThrow();
+          }
+          expect(git("rev-parse", "HEAD")).toBe(base);
+        }
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    }
+  });
   it("routes code releases to production credentials without a manual approval job, while refreshes can publish", () => {
     const { jobs } = workflow(".github/workflows/deploy.yml");
     expect(jobs.approve).toBeUndefined();

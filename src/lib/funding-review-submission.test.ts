@@ -15,7 +15,6 @@ import {
 } from "../../scripts/apply-funding-review";
 import {
   applyFundingReviewSubmission,
-  createFundingReviewSubmission,
   type FundingReviewSubmission,
   fundingReviewProposalSha256,
 } from "./funding-review-submission";
@@ -125,7 +124,7 @@ describe("GitHub funding review submission", () => {
     });
     expect(assertRewardAllocationManifest(candidate)).toEqual(candidate);
   });
-  it("exports an app handoff with preserved funding basis and rejects invalid exports", async () => {
+  it("applies a handoff with preserved funding basis and rejects amounts over the cap", async () => {
     const value = proposal();
     value.fundingBasis = {
       cycleId: value.cycleId,
@@ -135,19 +134,22 @@ describe("GitHub funding review submission", () => {
       instrumentId: `sablier-lockup-v4:base:0x${"1".repeat(40)}:1`,
     };
     const { bytes, submission } = await input(value);
-    const exported = await createFundingReviewSubmission(
+    const candidate = await applyFundingReviewSubmission(
       bytes,
-      submission.adjustments,
+      submission,
       NOW,
     );
-    const candidate = await applyFundingReviewSubmission(bytes, exported, NOW);
-    expect(exported).toEqual(submission);
     expect(candidate.fundingBasis).toEqual(value.fundingBasis);
     expect(candidate.sourceSnapshotSha256).toEqual(value.sourceSnapshotSha256);
     await expect(
-      createFundingReviewSubmission(
+      applyFundingReviewSubmission(
         bytes,
-        [{ ...submission.adjustments[0], amountMinor: "90000000" }],
+        {
+          ...submission,
+          adjustments: [
+            { ...submission.adjustments[0], amountMinor: "90000000" },
+          ],
+        },
         NOW,
       ),
     ).rejects.toThrow(/cap/);
