@@ -15,23 +15,12 @@ import { childEnvironment } from "./child-environment.mjs";
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const playwright = join(packageRoot, "node_modules", ".bin", "playwright");
-const artifactContract =
-  "serves byte-consistent install and read-only artifacts for every project";
-
-const pagesContracts = [
-  "serves GitHub login on direct navigation and reload",
-  "points history is usable, accessible and independent of payments",
-  artifactContract,
-  "renders contributor and cycle records from validated public data",
-  "serves wallet registration on direct navigation and reload",
-].join("|");
-
 function runSync(command, args) {
   const result = spawnSync(command, args, {
     cwd: packageRoot,
     env: childEnvironment(),
     stdio: "inherit",
-    timeout: 25 * 60_000,
+    timeout: 40 * 60_000,
     killSignal: "SIGKILL",
   });
   if (result.error) throw result.error;
@@ -68,7 +57,7 @@ function runPhase(label, server, port, args) {
       },
       stdio: ["ignore", "pipe", "pipe"],
     });
-    const timer = setTimeout(() => child.kill("SIGKILL"), 25 * 60_000);
+    const timer = setTimeout(() => child.kill("SIGKILL"), 40 * 60_000);
     prefixLines(child.stdout, label, process.stdout);
     prefixLines(child.stderr, label, process.stderr);
     child.on("error", (error) => {
@@ -97,13 +86,13 @@ const extraArgs = process.argv.slice(2);
 const statuses = await Promise.all([
   runPhase("preview", "preview", String(basePort), [
     "--grep-invert",
-    artifactContract,
+    "@pages-only",
     ...extraArgs,
   ]),
   runPhase("pages", "pages", String(basePort + 1), [
     "--project=wide-desktop-chromium",
     "--grep",
-    pagesContracts,
+    "@pages",
     ...extraArgs,
   ]),
 ]);

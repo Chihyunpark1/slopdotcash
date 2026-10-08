@@ -1,0 +1,562 @@
+/**
+ * Supplies a contract-valid public snapshot for component and browser-state
+ * tests. Live ingestion has separate network-backed coverage.
+ */
+
+import type { CycleIndex } from "../src/lib/cycle-index";
+import {
+  type LeaderboardSnapshot,
+  SCORE_RULE_VERSION,
+  TARGET_REPOSITORIES,
+} from "../src/lib/leaderboard";
+
+export function cycleIndexFixture(): CycleIndex {
+  return {
+    schemaVersion: "1",
+    generatedAt: new Date().toISOString(),
+    cycles: [],
+  };
+}
+
+export function snapshotFixture(
+  generatedAt = new Date().toISOString(),
+): LeaderboardSnapshot {
+  const windowTo = "2026-07-30T00:00:00.000Z";
+  const leaderActor: LeaderboardSnapshot["leaders"][number]["actor"] = {
+    id: "U_fixture",
+    login: "finish-line",
+    avatarUrl: "https://avatars.githubusercontent.com/u/1?v=4",
+    url: "https://github.com/finish-line",
+    kind: "User",
+  };
+  return {
+    schemaVersion: "6",
+    repository: "elizaOS/eliza",
+    repositories: TARGET_REPOSITORIES.map(
+      ({ aliases: _aliases, expectedNodeId: _expectedNodeId, ...repository }) =>
+        repository,
+    ),
+    ruleVersion: SCORE_RULE_VERSION,
+    generatedAt,
+    sourceUpdatedAt: generatedAt,
+    stale: false,
+    window: {
+      days: 35,
+      from: "2026-06-25T00:00:00.000Z",
+      to: windowTo,
+    },
+    methodology: {
+      summary: "Accepted outcomes score; raw activity does not.",
+      scoringRules: [
+        {
+          id: "merged-pull-request",
+          points: "10 points",
+          cap: "Once per merged pull request.",
+          qualification: "A non-bot pull request merged in the rolling window.",
+        },
+        {
+          id: "resolved-issue",
+          points: "4 points",
+          cap: "Once per qualified issue.",
+          qualification: "A completed or confirmed issue closed in the window.",
+        },
+        {
+          id: "material-test-change",
+          points: "4 points",
+          cap: "Once per merged pull request.",
+          qualification: "Recognized tests meet the published churn threshold.",
+        },
+        {
+          id: "evidence",
+          points: "Up to 6 points",
+          cap: "One award per evidence category and pull request.",
+          qualification:
+            "Concrete screenshots, video, logs, trajectories, or artifacts.",
+        },
+        {
+          id: "substantive-review",
+          points: "3 points",
+          cap: "One qualifying reviewer award per pull request.",
+          qualification:
+            "A substantive non-self review submitted before merge.",
+        },
+        {
+          id: "evaluated-contribution",
+          points: "1 to 8 points",
+          cap: "Three reviewed awards per project.",
+          qualification:
+            "A maintainer-approved public award for useful otherwise-unscored work.",
+        },
+      ],
+      evidenceWeights: {
+        screenshot: 1,
+        video: 2,
+        logs: 1,
+        trajectory: 1,
+        "domain-artifact": 1,
+      },
+      materialTestThreshold: {
+        minimumAdditions: 10,
+        minimumTotalChurn: 20,
+        cap: "One award per merged pull request.",
+      },
+      exclusions: ["Bot-authored outcomes.", "Self-reviews."],
+      nonScoringActivity: ["Comments.", "Commit count.", "Lines changed."],
+      provenancePolicy:
+        "Provider and exact model identifiers are self-reported, never verified, and never score points.",
+      collectionPolicy:
+        "GitHub GraphQL data is collected in time slices and deduplicated by node ID.",
+    },
+    source: {
+      provider: "github-graphql",
+      fetchedAt: generatedAt,
+      cutoffAt: windowTo,
+      repositoryId: "R_fixture",
+      repositories: TARGET_REPOSITORIES.map((repository) => ({
+        id: repository.id,
+        repositoryId:
+          repository.role === "primary"
+            ? "R_fixture"
+            : `R_fixture_${repository.name.replaceAll("-", "_")}`,
+      })),
+      requestCount: 7,
+      searchSliceCount: 3,
+      rateLimit: {
+        cost: 7,
+        limit: 5000,
+        remaining: 4993,
+        resetAt: "2026-07-30T01:00:00.000Z",
+      },
+      counts: {
+        mergedPullRequests: 2,
+        detailedMergedPullRequests: 1,
+        closedIssues: 1,
+        detailedClosedIssues: 1,
+        resolvedIssues: 1,
+        openIssues: 2,
+        openPullRequests: 1,
+      },
+      verificationWindow: {
+        days: 35,
+        from: "2026-06-25T00:00:00.000Z",
+        to: windowTo,
+      },
+      evidenceVerification: {
+        status: "complete",
+        sourceCount: 1,
+        artifactCount: 3,
+        maxSources: 64,
+        maxArtifacts: 64,
+      },
+    },
+    leaders: [
+      {
+        rank: 1,
+        actor: leaderActor,
+        score: 34,
+        scoreThirds: 102,
+        points: {
+          mergedPullRequests: 20,
+          resolvedIssues: 4,
+          materialTestChanges: 4,
+          evidence: 3,
+          substantiveReviews: 3,
+          evaluatedContributions: 0,
+        },
+        pointThirds: {
+          mergedPullRequests: 60,
+          resolvedIssues: 12,
+          materialTestChanges: 12,
+          evidence: 9,
+          substantiveReviews: 9,
+          evaluatedContributions: 0,
+        },
+        acceptedOutcomes: {
+          mergedPullRequests: 2,
+          resolvedIssues: 1,
+          materialTestChanges: 1,
+          evidenceCategories: 2,
+          substantiveReviews: 1,
+          evaluatedContributions: 0,
+        },
+        rawActivity: {
+          comments: 2,
+          reviews: 1,
+          commits: 2,
+          additions: 40,
+          deletions: 8,
+        },
+        reportedModels: ["openai/gpt-5"],
+      },
+    ],
+    ledger: [
+      {
+        id: "PR_fixture:merged",
+        actor: leaderActor,
+        category: "merged-pull-request",
+        points: 10,
+        occurredAt: "2026-07-29T12:00:00.000Z",
+        repository: "elizaOS/eliza",
+        source: {
+          id: "PR_fixture",
+          kind: "pull-request",
+          number: 17327,
+          title: "Ship the public contribution ledger",
+          url: "https://github.com/elizaOS/eliza/pull/17327",
+        },
+        reason: "Pull request merged during the rolling window.",
+      },
+      {
+        id: "PR_proximityprize_fixture:merged",
+        actor: leaderActor,
+        category: "merged-pull-request",
+        points: 10,
+        occurredAt: "2026-07-28T12:00:00.000Z",
+        repository: "elizaOS/proximityprize",
+        source: {
+          id: "PR_proximityprize_fixture",
+          kind: "pull-request",
+          number: 12,
+          title: "Harden the proximity manifest loader",
+          url: "https://github.com/SlopDotCash/proximityprize/pull/12",
+        },
+        reason: "Pull request merged during the rolling window.",
+      },
+      {
+        id: "ISSUE_fixture:resolved",
+        actor: leaderActor,
+        category: "resolved-issue",
+        points: 4,
+        occurredAt: "2026-07-29T12:00:00.000Z",
+        repository: "elizaOS/eliza",
+        source: {
+          id: "ISSUE_fixture",
+          kind: "issue",
+          number: 17326,
+          title: "Launch the contribution protocol",
+          url: "https://github.com/elizaOS/eliza/issues/17326",
+        },
+        reason: "Issue resolution was confirmed.",
+      },
+      {
+        id: "PR_fixture:tests",
+        actor: leaderActor,
+        category: "material-test-change",
+        points: 4,
+        occurredAt: "2026-07-29T12:00:00.000Z",
+        repository: "elizaOS/eliza",
+        source: {
+          id: "PR_fixture",
+          kind: "pull-request",
+          number: 17327,
+          title: "Ship the public contribution ledger",
+          url: "https://github.com/elizaOS/eliza/pull/17327",
+        },
+        reason: "Material test additions and churn met the public threshold.",
+      },
+      {
+        id: "PR_fixture:evidence:screenshot",
+        actor: leaderActor,
+        category: "evidence",
+        points: 1,
+        occurredAt: "2026-07-29T12:00:00.000Z",
+        repository: "elizaOS/eliza",
+        source: {
+          id: "PR_fixture",
+          kind: "pull-request",
+          number: 17327,
+          title: "Ship the public contribution ledger",
+          url: "https://github.com/elizaOS/eliza/pull/17327",
+        },
+        reason: "Concrete screenshot evidence was attached.",
+      },
+      {
+        id: "PR_fixture:evidence:video",
+        actor: leaderActor,
+        category: "evidence",
+        points: 2,
+        occurredAt: "2026-07-29T12:00:00.000Z",
+        repository: "elizaOS/eliza",
+        source: {
+          id: "PR_fixture",
+          kind: "pull-request",
+          number: 17327,
+          title: "Ship the public contribution ledger",
+          url: "https://github.com/elizaOS/eliza/pull/17327",
+        },
+        reason: "Concrete video evidence was attached.",
+      },
+      {
+        id: "PR_fixture:reviewer:U_fixture",
+        actor: leaderActor,
+        category: "substantive-review",
+        points: 3,
+        occurredAt: "2026-07-27T12:00:00.000Z",
+        repository: "elizaOS/eliza",
+        source: {
+          id: "REVIEW_fixture",
+          kind: "review",
+          number: 17200,
+          title: "Repair the queue pagination boundary",
+          url: "https://github.com/elizaOS/eliza/pull/17200#pullrequestreview-1",
+        },
+        reason: "Substantive review completed before merge.",
+      },
+    ],
+    reviewExclusions: [],
+    opportunities: [
+      {
+        id: "PR_open_fixture:opportunity:missing-evidence",
+        actor: leaderActor,
+        kind: "missing-evidence",
+        category: "evidence",
+        potentialPoints: null,
+        occurredAt: "2026-07-29T18:00:00.000Z",
+        repository: "elizaOS/eliza",
+        source: {
+          id: "PR_open_fixture",
+          kind: "pull-request",
+          number: 17340,
+          title: "Finish the open contribution checklist",
+          url: "https://github.com/elizaOS/eliza/pull/17340",
+        },
+        reason:
+          "Open pull request evidence is missing; its legacy evidence assessment is 0 of 6. Evidence does not add standalone Score v2 points.",
+        hint: "Add verified screenshot, video, or log evidence before merge.",
+      },
+    ],
+    attributions: [
+      {
+        id: "COMMENT_MODEL_fixture:machine-marker:0",
+        sourceId: "COMMENT_MODEL_fixture",
+        sourceUrl: "https://github.com/elizaOS/eliza/pull/17327#issuecomment-1",
+        artifactId: "PR_fixture",
+        actor: leaderActor,
+        provider: "openai",
+        model: "gpt-5",
+        identifier: "openai/gpt-5",
+        client: "codex-desktop",
+        skillRevision: null,
+        run: null,
+        format: "machine-marker",
+        status: "self-reported",
+      },
+    ],
+    invalidAttributionMarkers: [],
+    attributionCoverage: {
+      status: "complete",
+      eligibleSourceCount: 1,
+      validSourceCount: 1,
+      missingSourceCount: 0,
+      invalidSourceCount: 0,
+      humanOnlySourceCount: 0,
+    },
+    workQueue: {
+      issues: [
+        {
+          id: "I_fixture",
+          kind: "issue",
+          number: 17326,
+          title: "Launch the slop.cash contribution protocol",
+          url: "https://github.com/elizaOS/eliza/issues/17326",
+          repository: "elizaOS/eliza",
+          author: leaderActor,
+          createdAt: generatedAt,
+          updatedAt: generatedAt,
+          labels: ["help wanted", "website"],
+          priority: "normal",
+          actionability: "actionable",
+          isDraft: null,
+          reviewDecision: null,
+          activeReviewRequestCount: null,
+          commentCount: 1,
+          claim: {
+            status: "unclaimed",
+            source: "none",
+            kind: null,
+            actors: [],
+            claimedAt: null,
+          },
+          selection: {
+            status: "candidate",
+            reasons: [],
+          },
+          evidence: {
+            status: "partial",
+            points: 2,
+            maxPoints: 6,
+            categories: ["screenshot"],
+          },
+          model: {
+            status: "complete",
+            identifiers: ["openai/gpt-5"],
+            machineMarkerCount: 1,
+            invalidMarkerCount: 0,
+            eligibleSourceCount: 1,
+            validSourceCount: 1,
+            missingSourceCount: 0,
+            invalidSourceCount: 0,
+            humanOnlySourceCount: 0,
+            provenance: "self-reported",
+          },
+        },
+        {
+          id: "I_proximityprize_fixture",
+          kind: "issue",
+          number: 12,
+          title: "Document the Proximity Prize ingestion contract",
+          url: "https://github.com/SlopDotCash/proximityprize/issues/12",
+          repository: "elizaOS/proximityprize",
+          author: leaderActor,
+          createdAt: generatedAt,
+          updatedAt: generatedAt,
+          labels: ["help wanted"],
+          priority: "normal",
+          actionability: "actionable",
+          isDraft: null,
+          reviewDecision: null,
+          activeReviewRequestCount: null,
+          commentCount: 0,
+          claim: {
+            status: "unclaimed",
+            source: "none",
+            kind: null,
+            actors: [],
+            claimedAt: null,
+          },
+          selection: {
+            status: "candidate",
+            reasons: [],
+          },
+          evidence: {
+            status: "missing",
+            points: 0,
+            maxPoints: 6,
+            categories: [],
+          },
+          model: {
+            status: "missing",
+            identifiers: [],
+            machineMarkerCount: 0,
+            invalidMarkerCount: 0,
+            eligibleSourceCount: 0,
+            validSourceCount: 0,
+            missingSourceCount: 0,
+            invalidSourceCount: 0,
+            humanOnlySourceCount: 0,
+            provenance: "none",
+          },
+        },
+      ],
+      pullRequests: [
+        {
+          id: "PR_open_fixture",
+          kind: "pull-request",
+          number: 17340,
+          title: "Finish the open contribution checklist",
+          url: "https://github.com/elizaOS/eliza/pull/17340",
+          repository: "elizaOS/eliza",
+          author: leaderActor,
+          createdAt: generatedAt,
+          updatedAt: generatedAt,
+          labels: ["website"],
+          priority: "normal",
+          actionability: "actionable",
+          isDraft: false,
+          reviewDecision: "REVIEW_REQUIRED",
+          activeReviewRequestCount: 0,
+          commentCount: 2,
+          claim: {
+            status: "unclaimed",
+            source: "none",
+            kind: null,
+            actors: [],
+            claimedAt: null,
+          },
+          selection: {
+            status: "candidate",
+            reasons: [],
+          },
+          evidence: {
+            status: "missing",
+            points: 0,
+            maxPoints: 6,
+            categories: [],
+          },
+          model: {
+            status: "missing",
+            identifiers: [],
+            machineMarkerCount: 0,
+            invalidMarkerCount: 0,
+            eligibleSourceCount: 1,
+            validSourceCount: 0,
+            missingSourceCount: 1,
+            invalidSourceCount: 0,
+            humanOnlySourceCount: 0,
+            provenance: "none",
+          },
+        },
+      ],
+    },
+  };
+}
+
+export function archivedPaidCycleIndex() {
+  const index = cycleIndexFixture();
+  const prefix = "/data/cycles/eliza/2026-07";
+  const file = (name: string) => ({
+    sha256: "a".repeat(64),
+    url: `${prefix}/${name}.json`,
+  });
+  index.cycles = [
+    {
+      projectId: "eliza",
+      cycleId: "2026-07",
+      kind: "monthly-pool",
+      state: "paid",
+      generatedAt: "2026-08-02T00:00:00.000Z",
+      contributionWindow: {
+        from: "2026-07-07T00:00:00.000Z",
+        to: "2026-08-01T00:00:00.000Z",
+      },
+      reviewEndsAt: "2026-08-15T00:00:00.000Z",
+      approvedAt: "2026-08-16T00:00:00.000Z",
+      settledAt: "2026-08-16T00:00:00.000Z",
+      reward: {
+        currency: "USDC",
+        capMinor: "10000000000",
+        suggestedMinor: "1000000",
+        approvedMinor: "1000000",
+        paidMinor: "1000000",
+        feeMinor: "10000",
+        sharePartsPerMillion: null,
+      },
+      contributors: [
+        {
+          actor: { id: "U_archived", login: "archive-only" },
+          score: 7,
+          state: "paid",
+          suggestedMinor: "1000000",
+          approvedMinor: "1000000",
+          paidMinor: "1000000",
+          sharePartsPerMillion: null,
+          wallet: {
+            address: "11111111111111111111111111111111",
+            chain: "solana",
+            observedAt: "2026-08-01T00:00:00.000Z",
+            sourceCommit: "b".repeat(40),
+            sourceUrl: `https://github.com/archive-only/archive-only/blob/${"b".repeat(40)}/README.md`,
+          },
+        },
+      ],
+      files: {
+        sourceSnapshot: file("source-snapshot"),
+        proposal: file("proposal"),
+        allocation: file("allocation"),
+        executionPlan: file("execution-plan"),
+        settlement: file("settlement"),
+      },
+    },
+  ];
+  return index;
+}

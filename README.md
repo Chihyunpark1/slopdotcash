@@ -197,6 +197,17 @@ Slop is experimental software. The repository is licensed under the
 
 ### Focused maintenance commands
 
+`bun run prepare:publication` runs site packaging, points generation and profile
+publication in order. Development and production builds use this same entrypoint.
+Offline profile builds read `data/profiles/seed.json`. To use a captured census,
+set `SLOP_PROFILES_INPUT` to its path. Trusted CI sets that path to the live census
+it generated earlier. A missing declared input stops publication; leftover public
+files never select the source.
+
+`bun run verify:contracts` and `bun run verify:code` are shared by local verification
+and CI. The former checks source records; the latter checks types, formatting,
+lint and tests. Live chain verification and browser checks remain separate.
+
 - `bun run check:unused` checks application locals and parameters; review exports,
   generated entry points, CLI tools, and configuration before removing dependencies.
 - `bun run quality:simulate -- PREPARATION EVIDENCE PROPOSAL OUTPUT` recalculates
