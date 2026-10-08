@@ -558,7 +558,7 @@ test("never presents Delta Star's external prize as platform money", async ({
     page.getByText("No platform pool · no dollar projection"),
   ).toBeVisible();
   await expect(
-    page.getByText(/prize sponsor controls eligibility and payment/u),
+    page.getByText("Organizer rules decide eligibility, amount, and payment."),
   ).toBeVisible();
   const history = page.locator(".payment-history");
   await expect(

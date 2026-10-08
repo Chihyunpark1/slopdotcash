@@ -1459,7 +1459,7 @@ function ProjectPage({
                     ? monthlyPoolUnfunded(project.reward)
                       ? `Target ${project.reward.monthlyCapDisplay} per month. No payments scheduled.`
                       : `${formatMicroUsdc(project.reward.committedMinor)} committed against a ${project.reward.monthlyCapDisplay} monthly target. Accessibility is unknown; no payment is enabled.`
-                    : "10% of an award actually received is allocated to Slop Cash; the remaining 90% is shared among accepted contributors. The prize sponsor controls eligibility and payment."}
+                    : project.terms.externalPrize?.allocationAuthority}
                 </p>
                 <div>
                   {project.reward.reviewBudget ? (
