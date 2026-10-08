@@ -154,7 +154,7 @@ export interface MergedPullRequestOutcome {
   deletions: number;
   /** Target branch; only integration-branch merges share commit credit. */
   baseRefName: string;
-  /** Commit SHAs and linked GitHub authors; null above one 100-commit page. */
+  /** Complete commit SHAs and linked GitHub authors; null for legacy evidence. */
   commits: Array<{ oid: string; author: GitHubActor | null }> | null;
 }
 

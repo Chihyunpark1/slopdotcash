@@ -36,8 +36,9 @@ emails, `[bot]` app logins, the vendor coding-agent accounts `claude`, `codex`,
 and `cursoragent` (pinned by node ID), and `Co-authored-by` trailers do not
 count. A commit SHA gives credit
 only in the earliest merged pull request that lists it, so a consolidation or
-promotion pull request cannot score it again. A pull request with more than
-100 commits, or into another branch, keeps author-only credit.
+promotion pull request cannot score it again. Collect every commit page before scoring. An incomplete commit listing must
+fail snapshot collection. A pull request into another branch keeps author-only
+credit.
 
 The work unit's score thirds are split equally. The author is first and the
 other actors follow in actor-ID order; the first actors receive the remainder.

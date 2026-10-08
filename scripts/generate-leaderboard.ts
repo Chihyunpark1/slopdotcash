@@ -192,6 +192,7 @@ interface NodeReference {
   kind: "Issue" | "PullRequest";
   outcome: MergedPullRequestOutcome | null;
   openVersion: string | null;
+  commitPage?: NestedPageState;
 }
 
 type ExpectedRecordState = "closed" | "merged" | "open";
@@ -504,8 +505,29 @@ const SEARCH_REFERENCES_QUERY = `
           baseRefName
           commits(first: 100) {
             totalCount
+            pageInfo { hasNextPage endCursor }
             nodes { commit { oid author { user { ...LeaderboardActor } } } }
           }
+        }
+      }
+    }
+    rateLimit { cost limit remaining resetAt }
+  }
+  ${ACTOR_FRAGMENT}
+`;
+
+const MORE_OUTCOME_COMMITS_QUERY = `
+  query LeaderboardOutcomeCommits($id: ID!, $after: String!) {
+    node(id: $id) {
+      ... on PullRequest {
+        id
+        state
+        mergedAt
+        baseRefName
+        commits(first: 100, after: $after) {
+          totalCount
+          pageInfo { hasNextPage endCursor }
+          nodes { commit { oid author { user { ...LeaderboardActor } } } }
         }
       }
     }
@@ -1757,6 +1779,20 @@ function parseSearchReference(
     outcome:
       kind === "PullRequest" ? parsePullRequestOutcome(node, path) : null,
     openVersion: null,
+    ...(kind === "PullRequest"
+      ? {
+          commitPage: {
+            totalCount: asNumber(
+              child(node, "commits", path).totalCount,
+              `${path}.commits.totalCount`,
+            ),
+            pageInfo: parsePageInfo(
+              child(node, "commits", path).pageInfo,
+              `${path}.commits.pageInfo`,
+            ),
+          },
+        }
+      : {}),
   };
 }
 
@@ -1977,7 +2013,58 @@ export async function collectSearchReferences(
       `GitHub Search returned ${deduped.length} unique references but reported ${expectedCount} for ${searchRange(from, to)}`,
     );
   }
+  for (const reference of deduped) {
+    await completeOutcomeCommits(client, reference);
+  }
   return deduped;
+}
+
+async function completeOutcomeCommits(
+  client: GraphqlExecutor,
+  reference: NodeReference,
+): Promise<void> {
+  const outcome = reference.outcome;
+  const firstPage = reference.commitPage;
+  if (!outcome || !firstPage) return;
+  const commits = outcome.commits;
+  if (!commits) throw new Error(`PR #${outcome.number} has no commit evidence`);
+  let pageInfo = firstPage.pageInfo;
+  const cursors = new Set<string>();
+  while (pageInfo.hasNextPage) {
+    const cursor = pageInfo.endCursor;
+    if (!cursor || cursors.has(cursor)) {
+      throw new Error(
+        `PR #${outcome.number} commits cursor is missing or repeated`,
+      );
+    }
+    cursors.add(cursor);
+    const data = await client.execute(MORE_OUTCOME_COMMITS_QUERY, {
+      id: outcome.id,
+      after: cursor,
+    });
+    const node = child(data, "node", "data");
+    const connection = child(node, "commits", "data.node");
+    if (
+      node.id !== outcome.id ||
+      node.state !== "MERGED" ||
+      node.mergedAt !== outcome.mergedAt ||
+      node.baseRefName !== outcome.baseRefName ||
+      connection.totalCount !== firstPage.totalCount
+    ) {
+      throw new Error(`PR #${outcome.number} changed during commit collection`);
+    }
+    commits.push(...parseOutcomeCommits(connection, "data.node.commits"));
+    pageInfo = parsePageInfo(connection.pageInfo, "data.node.commits.pageInfo");
+  }
+  if (
+    commits.length !== firstPage.totalCount ||
+    new Set(commits.map((commit) => commit.oid)).size !== firstPage.totalCount
+  ) {
+    throw new Error(
+      `PR #${outcome.number} commit totals do not match complete unique evidence`,
+    );
+  }
+  delete reference.commitPage;
 }
 
 async function countSearchResults(
@@ -2108,16 +2195,9 @@ function parsePullRequestOutcome(
 function parseOutcomeCommits(
   value: unknown,
   path: string,
-): MergedPullRequestOutcome["commits"] {
+): NonNullable<MergedPullRequestOutcome["commits"]> {
   const connection = asRecord(value, path);
-  const totalCount = asNumber(connection.totalCount, `${path}.totalCount`);
   const nodes = asArray(connection.nodes, `${path}.nodes`);
-  if (totalCount > GRAPHQL_PAGE_SIZE) return null;
-  if (nodes.length !== totalCount) {
-    throw new Error(
-      `${path} returned ${nodes.length} commits but reported ${totalCount}`,
-    );
-  }
   return nodes.map((nodeValue, index) => {
     const nodePath = `${path}.nodes[${index}]`;
     const commit = child(asRecord(nodeValue, nodePath), "commit", nodePath);
