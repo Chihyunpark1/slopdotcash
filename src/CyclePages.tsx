@@ -31,6 +31,9 @@ export function CyclePage({
   state: DataState;
   retry: () => void;
 }) {
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/u.test(cycleId)) {
+    return <NotFound title="Cycle unavailable" />;
+  }
   if (state.status !== "ready")
     return (
       <main className="shell route-main">

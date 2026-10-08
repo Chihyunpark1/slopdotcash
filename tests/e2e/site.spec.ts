@@ -565,6 +565,14 @@ test("never presents Delta Star's external prize as platform money", async ({
 test("renders contributor and cycle records from validated public data", {
   tag: ["@pages"],
 }, async ({ page, request }) => {
+  await page.goto("/cycles/eliza/2026-99", { waitUntil: "networkidle" });
+  await expect(
+    page.getByRole("heading", { name: "Cycle unavailable", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("link", { name: "See open projects", exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/$/u);
   const snapshot = await loadSnapshot(request);
   const cycles = await loadCycles(request);
   const actor =
