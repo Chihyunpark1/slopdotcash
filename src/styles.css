@@ -3994,11 +3994,7 @@ small {
 }
 
 .draft-badge {
-  width: fit-content;
   display: inline-block;
-  padding: 4px 10px;
-  border: 1px solid var(--warning);
-  border-radius: var(--brand-radius-pill);
   color: var(--warning);
   font-family: var(--brand-font-data);
   font-size: 12px;
@@ -4104,6 +4100,10 @@ small {
   box-shadow: 0 3px 0 var(--orange);
   color: var(--ink);
   font-weight: 700;
+}
+
+.funding-page [role="tabpanel"][hidden] {
+  display: none;
 }
 
 .funding-records {

@@ -1258,8 +1258,13 @@ function ProjectFundingPage({
 }) {
   const funding = useFundingIndex();
   const [view, setView] = useState<FundingView>(fundingViewFromHash);
+  const [payoutsOpened, setPayoutsOpened] = useState(() => view === "payouts");
   useEffect(() => {
-    const sync = () => setView(fundingViewFromHash());
+    const sync = () => {
+      const next = fundingViewFromHash();
+      setView(next);
+      if (next === "payouts") setPayoutsOpened(true);
+    };
     window.addEventListener("hashchange", sync);
     window.addEventListener("popstate", sync);
     return () => {
@@ -1269,6 +1274,7 @@ function ProjectFundingPage({
   }, []);
   const select = (next: FundingView) => {
     setView(next);
+    if (next === "payouts") setPayoutsOpened(true);
     window.history.replaceState(
       window.history.state,
       "",
@@ -1337,168 +1343,169 @@ function ProjectFundingPage({
           </button>
         ))}
       </div>
-      {view === "records" ? (
-        <section
-          aria-labelledby="funding-tab-records"
-          className="funding-records"
-          id="funding-panel-records"
-          role="tabpanel"
-        >
-          <dl className="funding-status-grid">
-            <div>
-              <dt>
-                {project.reward.kind === "monthly-pool"
-                  ? "Monthly target"
-                  : "Advertised prize"}
-              </dt>
-              <dd>
-                {project.reward.kind === "monthly-pool"
-                  ? project.reward.monthlyCapDisplay
-                  : (project.reward.externalOpportunity
-                      ?.advertisedAmountDisplay ?? "External")}
-              </dd>
-            </div>
-            <div>
-              <dt>Funding</dt>
-              <dd>{fundingStateLabel(project)}</dd>
-            </div>
-            <div>
-              <dt>Committed</dt>
-              <dd>{formatMicroUsdc(project.reward.committedMinor)}</dd>
-            </div>
-            <div>
-              <dt>Payments</dt>
-              <dd>
-                {project.reward.paymentMode === "enabled"
-                  ? "Enabled"
-                  : "Disabled"}
-              </dd>
-            </div>
-            <div>
-              <dt>Project vault</dt>
-              <dd>
-                {project.escrow?.deployments.length || projectVaults.length
-                  ? "Reviewed deployment published"
-                  : "Not deployed"}
-              </dd>
-            </div>
-            <div>
-              <dt>Direct addresses</dt>
-              <dd>
-                {activeAddresses.length === 0
-                  ? "None published"
-                  : `${activeAddresses.length} published`}
-              </dd>
-            </div>
-          </dl>
-          <p>{project.funding.disclosure}</p>
-          {funding.status === "loading" ? (
-            <div className="data-notice" role="status">
-              <span className="pulse" /> Reading funding records…
-            </div>
-          ) : funding.status === "error" ? (
-            <div className="data-notice data-error" role="alert">
-              <CircleAlert aria-hidden="true" size={18} />
-              Funding records unavailable: {funding.message}
-            </div>
-          ) : records.length === 0 ? (
-            <EmptyState text="No reviewed public funding transactions have been published yet." />
-          ) : (
-            FUNDING_RECORD_GROUPS.map((group) => {
-              const groupRecords = records.filter(
-                (record) => record.state === group.state,
-              );
-              if (groupRecords.length === 0 && group.state === "disputed")
-                return null;
-              const assets = [
-                ...new Set(groupRecords.map((record) => record.asset)),
-              ];
-              return (
-                <section
-                  aria-labelledby={`funding-${group.state}`}
-                  className="funding-record-group"
-                  key={group.state}
-                >
-                  <h2 id={`funding-${group.state}`}>{group.title}</h2>
-                  {groupRecords.length === 0 ? (
-                    <p>No records.</p>
-                  ) : (
-                    <>
-                      <p className="money-summary">
-                        {assets.map((asset) => (
-                          <strong key={asset}>
-                            {formatFundingAmount(
-                              asset,
-                              groupRecords
-                                .filter((record) => record.asset === asset)
-                                .reduce(
-                                  (sum, record) =>
-                                    sum + BigInt(record.amountMinor),
-                                  0n,
-                                )
-                                .toString(),
-                            )}
-                          </strong>
-                        ))}
-                      </p>
-                      <div className="plain-table-wrap">
-                        <table className="plain-table">
-                          <caption className="visually-hidden">
-                            {project.name} {group.title.toLowerCase()} funding
-                            transactions
-                          </caption>
-                          <thead>
-                            <tr>
-                              <th scope="col">Transaction</th>
-                              <th scope="col">Amount</th>
-                              <th scope="col">Attribution</th>
-                              <th scope="col">Network</th>
+      <section
+        hidden={view !== "records"}
+        aria-labelledby="funding-tab-records"
+        className="funding-records"
+        id="funding-panel-records"
+        role="tabpanel"
+      >
+        <dl className="funding-status-grid">
+          <div>
+            <dt>
+              {project.reward.kind === "monthly-pool"
+                ? "Monthly target"
+                : "Advertised prize"}
+            </dt>
+            <dd>
+              {project.reward.kind === "monthly-pool"
+                ? project.reward.monthlyCapDisplay
+                : (project.reward.externalOpportunity
+                    ?.advertisedAmountDisplay ?? "External")}
+            </dd>
+          </div>
+          <div>
+            <dt>Funding</dt>
+            <dd>{fundingStateLabel(project)}</dd>
+          </div>
+          <div>
+            <dt>Committed</dt>
+            <dd>{formatMicroUsdc(project.reward.committedMinor)}</dd>
+          </div>
+          <div>
+            <dt>Payments</dt>
+            <dd>
+              {project.reward.paymentMode === "enabled"
+                ? "Enabled"
+                : "Disabled"}
+            </dd>
+          </div>
+          <div>
+            <dt>Project vault</dt>
+            <dd>
+              {project.escrow?.deployments.length || projectVaults.length
+                ? "Reviewed deployment published"
+                : "Not deployed"}
+            </dd>
+          </div>
+          <div>
+            <dt>Direct addresses</dt>
+            <dd>
+              {activeAddresses.length === 0
+                ? "None published"
+                : `${activeAddresses.length} published`}
+            </dd>
+          </div>
+        </dl>
+        <p>{project.funding.disclosure}</p>
+        {funding.status === "loading" ? (
+          <div className="data-notice" role="status">
+            <span className="pulse" /> Reading funding records…
+          </div>
+        ) : funding.status === "error" ? (
+          <div className="data-notice data-error" role="alert">
+            <CircleAlert aria-hidden="true" size={18} />
+            Funding records unavailable: {funding.message}
+          </div>
+        ) : records.length === 0 ? (
+          <EmptyState text="No reviewed public funding transactions have been published yet." />
+        ) : (
+          FUNDING_RECORD_GROUPS.map((group) => {
+            const groupRecords = records.filter(
+              (record) => record.state === group.state,
+            );
+            if (groupRecords.length === 0 && group.state === "disputed")
+              return null;
+            const assets = [
+              ...new Set(groupRecords.map((record) => record.asset)),
+            ];
+            return (
+              <section
+                aria-labelledby={`funding-${group.state}`}
+                className="funding-record-group"
+                key={group.state}
+              >
+                <h2 id={`funding-${group.state}`}>{group.title}</h2>
+                {groupRecords.length === 0 ? (
+                  <p>No records.</p>
+                ) : (
+                  <>
+                    <p className="money-summary">
+                      {assets.map((asset) => (
+                        <strong key={asset}>
+                          {formatFundingAmount(
+                            asset,
+                            groupRecords
+                              .filter((record) => record.asset === asset)
+                              .reduce(
+                                (sum, record) =>
+                                  sum + BigInt(record.amountMinor),
+                                0n,
+                              )
+                              .toString(),
+                          )}
+                        </strong>
+                      ))}
+                    </p>
+                    <div className="plain-table-wrap">
+                      <table className="plain-table">
+                        <caption className="visually-hidden">
+                          {project.name} {group.title.toLowerCase()} funding
+                          transactions
+                        </caption>
+                        <thead>
+                          <tr>
+                            <th scope="col">Transaction</th>
+                            <th scope="col">Amount</th>
+                            <th scope="col">Attribution</th>
+                            <th scope="col">Network</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {groupRecords.map((record) => (
+                            <tr key={record.recordId}>
+                              <th scope="row">
+                                <ExternalLinkAnchor
+                                  href={fundingTransactionExplorer(record)}
+                                >
+                                  {record.transactionId.slice(0, 12)}…
+                                </ExternalLinkAnchor>
+                              </th>
+                              <td>{formatFundingMinor(record)}</td>
+                              <td>
+                                {record.donor.attribution === "github"
+                                  ? `@${record.donor.login}`
+                                  : "Anonymous"}
+                              </td>
+                              <td>{record.network}</td>
                             </tr>
-                          </thead>
-                          <tbody>
-                            {groupRecords.map((record) => (
-                              <tr key={record.recordId}>
-                                <th scope="row">
-                                  <ExternalLinkAnchor
-                                    href={fundingTransactionExplorer(record)}
-                                  >
-                                    {record.transactionId.slice(0, 12)}…
-                                  </ExternalLinkAnchor>
-                                </th>
-                                <td>{formatFundingMinor(record)}</td>
-                                <td>
-                                  {record.donor.attribution === "github"
-                                    ? `@${record.donor.login}`
-                                    : "Anonymous"}
-                                </td>
-                                <td>{record.network}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </>
-                  )}
-                </section>
-              );
-            })
-          )}
-          {signerReports.length > 0 ? (
-            <SignerReports reports={signerReports} />
-          ) : null}
-          <p className="funding-records-note">
-            A GitHub login or a submitted transaction ID does not prove wallet
-            ownership or payment. A balance does not prove signer capability.
-            Monthly payout states are in the{" "}
-            <Link href="/cycles">cycle archive</Link>.
-          </p>
-        </section>
-      ) : (
-        <section
-          aria-labelledby="funding-tab-payouts"
-          id="funding-panel-payouts"
-          role="tabpanel"
-        >
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
+              </section>
+            );
+          })
+        )}
+        {signerReports.length > 0 ? (
+          <SignerReports reports={signerReports} />
+        ) : null}
+        <p className="funding-records-note">
+          A GitHub login or a submitted transaction ID does not prove wallet
+          ownership or payment. A balance does not prove signer capability.
+          Monthly payout states are in the{" "}
+          <Link href="/cycles">cycle archive</Link>.
+        </p>
+      </section>
+      <section
+        hidden={view !== "payouts"}
+        aria-labelledby="funding-tab-payouts"
+        id="funding-panel-payouts"
+        role="tabpanel"
+      >
+        {payoutsOpened ? (
           <Suspense fallback={<p role="status">Loading funding review…</p>}>
             <FundingReview
               key={project.id}
@@ -1508,8 +1515,8 @@ function ProjectFundingPage({
               funding={funding.status === "ready" ? funding.index : null}
             />
           </Suspense>
-        </section>
-      )}
+        ) : null}
+      </section>
     </main>
   );
 }

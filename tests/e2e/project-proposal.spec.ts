@@ -14,10 +14,12 @@ const COMMIT = "c".repeat(40);
 async function routeGitHub(
   page: Page,
   { repository = 200, licensePath = "LICENSE" } = {},
+  beforeRepository?: () => Promise<void>,
 ) {
   await page.route("https://api.github.com/**", async (route) => {
     const url = new URL(route.request().url());
-    if (url.pathname === "/repos/example/open-protein")
+    if (url.pathname === "/repos/example/open-protein") {
+      await beforeRepository?.();
       return route.fulfill({
         status: repository,
         json:
@@ -37,6 +39,7 @@ async function routeGitHub(
               }
             : { message: repository === 404 ? "Not Found" : "rate limited" },
       });
+    }
     if (url.pathname === "/repos/example/open-protein/branches/trunk")
       return route.fulfill({ json: { commit: { sha: COMMIT } } });
     if (url.pathname === "/repos/example/open-protein/license") {
@@ -276,5 +279,48 @@ test("failed or partial GitHub lookups never fill unknown facts", async ({
   );
   await expect(page.getByLabel("License SPDX")).toHaveValue("");
   await expect(page.locator(".proposal-facts")).toContainText("Unknown");
+  // A response that arrives after the user changes or clears the draft must
+  // not restore the previous repository. Only GitHub responses are fixtures.
+  for (const action of ["change", "clear"]) {
+    await page.unrouteAll();
+    let release!: () => void;
+    let started!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const requested = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    await routeGitHub(page, {}, async () => {
+      started();
+      await pending;
+    });
+    await page
+      .getByLabel("Public GitHub repository")
+      .fill("example/open-protein");
+    await page.getByRole("button", { name: "Look up on GitHub" }).click();
+    await requested;
+    if (action === "clear") {
+      await page.getByRole("button", { name: "Start over" }).click();
+      await page.getByRole("button", { name: "Clear draft" }).click();
+    } else {
+      await page
+        .getByLabel("Public GitHub repository")
+        .fill("example/new-project");
+    }
+    release();
+    await page.waitForLoadState("networkidle");
+    const expected = action === "clear" ? "" : "example/new-project";
+    await expect(page.getByLabel("Public GitHub repository")).toHaveValue(
+      expected,
+    );
+    expect(
+      await page.evaluate(
+        () =>
+          JSON.parse(localStorage.getItem("slop:project-proposal:v1") ?? "{}")
+            .repository,
+      ),
+    ).toBe(expected);
+  }
   expect(errors).toEqual([]);
 });

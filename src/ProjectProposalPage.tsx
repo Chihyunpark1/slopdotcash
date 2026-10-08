@@ -442,8 +442,13 @@ export default function ProjectProposalPage() {
     }
   }, [proposal]);
   useEffect(() => () => lookupController.current?.abort(), []);
-  const set = (field: ProposalField) => (value: string) =>
+  const set = (field: ProposalField) => (value: string) => {
+    if (field === "repository") {
+      lookupController.current?.abort();
+      setLookup({ state: "idle", message: "" });
+    }
     setProposal((current) => ({ ...current, [field]: value }));
+  };
   const errors = useMemo(() => proposalErrors(proposal), [proposal]);
   const stepErrors = (index: number) =>
     Object.fromEntries(
@@ -744,6 +749,7 @@ ${manifestText}`;
     }
   }
   function clearDraft() {
+    lookupController.current?.abort();
     setProposal(EMPTY_PROPOSAL);
     setAttempted(SETUP_STEPS.map(() => false));
     setLookup({ state: "idle", message: "" });

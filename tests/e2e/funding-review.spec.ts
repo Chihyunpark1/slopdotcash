@@ -102,6 +102,16 @@ test("recipient edits survive search, quick filters and pagination", async ({
   await expect(
     panel.getByLabel(`Reason for ${login}`, { exact: true }),
   ).toHaveValue("Test-only reduction kept across views");
+  await page.getByRole("tab", { name: "Funding records", exact: true }).click();
+  await expect(panel).toBeHidden();
+  await page.getByRole("tab", { name: "Manage payouts", exact: true }).click();
+  await expect(panel.getByLabel("Contribution month")).toHaveValue("2026-08");
+  await expect(
+    panel.getByLabel(`USDC for ${login}`, { exact: true }),
+  ).toHaveValue("1.5");
+  await expect(
+    panel.getByLabel(`Reason for ${login}`, { exact: true }),
+  ).toHaveValue("Test-only reduction kept across views");
   await expect(panel.locator(".review-working-summary")).toContainText(
     "Proposed",
   );
