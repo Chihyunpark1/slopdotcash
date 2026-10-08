@@ -20,6 +20,7 @@ const localPort = Number(process.env.SLOP_E2E_PORT ?? 4466);
 if (!Number.isInteger(localPort) || localPort < 1024 || localPort > 65535)
   throw new Error("SLOP_E2E_PORT must be an unprivileged TCP port");
 const localOrigin = `http://127.0.0.1:${localPort}`;
+const requestedWorkers = process.env.SLOP_E2E_WORKERS;
 
 const localServerCommand =
   localServer === "preview"
@@ -45,7 +46,13 @@ export default defineConfig({
   // serves the full desktop/mobile matrix in parallel. SLOP_E2E_WORKERS
   // overrides either default.
   workers:
-    process.env.SLOP_E2E_WORKERS ?? (localServer === "pages" ? 1 : "50%"),
+    requestedWorkers === undefined
+      ? localServer === "pages"
+        ? 1
+        : "50%"
+      : requestedWorkers.endsWith("%")
+        ? requestedWorkers
+        : Number(requestedWorkers),
   // A retried browser failure cannot serve as binding release evidence: an
   // intermittent console, network, accessibility, or rendering failure must
   // fail the exact run instead of being converted into a flaky green result.
