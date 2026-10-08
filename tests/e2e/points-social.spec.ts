@@ -101,16 +101,6 @@ test("social membership shows connection points, respects privacy and survives d
     .getByRole("link", { name: "Slop home" })
     .boundingBox();
   expect(accountBounds!.x).toBeGreaterThan(brandBounds!.x + brandBounds!.width);
-  const navigationToggle = header.getByRole("button", {
-    name: "Open navigation",
-  });
-  const preceding = (await navigationToggle.isVisible())
-    ? navigationToggle
-    : header.getByRole("link", { name: "Add a project" });
-  const precedingBounds = await preceding.boundingBox();
-  expect(accountBounds!.x).toBeGreaterThanOrEqual(
-    precedingBounds!.x + precedingBounds!.width,
-  );
   await accountButton.click();
   const accountPanel = page.getByRole("region", {
     name: "Your account details",

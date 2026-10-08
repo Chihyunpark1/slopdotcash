@@ -559,12 +559,20 @@ describe("discovery", () => {
     expect(
       screen.queryByRole("heading", { name: "Contribute to Eliza." }),
     ).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Agent prompt")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Agent prompt")).toHaveTextContent(
+      `Read ${window.location.origin}/SKILL.md and follow it.`,
+    );
+    expect(screen.getByRole("link", { name: "Cursor" })).toHaveAttribute(
+      "href",
+      `https://cursor.com/link/prompt?text=${encodeURIComponent(
+        `Read ${window.location.origin}/SKILL.md and follow it.`,
+      )}`,
+    );
     expect(
-      await screen.findByRole("heading", { name: "Leaderboard" }),
+      await screen.findByRole("heading", { name: "Top sloperators" }),
     ).toBeInTheDocument();
     expect(
-      screen.getAllByRole("heading", { name: "Leaderboard" }),
+      screen.getAllByRole("heading", { name: "Top sloperators" }),
     ).toHaveLength(1);
     expect(
       screen.queryByRole("heading", { name: "Contribution points" }),
@@ -595,10 +603,15 @@ describe("discovery", () => {
       .closest("a");
     expect(elizaCard).not.toBeNull();
     if (!elizaCard) throw new Error("Eliza project card is missing");
-    // A pledged pool headlines its state; the cap is small print only.
-    expect(within(elizaCard).getByText("Not funded yet")).toBeInTheDocument();
-    expect(within(elizaCard).queryByText("$5k")).not.toBeInTheDocument();
-    expect(within(elizaCard).getByText("Target $5k/mo")).toBeInTheDocument();
+    // The monthly amount stays prominent regardless of vault funding.
+    expect(
+      within(elizaCard).queryByText("Not funded yet"),
+    ).not.toBeInTheDocument();
+    expect(within(elizaCard).getByText("$5k")).toBeInTheDocument();
+    expect(within(elizaCard).getByText("/mo target")).toBeInTheDocument();
+    expect(
+      within(elizaCard).getByText("Vault: Unavailable"),
+    ).toBeInTheDocument();
     expect(
       screen.queryByText("The proof is the product."),
     ).not.toBeInTheDocument();
@@ -636,7 +649,7 @@ describe("discovery", () => {
     mockSnapshot();
     render(<App />);
 
-    await screen.findByRole("heading", { name: "Leaderboard" });
+    await screen.findByRole("heading", { name: "Top sloperators" });
     fireEvent.click(screen.getByRole("link", { name: "Leaderboard" }));
 
     await waitFor(() => expect(scrollIntoView).toHaveBeenCalledOnce());
@@ -657,7 +670,7 @@ describe("discovery", () => {
     mockSnapshot();
     render(<App />);
 
-    await screen.findByRole("heading", { name: "Leaderboard" });
+    await screen.findByRole("heading", { name: "Top sloperators" });
     await waitFor(() =>
       expect(scrollIntoView.mock.contexts.at(-1)).toHaveProperty(
         "id",
@@ -1126,7 +1139,7 @@ describe("public records", () => {
     expect(screen.getByText("Evidence guidance")).toBeInTheDocument();
     expect(screen.getByText("recorded score")).toBeInTheDocument();
     expect(
-      screen.getByText("July 2026 projected, unfunded"),
+      screen.getByText("July 2026 simulated estimate, unfunded"),
     ).toBeInTheDocument();
     expect(screen.queryByText(/all-time/u)).not.toBeInTheDocument();
     expect(screen.queryByText("monthly estimate")).not.toBeInTheDocument();
