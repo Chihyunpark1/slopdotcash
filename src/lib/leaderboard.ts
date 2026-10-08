@@ -2491,6 +2491,16 @@ function commitCreditOwners(
 }
 
 /**
+ * Vendor coding-agent User accounts that GitHub links to agent commit emails.
+ * An agent run is attributed to the human who submits it, never to the vendor.
+ */
+const AGENT_COMMIT_ACCOUNT_IDS: ReadonlySet<string> = new Set([
+  "MDQ6VXNlcjgxODQ3", // claude (Anthropic)
+  "U_kgDOD-0LXg", // codex (OpenAI)
+  "U_kgDOC972lw", // cursoragent (Cursor)
+]);
+
+/**
  * Returns the non-bot pull-request author first, then every other non-bot
  * GitHub author of a commit this pull request owns, in actor-ID order.
  */
@@ -2508,6 +2518,7 @@ function mergeCreditActors(
     if (
       commit.author &&
       !isBotActor(commit.author) &&
+      !AGENT_COMMIT_ACCOUNT_IDS.has(commit.author.id) &&
       commit.author.id !== author?.id &&
       commitOwners.get(`${repositoryId}\0${commit.oid}`) === pullRequest.id
     ) {

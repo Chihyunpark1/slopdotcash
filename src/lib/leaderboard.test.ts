@@ -506,6 +506,7 @@ describe("score v2 work units", () => {
         commit("3", lead),
         commit("4", actor("helper-bot", "Bot")),
         commit("5", null),
+        commit("7", { ...actor("codex"), id: "U_kgDOD-0LXg" }),
       ],
       PR_CONSOLIDATION: [commit("1", contributor), commit("6", lead)],
     } as Record<string, MergedPullRequestOutcome["commits"]>;

@@ -2122,15 +2122,21 @@ function parseOutcomeCommits(
     const nodePath = `${path}.nodes[${index}]`;
     const commit = child(asRecord(nodeValue, nodePath), "commit", nodePath);
     const commitPath = `${nodePath}.commit`;
+    const author =
+      commit.author === null
+        ? null
+        : parseActor(
+            child(commit, "author", commitPath).user,
+            `${commitPath}.author.user`,
+          );
     return {
       oid: asFullCommitSha(commit.oid, `${commitPath}.oid`),
+      // GitHub links app commits to a User whose reserved login ends in
+      // "[bot]" (for example dependabot[bot]); no person can hold that login.
       author:
-        commit.author === null
-          ? null
-          : parseActor(
-              child(commit, "author", commitPath).user,
-              `${commitPath}.author.user`,
-            ),
+        author?.login.endsWith("[bot]") === true
+          ? { ...author, kind: "Bot" }
+          : author,
     };
   });
 }
