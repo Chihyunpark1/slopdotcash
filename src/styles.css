@@ -1418,7 +1418,8 @@ small {
 
 .install-advanced > a {
   width: fit-content;
-  display: inline-flex;
+  display: flex;
+  min-height: 44px;
   align-items: center;
   gap: 6px;
   font-weight: 750;
