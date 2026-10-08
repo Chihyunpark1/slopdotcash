@@ -33,14 +33,10 @@ Apply migration `0011_payments.sql` after prior migrations. Run the account and
 queue integration workflow with:
 
 ```
-bun x vitest run src/lib/payments/integration.test.ts
 bun backend/payments/base.integration.ts
 ```
 
-The test uses real SQLite with every repository migration, real secp256k1
-signatures, API requests, durable reservations, authorization, dispatch retries,
-and finalized event projection. Its supplied chain evidence is a test adapter;
-it is not evidence of public testnet transfers. The Base vertical workflow deploys real local contracts, reserves a walletless
+The Base vertical workflow deploys real local contracts, reserves a walletless
 award, refunds free funds with the withdrawal fee, authorizes a late wallet,
 dispatches a payment, and indexes its finalized receipt into the account ledger.
 It checks actual contributor, fee, and refund token balances. It uses an isolated

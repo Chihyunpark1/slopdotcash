@@ -192,9 +192,6 @@ Slop is experimental software. The repository is licensed under the
 - `bun run check:unused` checks application locals and parameters; review exports,
   generated entry points, CLI tools, and configuration before removing dependencies.
 - `bun run test:evidence` runs the planted evidence-verifier failure cases.
-- `bun run test:coverage` produces branch-coverage reports for core domain boundaries
-  under `coverage/`. Use uncovered behavior to investigate meaningful risks, not
-  to create shape-only tests or score-padding submissions.
 - `bun run quality:simulate -- PREPARATION EVIDENCE PROPOSAL OUTPUT` recalculates
   a saved quality proposal against its exact source and budget. It creates a new
   output file and never authorizes payments or trusts imported output amounts.

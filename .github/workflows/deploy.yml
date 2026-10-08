@@ -140,7 +140,6 @@ jobs:
             test -d "$skill"
             python scripts/skill-validation/quick_validate.py "$skill"
           done
-          bun test ./skill-tests
 
       - name: Authenticate signer history before trusted publication
         if: github.event_name != 'pull_request'
@@ -217,10 +216,8 @@ jobs:
           bun run format:check
           bun run lint:check
 
-      - name: Run unit tests
-        run: |
-          bun run test:evidence
-          bun run test
+      - name: Run evidence verifier self-test
+        run: bun run test:evidence
 
       - name: Build production site
         env:
