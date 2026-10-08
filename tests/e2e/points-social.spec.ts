@@ -146,6 +146,7 @@ test("social membership shows connection points, respects privacy and survives d
     .click();
   await expect(social.getByText("X visibility updated.")).toBeVisible();
   await page.goto("https://slop.cash/points#people");
+  await community.getByLabel("GitHub username").fill("social-member");
   await expect(
     community.getByRole("link", { name: "X · @social_member" }),
   ).toBeVisible();
@@ -168,6 +169,7 @@ test("social membership shows connection points, respects privacy and survives d
     social.getByText("X disconnected. Your earned points are retained."),
   ).toBeVisible();
   await page.goto("https://slop.cash/points#people");
+  await community.getByLabel("GitHub username").fill("social-member");
   await expect(
     community.getByRole("link", { name: "X · @social_member" }),
   ).toHaveCount(0);
