@@ -268,6 +268,42 @@ function git(args) {
   });
 }
 
+/**
+ * Read several committed blobs with one Git process instead of one per file
+ * (missed sibling of #817's skill-provenance batching). Returns [path, bytes]
+ * pairs in input order. Callers keep enforcing their own byte bounds.
+ */
+function gitBatchShow(revision, paths) {
+  if (paths.length === 0) return [];
+  const specs = paths.map((path) => `${revision}:${path}`);
+  const output = execFileSync("git", ["cat-file", "--batch"], {
+    cwd: ROOT,
+    input: `${specs.join("\n")}\n`,
+    maxBuffer: MAX_PROPOSAL_INVENTORY_BYTES + specs.length * 128,
+  });
+  const entries = [];
+  let offset = 0;
+  for (const path of paths) {
+    const end = output.indexOf(0x0a, offset);
+    if (end < 0) throw new TypeError(`cannot read committed blob: ${path}`);
+    const header = output.toString("ascii", offset, end);
+    const match = /^([0-9a-f]{40}) blob (\d+)$/u.exec(header);
+    if (!match) throw new TypeError(`cannot read committed blob: ${path}`);
+    const size = Number(match[2]);
+    if (!Number.isSafeInteger(size) || size > MAX_PROPOSAL_INVENTORY_BYTES)
+      throw new TypeError(`committed blob exceeds its byte bound: ${path}`);
+    const start = end + 1;
+    const next = start + size;
+    if (next + 1 > output.length || output[next] !== 0x0a)
+      throw new TypeError(`invalid committed blob framing: ${path}`);
+    entries.push([path, output.toString("utf8", start, next)]);
+    offset = next + 1;
+  }
+  if (offset !== output.length)
+    throw new TypeError("unexpected committed blob output");
+  return entries;
+}
+
 function revisionEntries(revision, label = "revision") {
   if (!REVISION.test(revision)) throw new TypeError(`${label} is invalid`);
   git(["cat-file", "-e", `${revision}^{commit}`]);
@@ -281,7 +317,7 @@ function revisionEntries(revision, label = "revision") {
   ])
     .split("\n")
     .filter((path) => PROJECT_PATH.test(path));
-  return paths.map((path) => [path, git(["show", `${revision}:${path}`])]);
+  return gitBatchShow(revision, paths);
 }
 
 async function workingEntries() {
@@ -328,10 +364,11 @@ export async function checkProjectTransitions(baseRevision, currentRevision) {
     const paths = proposalPaths(revision);
     if (paths.length > MAX_PROPOSAL_FILES)
       throw new TypeError("cycle proposal inventory exceeds its bound");
+    const committed = revision ? gitBatchShow(revision, paths) : [];
     const entries = [];
-    for (const path of paths) {
+    for (const [index, path] of paths.entries()) {
       const bytes = revision
-        ? git(["show", `${revision}:${path}`])
+        ? committed[index][1]
         : await readFile(resolve(ROOT, path), "utf8");
       const size = Buffer.byteLength(bytes);
       aggregateBytes += size;
