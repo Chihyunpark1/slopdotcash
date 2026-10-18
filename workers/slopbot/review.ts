@@ -1285,6 +1285,12 @@ export async function recordHumanSignal(
   const db = env.SLOPBOT_DB;
   if (!(await registeredRepository(db, job)))
     return "repository is not active in the Slop registry";
+  const install = await store.installation(db, job.installationId);
+  const installationActive =
+    install !== null &&
+    install.removed_at === null &&
+    install.suspended_at === null;
+  if (!installationActive) return "installation removed or suspended";
   const github = await GitHubClient.forInstallation(
     env.SLOPBOT_APP_ID,
     env.SLOPBOT_APP_PRIVATE_KEY,
