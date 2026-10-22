@@ -143,6 +143,57 @@ test("Slopbot queue confirms appeal labels and refuses private or replaced repos
       { status: 302, ack: 0, retry: 1 },
       { status: 200, ack: 1, retry: 0 },
     ]);
+    for (const state of ["removed_at", "suspended_at", "missing"] as const) {
+      if (state === "missing")
+        sqlite.run(
+          "DELETE FROM slopbot_installations WHERE installation_id = 1",
+        );
+      else
+        sqlite.run(
+          `UPDATE slopbot_installations SET removed_at=NULL, suspended_at=NULL, ${state}=? WHERE installation_id=1`,
+          [at],
+        );
+      for (const kind of ["appeal", "human_reopen"] as const) {
+        const before = calls.length;
+        let ack = 0;
+        await worker.queue(
+          {
+            messages: [
+              {
+                body: {
+                  kind,
+                  deliveryId: `inactive-${state}-${kind}`,
+                  installationId: 1,
+                  repositoryId: Number(project.authority.repositoryId),
+                  owner,
+                  repo,
+                  itemKind: "issue",
+                  number: 1,
+                  senderId: 42,
+                },
+                ack() {
+                  ack++;
+                },
+                retry() {
+                  assert.fail("inactive installation must be retired");
+                },
+              },
+            ],
+          },
+          env,
+        );
+        assert.equal(ack, 1);
+        assert.equal(
+          calls.length,
+          before,
+          "inactive jobs must not authenticate or write",
+        );
+      }
+    }
+    sqlite.run(
+      "INSERT INTO slopbot_installations(installation_id, account_id, account_login, account_type, created_at) VALUES (1,77,?,'Organization',?)",
+      [owner, at],
+    );
     for (const scope of ["private", "replaced"] as const) {
       repositoryPrivate = scope === "private";
       repositoryId =
