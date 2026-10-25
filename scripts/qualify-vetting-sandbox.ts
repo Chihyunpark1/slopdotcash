@@ -30,6 +30,30 @@ type Project = PagesMetadata & {
     production: { services?: Record<string, { service: string }> };
   };
 };
+
+/**
+ * Collects every page of worker domains, following result_info.total_pages.
+ * The Cloudflare List Domains endpoint paginates, so reading only the first
+ * page would miss a domain listed later and let the "no public domain" gate
+ * pass while the sandbox is actually public.
+ */
+export async function listAllWorkerDomains(
+  fetchPage: (page: number) => Promise<{
+    domains: { service: string }[];
+    totalPages: number;
+  }>,
+): Promise<{ service: string }[]> {
+  const domains: { service: string }[] = [];
+  let page = 1;
+  let totalPages = 1;
+  do {
+    const fetched = await fetchPage(page);
+    domains.push(...fetched.domains);
+    totalPages = fetched.totalPages;
+    page += 1;
+  } while (page <= totalPages);
+  return domains;
+}
 async function main() {
   if (!process.argv.includes("--execute")) {
     console.log(
@@ -93,7 +117,10 @@ async function main() {
       "staging",
       sha,
     );
-    async function api<T>(route: string): Promise<T> {
+    async function apiPage<T>(route: string): Promise<{
+      result: T;
+      totalPages: number;
+    }> {
       const response = await fetch(
         `https://api.cloudflare.com/client/v4/accounts/${env.CLOUDFLARE_ACCOUNT_ID}/${route}`,
         {
@@ -103,10 +130,20 @@ async function main() {
         },
       );
       if (!response.ok) throw new Error("Deployment metadata read failed");
-      const body = (await response.json()) as { success?: boolean; result?: T };
+      const body = (await response.json()) as {
+        success?: boolean;
+        result?: T;
+        result_info?: { total_pages?: number };
+      };
       if (body.success !== true || body.result === undefined)
         throw new Error("Deployment metadata is unavailable");
-      return body.result;
+      return {
+        result: body.result,
+        totalPages: body.result_info?.total_pages ?? 1,
+      };
+    }
+    async function api<T>(route: string): Promise<T> {
+      return (await apiPage<T>(route)).result;
     }
     async function metadata() {
       const project = await api<Project>("pages/projects/slop-staging");
@@ -171,7 +208,12 @@ async function main() {
       }>(`workers/scripts/${worker}/subdomain`);
       if (subdomain.enabled !== false || subdomain.previews_enabled !== false)
         throw new Error("Sandbox public access must be disabled");
-      const domains = await api<{ service: string }[]>("workers/domains");
+      const domains = await listAllWorkerDomains(async (page) => {
+        const { result, totalPages } = await apiPage<{ service: string }[]>(
+          `workers/domains?page=${page}&per_page=100`,
+        );
+        return { domains: result, totalPages };
+      });
       if (domains.some((d) => d.service === worker))
         throw new Error("Sandbox has a public domain");
       const applications = await api<
