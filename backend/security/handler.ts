@@ -596,9 +596,14 @@ function allowedActions(row: CaseRow, roles: Set<Role>): string[] {
     actions.push("recognition");
     // An award the program withheld stays appealable: the shortage or a
     // refusal is an award exception, not a finding change (SEC-12), and a
-    // separate reviewer resolves it (SEC-04, SEC-18).
+    // separate reviewer resolves it (SEC-04, SEC-18). An upheld appeal is
+    // final: the independent reviewer confirmed the outcome, so the same
+    // outcome cannot be appealed again to shop for a different reviewer.
+    // A returned appeal reopens the case, and the new decision after
+    // triage is appealable again.
     if (
       row.appeal_state !== "open" &&
+      row.appeal_state !== "upheld" &&
       (["duplicate", "out-of-scope", "rejected"].includes(row.receipt_state) ||
         (row.receipt_state === "confirmed" &&
           ["ineligible", "capacity-exhausted"].includes(row.award_state)))
