@@ -1,5 +1,6 @@
 /// <reference types="bun-types" />
 import { describe, expect, it } from "bun:test";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
@@ -67,5 +68,92 @@ describe("direct-payment disclosure binding", () => {
       `row ADWilkinson repeats contributor ${kept.actorId}`,
       "preparation contributor gblinproject has no row",
     ]);
+  });
+
+  it("refuses a denominator the rows do not add up to", () => {
+    const preparation = {
+      projectId: "demo",
+      cycleId: "2026-10",
+      counts: { weight: "4" },
+      contributors: [
+        { actor: { id: "1", login: "alice" }, weight: "3", wallet: null },
+        { actor: { id: "2", login: "bob" }, weight: "1", wallet: null },
+      ],
+    };
+    const preparationBytes = new TextEncoder().encode(
+      JSON.stringify(preparation),
+    );
+    const sha256 = createHash("sha256").update(preparationBytes).digest("hex");
+    const base: Disclosure = {
+      schemaVersion: "1",
+      kind: "direct-payment-disclosure",
+      projectId: "demo",
+      contributionMonth: "2026-10",
+      preparation: { path: "prep.json", sha256, totalWeight: "4" },
+      reconstructedBasis: {
+        capMinor: "1000",
+        denominatorWeight: "8",
+        rounding: "half-up",
+        allocatedMinor: "500",
+        overCapMinor: "-500",
+      },
+      totals: {
+        rows: 2,
+        observedTransfers: 0,
+        observedAmountMinor: "0",
+        allocatedMinor: "500",
+        byState: {
+          "held-below-minimum": { rows: 2, amountMinor: "500" },
+        },
+      },
+      rows: [
+        {
+          actorId: "1",
+          login: "alice",
+          publishedWeight: "3",
+          effectiveWeight: "3",
+          entitlementMinor: "375",
+          wallet: null,
+          state: "held-below-minimum",
+          observed: null,
+        },
+        {
+          actorId: "2",
+          login: "bob",
+          publishedWeight: "1",
+          effectiveWeight: "1",
+          entitlementMinor: "125",
+          wallet: null,
+          state: "held-below-minimum",
+          observed: null,
+        },
+      ],
+    };
+    // Halved entitlements reproduce against the wrong denominator.
+    expect(verifyDisclosure(base, preparationBytes)).toEqual([
+      "reconstructedBasis.denominatorWeight 8 matches neither the preparation totalWeight 4 nor the sum of effective weights 4",
+    ]);
+    const correct: Disclosure = {
+      ...base,
+      reconstructedBasis: {
+        capMinor: "1000",
+        denominatorWeight: "4",
+        rounding: "half-up",
+        allocatedMinor: "1000",
+        overCapMinor: "0",
+      },
+      totals: {
+        ...base.totals,
+        allocatedMinor: "1000",
+        byState: {
+          "held-below-minimum": { rows: 2, amountMinor: "1000" },
+        },
+      },
+      rows: [
+        { ...base.rows[0], entitlementMinor: "750" },
+        { ...base.rows[1], entitlementMinor: "250" },
+      ],
+    };
+    expect(verifyDisclosure(correct, preparationBytes)).toEqual([]);
   });
 });

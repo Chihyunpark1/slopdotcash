@@ -124,6 +124,7 @@ export function verifyDisclosure(
   );
 
   let allocated = 0n;
+  let effectiveTotal = 0n;
   let observedTotal = 0n;
   let observedRows = 0;
   const signatures = new Set<string>();
@@ -157,6 +158,7 @@ export function verifyDisclosure(
       fail(
         `row ${row.login} effectiveWeight is not published weight plus the declared adjustment`,
       );
+    effectiveTotal += effective;
 
     const entitlement = assertBigint(
       row.entitlementMinor,
@@ -220,6 +222,24 @@ export function verifyDisclosure(
   for (const [actorId, entry] of published)
     if (!covered.has(actorId))
       fail(`preparation contributor ${entry.actor.login} has no row`);
+
+  // The denominator is the basis every entitlement is computed against, so
+  // it must be anchored in the published bytes: either the preparation's
+  // frozen total weight, or the total effective weight once adjustments
+  // are applied. The checked-in disclosures use both conventions (one
+  // keeps the frozen total, the other recomputes it for restored reviews),
+  // but a denominator matching neither lets the published entitlements be
+  // scaled up or down and still "reproduce". This only has meaning once
+  // the rows cover the preparation exactly; a coverage failure already
+  // rejects the disclosure.
+  if (
+    covered.size === published.size &&
+    denominator !== assertBigint(preparation.counts.weight, "totalWeight") &&
+    denominator !== effectiveTotal
+  )
+    fail(
+      `reconstructedBasis.denominatorWeight ${denominator} matches neither the preparation totalWeight ${preparation.counts.weight} nor the sum of effective weights ${effectiveTotal}`,
+    );
 
   if (allocated !== assertBigint(disclosure.totals.allocatedMinor, "allocated"))
     fail("totals.allocatedMinor does not equal the sum of the rows");
