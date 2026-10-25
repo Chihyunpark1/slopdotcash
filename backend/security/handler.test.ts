@@ -849,6 +849,43 @@ describe("discretionary awards", () => {
     });
   });
 
+  test("an upheld appeal is final and cannot be appealed again", async () => {
+    const env = open();
+    const id = await env.receive(REPORTER, "2026-10-19T09:10:00.000Z");
+    await env.decide(id, "vault-drain");
+    const none = await env.act(MAINTAINER, id, {
+      action: "award",
+      decision: "none",
+      reason: "Already known and mitigated before the report.",
+    });
+    expect(none.body.case.awardState).toBe("ineligible");
+    const appealed = await env.act(REPORTER, id, {
+      action: "appeal",
+      reason: "The mitigation did not cover the path I reported.",
+    });
+    expect(appealed.body.case.appealState).toBe("open");
+    const upheld = await env.act(DISPUTE, id, {
+      action: "decide-appeal",
+      outcome: "uphold",
+      reason: "The original award decision stands.",
+    });
+    expect(upheld.body.case).toMatchObject({
+      appealState: "upheld",
+      receiptState: "confirmed",
+      awardState: "ineligible",
+    });
+    const reporter = await env.call(REPORTER, "GET", `security-cases/${id}`);
+    expect(reporter.body.case.allowedActions).not.toContain("appeal");
+    expect(
+      (
+        await env.act(REPORTER, id, {
+          action: "appeal",
+          reason: "Trying a different reviewer.",
+        })
+      ).status,
+    ).toBe(409);
+  });
+
   test("a concurrent reservation cannot overspend the program", async () => {
     const env = open();
     const first = await env.receive(REPORTER, "2026-10-19T09:10:00.000Z");
